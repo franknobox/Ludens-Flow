@@ -18,7 +18,9 @@ Ludens-Flow makes development decisions **traceable, reviewable, and reproducibl
 
 **Ludens-Flow** 是一个多智能体、以工件为中心的游戏开发工作流程系统。
 
-名称结合了以下内容：- **Ludens**，源自*Homo Ludens*，强调游戏作为一种创造性的人类过程。 - **Flow**，指结构化、可控的开发流程。
+名称结合了以下内容：
+- **Ludens**，源自*Homo Ludens*，强调游戏作为一种创造性的人类过程。
+- **Flow**，指结构化、可控的开发流程。
 
 Ludens-Flow**并不**旨在自动生成完整对局。
 相反，它专注于**结构化、协调和审查游戏开发过程本身**。
