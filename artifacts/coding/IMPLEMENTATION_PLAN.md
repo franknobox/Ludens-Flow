@@ -1,172 +1,114 @@
 ```markdown
-# 《Neon Runner》实现计划
-
-> 基于 Unity6 | 2D URP | 单仓库 | 6周交付
+# 铁魂 · Iron Equilibrium 实现计划 v0.1  
+（供程序/美术/关卡评审，可直接落盘）
 
 ---
 
-## 1. 目录结构（Assets/）
-
+## 1. 目录结构（Perforce 单仓库 //depot/IronEq）
 ```
-├─_Root
-│  ├─Scenes
-│  │  ├─Boot.unity
-│  │  ├─Menu.unity
-│  │  └─Game.unity
-│  ├─Scripts
-│  │  ├─Runtime
-│  │  │  ├─Core
-│  │  │  │  ├─Sight
-│  │  │  │  ├─Noise
-│  │  │  │  ├─Cargo
-│  │  │  │  ├─Alarm
-│  │  │  │  ├─Melee
-│  │  │  │  └─GhostPath
-│  │  │  ├─Level
-│  │  │  │  ├─SO
-│  │  │  │  ├─Grid
-│  │  │  │  └─Score
-│  │  │  ├─UI
-│  │  │  ├─Save
-│  │  │  ├─Localization
-│  │  │  └─Chip
-│  │  └─Editor
-│  │      ├─LevelIO
-│  │      └─ChipSOEditor
-│  ├─ScriptableObjects
-│  │  ├─Levels
-│  │  └─Chips
-│  ├─Prefabs
-│  │  ├─Player
-│  │  ├─Enemy
-│  │  ├─Props
-│  │  └─VFX
-│  ├─Tiles
-│  ├─Sprites
-│  ├─Shaders
-│  ├─Audio
-│  └─Localization
+/IronEq
+ ├─/Assets
+ │  ├─/Art
+ │  │  ├─/Characters        # 铠甲、武器、部位破坏模型
+ │  │  ├─/Environments       # 五区域场景组件、熔岩/齿轮/黑水材质
+ │  │  ├─/FX                 # 火星、铁水BAV槽、处决特效
+ │  │  └─/Shaders            # RustAccumulate、ImpactGlow、WeightPenalty
+ │  ├─/Audio
+ │  │  ├─/Weapons            # 冲击等级1-5对应金属声
+ │  │  └─/Voices             # 失衡惨叫、处决台词
+ │  └─/Game
+ │     ├─/Core               # 引擎无关纯逻辑，可单元测试
+ │     ├─/Modules            # 业务模块，见第2节
+ │     ├─/Networking         # 轻量联机，P2P+回滚
+ │     ├─/UI                 # UMG/ImGui双方案，主机用UMG
+ │     └─/Utils              # 配置表、日志、崩溃上报
+ ├─/Config                   # Excel→json→bin 流水线
+ ├─/Docs                     # 自动生成的API+策划注释
+ ├─/Tools                    # 可视化BAV调参、关卡灰盒插件
+ ├─/Build                    # TeamCity脚本，PC/XB/PS三端
+ └─/Tests                    # 单元+集成+压力， nightly 跑
 ```
 
 ---
 
-## 2. 模块划分 & 关键接口
+## 2. 模块划分（C++17 + UE5.3）
 
-| 模块 | 主类 | 对外接口 | 事件 |
-|---|---|---|---|
-| Sight | `SightSystem` | `bool CanSee(Transform target)` | `OnSpot` |
-| Noise | `NoiseManager` | `void Emit(Vector3 pos, float radius, EType type)` | `OnHeard` |
-| Cargo | `CargoController` | `bool HasCargo; float SpeedMul` | `OnPick; OnDrop` |
-| Alarm | `AlarmManager` | `void Trigger()` | `OnAlarmStart; OnAlarmEnd` |
-| Melee | `MeleeStrike` | `void Strike(Vector2 dir)` | `OnKill; OnKO` |
-| GhostPath | `GhostPath` | `void SetMarkers(List<Vector3> pts)` | — |
-| Score | `LevelScore` | `int Stars` | `OnStarChange` |
-| Chip | `ChipInventory` | `bool IsEquipped(ChipSO chip)` | `OnEquip` |
-| Save | `SaveSystem` | `void SaveProfile(Profile p)` | — |
-
----
-
-## 3. 实现顺序（周驱动）
-
-### W1 原型
-1. Boot→Menu→Game 场景框架  
-2. TileGrid + 1白盒关卡  
-3. PlayerMovement（8方向+翻滚）  
-4. SightSystem 锥形射线  
-5. MeleeStrike 1v1秒杀  
-6. 撤离点触发→切场景→简易结算  
-
-**可测试点**：FPS≥120；击杀后撤离计时≤3s
-
-### W2 核心循环
-1. CargoController 负重减速-25%  
-2. NoiseManager 脚步声+波纹Shader  
-3. AlarmManager 30s增援+封闭撤离  
-4. GhostPath 3标记+路径预览  
-5. LevelScore 3星条件+UI  
-6. 3正式关卡数据SO  
-
-**可测试点**：任意关卡3星通关；警报后30s内撤离失败
-
-### W3 内容批量
-1. Excel→SO导入器（EditorWindow）  
-2. NodeGraph自动烘焙（A*）  
-3. TilePalette+批量铺图  
-4. 雨幕粒子+全屏后期开关  
-5. 1章5关完整数据  
-
-**可测试点**：1章平均帧≥100；关卡加载≤2s
-
-### W4 芯片&输入
-1. ChipSO + ChipInventory UI  
-2. 存档/读档（JSON+AES）  
-3. 本地化（CSV→ScriptableObject）  
-4. Switch输入映射（Rewired或新InputSystem）  
-
-**可测试点**：手柄无键位冲突；存档掉电不损坏
-
-### W5 抛光
-1. CRT死亡Shader+关电视音效  
-2. 过场插画淡入淡出  
-3. 音频混音（Snapshot）  
-4. Steam成就接口  
-
-**可测试点**：死亡→重开≤5s；成就即时弹出
-
-### W6 送审
-1. Switch平台编译+TCR自检  
-2. 崩溃日志捕获（API→云）  
-3. Demo分支锁定  
-
-**可测试点**：0崩溃/0TCR违规
+| 模块 | 职责 | 对外暴露 | 备注 |
+|------|------|----------|------|
+| BalanceCore | BAV公式、状态机、脆弱debuff | IBalanceInterface | 引擎无关，可gtest |
+| ImpactCore  | IL vs STB判定、反弹BAV | IImpactInterface | 同上 |
+| Equipment   | 部位重量、局部破坏、维修 | UEquipmentComponent | 绑定到Character |
+| PlayerState | 死亡掉落、碎片数量、配装方案 | AIronPlayerState | 继承AGameStateBase |
+| Campfire    | 存档、重配、修复、配装存储 | ACampfireActor | 调用PlayerState |
+| NetSync     | 帧同步、延迟补偿、入侵buff | UIronNetDriver | 继承UE5 PushModel |
+| AI          | Boss行为树、部位破坏感知 | UIronAIComponent | 与ImpactCore交互 |
+| FX          | 火星、铁水裂纹、锈蚀度 | UIronFXLibrary | 材质参数暴露给美术 |
 
 ---
 
-## 4. 关键配置示例
+## 3. 关键接口（头文件即文档）
 
-### LevelSO
-```yaml
-ID: 1-1
-MapSize: {x:32, y:24}
-Goal: AssassinateAndPickup
-CargoWeight: Light
-ReinforcePoints: 2
-Special: None
-ParTime: 90
-StarReq:
-  Spotted: 1
-  Kills: 3
-  Time: 90
-```
+```cpp
+// BalanceCore/Public/IBalanceInterface.h
+class IRONCORE_API IBalanceInterface {
+public:
+    virtual float GetWeight() const = 0;
+    virtual float GetBAV() const = 0;
+    virtual void  ModifyBAV(float Delta, UObject* Instigator) = 0;
+    virtual void  OnBreakBalance(UObject* Instigator) = 0;   // 进入失衡
+};
 
-### ChipSO
-```yaml
-Name: Air-Dash Mk2
-DescKey: CHIP_AIR_DASH
-Icon: chip_02
-Cost: 120
-Effect: DoubleAirDash
+// ImpactCore/Public/IImpactInterface.h
+struct FImpactResult {
+    bool bDeflected;   // 成功拆招
+    float AttackerBAVDelta;
+    float DefenderBAVDelta;
+};
+class IRONCORE_API IImpactInterface {
+    virtual FImpactResult EvaluateImpact(int32 AttackerIL, int32 DefenderSTB) const = 0;
+};
 ```
 
 ---
 
-## 5. 自动化可测试点（PlayMode Test）
+## 4. 实现顺序（与里程碑对齐）
 
-| 测试 | 断言 |
-|---|---|
-| Sight_BlockedByWall | `CanSee()==false` 当墙遮挡 |
-| Cargo_DropSpeedRestore | 丢弃后SpeedMul==1 |
-| Alarm_30sReinforce | Time.deltaTime累加30s时增援计数+1 |
-| Score_3Star | 结算时Stars==3 |
-| Save_RoundTrip | 存档前后Profile.Equals()==true |
+| 周 | 任务 | 可测试点 | 交付形式 |
+|----|------|----------|----------|
+| W1 | BalanceCore单元测试通过 | gtest 100%覆盖 | Jenkins绿灯 |
+| W2 | ImpactCore + 1把武器IL配置 | 控制台命令`keystone.ImpactTest` | 日志输出 |
+| W3 | EquipmentComponent + 局部破坏原型 | 打腿20次→防御-50% | 关卡内打印 |
+| W4 | 铸铁堡垒灰盒 + 熔炉骑士AI白模 | 通关时间≤3min | QA记录 |
+| W5 | Campfire重配面板 + 配装存储 | 3套方案切换≤1s | UI录屏 |
+| W6 | 联机8人局域网同步 | 延迟<100ms，0丢包 | TeamCity报告 |
 
 ---
 
-## 6. 每日构建检查单
+## 5. 可测试点（自动化+人工）
 
-- [ ] 编译Win/Mac/Switch无Error  
-- [ ] 运行Boot→Menu→Game无Exception  
-- [ ] 随机关卡3星通关脚本通过  
-- [ ] 帧率日志写入Artifacts  
-- [ ] 版本号+分支名写入build_info.txt
+| 标签 | 测试内容 | 工具 | 通过标准 |
+|------|----------|------|----------|
+| UNIT_BAV | 公式边界：重量=阈值1-1kg & +1kg | gtest | 误差<0.01 |
+| UNIT_IMPACT | IL=5 vs STB=5 & STB=4 | gtest | bDeflected=true/false |
+| INTEGRATION | 超重→木板塌陷 | 关卡脚本 | 触发率100% |
+| UX_DEATH | 死亡掉落碎片→回收率 | PlaytestCloud | 24h回收≥30% |
+| PERF | 1000火星粒子@1440p | Unreal Insights | ≥50fps |
+| NET | 入侵者-30%重量同步 | 2xPC+1xXB局域网 | 数值一致 |
+
+---
+
+## 6. 风险前置代码
+
+```cpp
+// BalanceCore/Private/BalanceDebugger.h
+#if ENABLE_BAV_DEBUG
+CVarFloat(TEXT("keystone.BAV_Threshold1"), 20.0f);
+CVarFloat(TEXT("keystone.BAV_Penalty"), 0.8f);
+#endif
+// 策划在UE控制台可实时调，无需重启
+```
+
+---
+
+> 下一评审点：W2结束，BalanceCore & ImpactCore 单元测试报告+日志。  
 ```
