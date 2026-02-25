@@ -1,11 +1,98 @@
-# run.py — 多Agent版入口（替换 run_baseline.py）
-# 用法：
-#   python run.py "你的游戏需求"
-#   python run.py           ← 交互式输入
-#
-# 流程：
-#   1. 读取用户需求（命令行参数 or input()）
-#   2. 初始化 SharedContext
-#   3. 实例化四个子 Agent 和 OrchestratorAgent
-#   4. orchestrator.run(ctx, cfg)
-#   5. atomic_write 将 ctx 中的产物写入 artifacts/ 目录
+import logging
+import sys
+from pathlib import Path
+
+# 添加 src 到路径，方便绝对导入
+sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
+
+import ludens_flow.state as st
+from ludens_flow.graph import graph_step
+
+try:
+    from dotenv import load_dotenv
+    # run_agents.py is in agent_workbench/, so parent is the root dir where .env lives
+    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+except ImportError:
+    pass
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+logger = logging.getLogger(__name__)
+
+def main():
+    logger.info("Initializing workspace...")
+    st.init_workspace()
+    
+    logger.info("Loading state...")
+    state = st.load_state()
+
+    print("\n" + "="*50)
+    print(" Ludens Flow V2 Graph Runner ")
+    print("="*50 + "\n")
+    
+    while True:
+        # 显示当前身位和重要错误
+        phase = state.phase
+        err = getattr(state, "last_error", None)
+
+        if phase == "DEV_COACHING":
+            print("\n" + "★"*50)
+            print(" 🎓 [DEV COACHING MODE ACTIVE] - ASK ME ANYTHING! ")
+            print("★"*50)
+            print("> You are now conversing with the Engineering Agent Coach.")
+            print("> (Main artifacts are currently FROZEN. Type your questions below)")
+        else:
+            print(f"\n[Current Phase]: {phase}")
+        if err:
+            print(f"[⚠️ WARNING]: Recovered from error: {err}")
+            state.last_error = None # 显示过即消
+            st.save_state(state)
+        
+        # 对于特殊的等待节点，给出明确提示
+        if phase == "POST_REVIEW_DECISION":
+             print("\n> [ACTION REQUIRED] Review completed. Please route next steps:")
+             print("  A: Redirect back to DISCUSS phase to fix targets.")
+             print("  C: Force Approve and proceed to DEV_COACHING.")
+             
+        try:
+            # 仅做纯净的 IO 与发送
+            user_input = input("\n[Ludens Flow]> ").strip()
+            if user_input.lower() in ("exit", "quit", "q"):
+                logger.info("Saving state and exiting...")
+                st.save_state(state)
+                break
+                
+            if not user_input:
+                continue
+                
+            if user_input.lower() in ("/reset", "/restart"):
+                logger.info("Resetting workspace state...")
+                if st.STATE_FILE.exists():
+                    st.STATE_FILE.unlink()
+                # 重新加载（会自动拿到全新的纯净状态）
+                state = st.load_state()
+                print("\n✨ [System]: 记忆已清空，时空倒流回起点！")
+                continue
+
+            print("\n>> Graph Engine Working...\n")
+            # 不包揽任何分发或修改权限，一律喂给 Graph
+            state = graph_step(state, user_input)
+            
+            # 若有模型自然语言返回，则立刻打印回显
+            if getattr(state, "last_assistant_message", None):
+                print(f"\n[🤖 Agent Reply]:\n{state.last_assistant_message}\n")
+                state.last_assistant_message = None  # 显示完即消
+                st.save_state(state)
+            
+        except KeyboardInterrupt:
+            print("\nInterrupted by user. Exiting...")
+            st.save_state(state)
+            break
+        except Exception as e:
+            # Runner 级别的防崩保护，即便 Graph 也炸了最后拖底
+            logger.error(f"Fatal Runner error: {e}")
+            st.save_state(state)
+            print("System halted safely. Run again to resume.")
+            break
+
+if __name__ == "__main__":
+    main()
