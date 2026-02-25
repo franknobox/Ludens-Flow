@@ -27,7 +27,14 @@ def main():
         phase = state.phase
         err = getattr(state, "last_error", None)
 
-        print(f"\n[Current Phase]: {phase}")
+        if phase == "DEV_COACHING":
+            print("\n" + "★"*50)
+            print(" 🎓 [DEV COACHING MODE ACTIVE] - ASK ME ANYTHING! ")
+            print("★"*50)
+            print("> You are now conversing with the Engineering Agent Coach.")
+            print("> (Main artifacts are currently FROZEN. Type your questions below)")
+        else:
+            print(f"\n[Current Phase]: {phase}")
         if err:
             print(f"[⚠️ WARNING]: Recovered from error: {err}")
             state.last_error = None # 显示过即消

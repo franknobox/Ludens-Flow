@@ -5,8 +5,11 @@ import logging
 sys.path.insert(0, str(Path(__file__).resolve().parents[1])) 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from ludens_flow.state import init_workspace, load_state, save_state
 from ludens_flow.graph import graph_step
+from dotenv import load_dotenv
+
+# 加载项目根目录的 .env 文件
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 from ludens_flow.router import Phase
 from ludens_flow.agents.base import BaseAgent
 
@@ -14,17 +17,14 @@ from ludens_flow.agents.base import BaseAgent
 def mock_call(self, prompt, cfg=None):
     prompt_low = prompt.lower()
     
-    # 模拟各类 Commit 行为
-    if self.name == "EngineeringAgent" and ("implementation_plan.md" in prompt_low or "架构拆解" in prompt_low):
-         return "Eng Commit Mock!"
-    elif self.name == "PMAgent" and "project_plan.md" in prompt_low:
-         return "PM Commit Mock!"
-    elif self.name == "DesignAgent" and ("gdd" in prompt_low or "专业、结构化、可落盘" in prompt_low):
-         return "GDD Commit Mock!"
-         
     # 模拟各类 Discuss 时带有的提取数据
-    if self.name == "DesignAgent" and "json" in prompt_low:
-         return "GDD Discuss Mock\n```json\n{\"core_loop\": \"kill-loot\"}\n```"
+    if self.name == "DesignAgent" and ("json" in prompt_low or "update_json" in prompt_low or "状态更新指令" in prompt_low):
+         return (
+             "GDD Discuss Mock: 我觉得杀戮尖塔不错。\n"
+             "<<STATE_UPDATE_JSON>>\n"
+             "{\"core_loop\": \"打怪-掉落-组卡\", \"mvp_scope\": \"30层\", \"open_questions\": [], \"setting\": \"中世纪暗黑\"}\n"
+             "<<END_STATE_UPDATE_JSON>>"
+         )
     elif self.name == "PMAgent" and "json" in prompt_low:
          return "PM Discuss Mock\n```json\n{\"team_size\": 3}\n```"
     elif self.name == "EngineeringAgent" and "json" in prompt_low:
@@ -78,7 +78,7 @@ def run_happy_path():
 
     # --- 阶段 3：工程 ENG ---
     logger.info("[3] 正在进行 ENG 讨论与定稿...")
-    state = graph_step(state, "使用 MVC 架构")
+    state = graph_step(state, "我们决定采用 A 预设，快速出个原型的 Demo跑起来！")
     state = graph_step(state, "2 定稿并生成")
     state = graph_step(state, "")  # 触发 Agent 提交并扭转
     
