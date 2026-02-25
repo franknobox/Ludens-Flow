@@ -6,7 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from ludens_flow.state import init_workspace, load_state, save_state
-from ludens_flow.agents.orchestrator import execute_step
+from ludens_flow.graph import graph_step
 from ludens_flow.router import Phase
 from ludens_flow.agents.base import BaseAgent
 
@@ -60,40 +60,40 @@ def run_happy_path():
 
     # --- 阶段 1：策划 GDD ---
     logger.info("[1] 正在进行 GDD 讨论与定稿...")
-    _, state = execute_step(state, "我要做一个类似杀戮尖塔的游戏")
-    _, state = execute_step(state, "2 定稿生成")
-    _, state = execute_step(state, "")  # 触发 Agent 生成 Commit
+    state = graph_step(state, "我要做一个类似杀戮尖塔的游戏")
+    state = graph_step(state, "2 定稿生成")
+    state = graph_step(state, "")  # 触发 Agent 生成 Commit
     
     assert "gdd" in state.artifacts, "GDD failed to generate"
     assert state.phase == Phase.PM_DISCUSS.value, f"Failed to transition to PM, stopped at {state.phase}"
 
     # --- 阶段 2：项目 PM ---
     logger.info("[2] 正在进行 PM 讨论与定稿...")
-    _, state = execute_step(state, "我们有 3 个人，开发两周")
-    _, state = execute_step(state, "2 定稿生成")
-    _, state = execute_step(state, "")  # 触发 Agent 生成 Commit
+    state = graph_step(state, "我们有 3 个人，开发两周")
+    state = graph_step(state, "2 定稿生成")
+    state = graph_step(state, "")  # 触发 Agent 生成 Commit
     
     assert "pm" in state.artifacts, "PM Plan failed to generate"
     assert state.phase == Phase.ENG_DISCUSS.value, f"Failed to transition to ENG, stopped at {state.phase}"
 
     # --- 阶段 3：工程 ENG ---
     logger.info("[3] 正在进行 ENG 讨论与定稿...")
-    _, state = execute_step(state, "使用 MVC 架构")
-    _, state = execute_step(state, "2 定稿并生成")
-    _, state = execute_step(state, "")  # 触发 Agent 提交并扭转
+    state = graph_step(state, "使用 MVC 架构")
+    state = graph_step(state, "2 定稿并生成")
+    state = graph_step(state, "")  # 触发 Agent 提交并扭转
     
     assert "eng" in state.artifacts, "ENG Plan failed to generate"
     assert state.phase == Phase.REVIEW.value, f"Failed to transition to REVIEW, stopped at {state.phase}"
 
     # --- 阶段 4：审核 REVIEW ---
     logger.info("[4] 正在进行 REVIEW 审查与裁决...")
-    _, state = execute_step(state, "")  # 触发 Review Agent
+    state = graph_step(state, "")  # 触发 Review Agent
     assert "review" in state.artifacts, "REVIEW failed to generate"
     assert state.phase == Phase.POST_REVIEW_DECISION.value, f"Failed to transition to POST_REVIEW, stopped at {state.phase}"
 
     # --- 阶段 5：用户最终拍板 ---
     logger.info("[5] 审查全线 PASS，用户同意终稿...")
-    _, state = execute_step(state, "c")  # 选择 Option C: 强行通过进入研发
+    state = graph_step(state, "c")  # 选择 Option C: 强行通过进入研发
     assert state.phase == Phase.DEV_COACHING.value, f"Failed to transition to DEV_COACHING, stopped at {state.phase}"
     assert getattr(state, "artifact_frozen", False) == True, "Artifacts should be frozen"
 

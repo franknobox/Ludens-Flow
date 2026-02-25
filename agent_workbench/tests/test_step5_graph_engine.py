@@ -39,6 +39,9 @@ def mock_eng_discuss(self, state, user_input, cfg=None):
 def mock_eng_commit(self, state, user_input, cfg=None):
     return AgentResult(assistant_message="", commit=CommitSpec(artifact_name="IMPLEMENTATION_PLAN", content="Eng Commit Mock!\n", reason="Test"), state_updates={})
 
+def mock_eng_coach(self, state, user_input, cfg=None):
+    return AgentResult(assistant_message="Coach Mode Mocked Instruction", state_updates={})
+
 def mock_review_commit(self, state, user_input, cfg=None):
     return AgentResult(
          assistant_message="",
@@ -50,8 +53,9 @@ DesignAgent.discuss = mock_design_discuss
 DesignAgent.commit = mock_design_commit
 PMAgent.discuss = mock_pm_discuss
 PMAgent.commit = mock_pm_commit
-EngineeringAgent.discuss = mock_eng_discuss
-EngineeringAgent.commit = mock_eng_commit
+EngineeringAgent.plan_discuss = mock_eng_discuss
+EngineeringAgent.plan_commit = mock_eng_commit
+EngineeringAgent.coach = mock_eng_coach
 ReviewAgent.commit = mock_review_commit
 
 def test_step5_graph_e2e():
@@ -118,7 +122,7 @@ def test_step5_graph_frozen_guard():
     try:
         from ludens_flow.graph import run_agent_step
         # 强行下发 COMMIT 命令（在 Graph 业务中已经被 ENGNode 封死在接口层了，此处直接调底层函数突破防波堤）
-        state = run_agent_step(agent_mock, "COMMIT", state, "恶意覆盖主项目 commit")
+        state = run_agent_step(agent_mock, "PLAN_COMMIT", state, "恶意覆盖主项目 commit")
         
         # 验证防御机制是否成功拦下并产生了报错记录
         assert state.last_error is not None, "Frozen Guard failed to report error msg!"

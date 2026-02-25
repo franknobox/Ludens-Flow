@@ -18,6 +18,12 @@ class EngineeringAgent(BaseAgent):
     )
 
     def discuss(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
+        raise NotImplementedError("EngineeringAgent uses plan_discuss and coach instead of discuss")
+
+    def commit(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
+        raise NotImplementedError("EngineeringAgent uses plan_commit instead of commit")
+
+    def plan_discuss(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
         gdd = read_artifact("GDD")
         pm = read_artifact("PROJECT_PLAN")
         impl_plan = read_artifact("IMPLEMENTATION_PLAN")  
@@ -73,7 +79,7 @@ class EngineeringAgent(BaseAgent):
             state_updates=updates
         )
 
-    def commit(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
+    def plan_commit(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
         gdd = read_artifact("GDD")
         pm = read_artifact("PROJECT_PLAN")
         draft = state.drafts.get("eng", {})
@@ -100,4 +106,28 @@ class EngineeringAgent(BaseAgent):
                 reason="Engineering Architecture Finalized"
             ),
             events=["ENG_COMMITTED"]
+        )
+
+    def coach(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
+        """
+        专职进行引擎保姆级实操指导，不包含任何大架构文件的强行覆写
+        输出记录将只向外发到 DEVLOG.md（可选），系统主工件被全数冻结
+        """
+        impl_plan = read_artifact("IMPLEMENTATION_PLAN")
+        
+        prompt = (
+            f"基于已定稿的实行计划:\n{impl_plan}\n\n"
+            f"用户在引擎操作/开发中遇到了问题或需要指导: {user_input}\n"
+            "请作为一线老将给予直接的具体引擎操作指导（如在Unity里怎么挂组件、命名文件等，或者给出代码段）。\n"
+            "请提供手把手的步骤和验收点。"
+        )
+        
+        # 为了演示和留档，直接生成纯文本指导
+        reply = self._call(prompt, cfg)
+        logger.info("[EngineeringAgent] Coach instruction issued.")
+        
+        return AgentResult(
+            assistant_message=reply.strip(),
+            state_updates={}
+            # 注释: 若未来想写入 DEVLOG.md，可再增加 CommitSpec(artifact_name="DEVLOG", ...) 并在 artifacts.py 中豁免
         )

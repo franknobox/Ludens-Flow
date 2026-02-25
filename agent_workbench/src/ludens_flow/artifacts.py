@@ -31,6 +31,10 @@ ARTIFACT_REGISTRY = {
     "REVIEW_REPORT": {
         "path": ARTIFACT_PATHS["review"],
         "owner": "ReviewAgent"
+    },
+    "DEVLOG": {
+        "path": ARTIFACT_PATHS["devlog"],
+        "owner": "EngineeringAgent"
     }
 }
 

@@ -23,6 +23,7 @@ ARTIFACT_PATHS = {
     "pm": WORKSPACE_DIR / "PROJECT_PLAN.md",
     "eng": WORKSPACE_DIR / "IMPLEMENTATION_PLAN.md",
     "review": WORKSPACE_DIR / "REVIEW_REPORT.md",
+    "devlog": DEV_NOTES_DIR / "DEVLOG.md",
 }
 
 

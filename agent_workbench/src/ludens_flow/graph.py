@@ -62,6 +62,12 @@ def run_agent_step(agent, mode: str, state: LudensState, user_input: str) -> Lud
             result: AgentResult = agent.discuss(state, user_input)
         elif mode == "COMMIT":
             result: AgentResult = agent.commit(state, user_input)
+        elif mode == "PLAN_DISCUSS":
+            result: AgentResult = getattr(agent, "plan_discuss")(state, user_input)
+        elif mode == "PLAN_COMMIT":
+            result: AgentResult = getattr(agent, "plan_commit")(state, user_input)
+        elif mode == "COACH":
+            result: AgentResult = getattr(agent, "coach")(state, user_input)
         else:
             raise ValueError(f"Unknown agent mode: {mode}")
 
@@ -73,8 +79,8 @@ def run_agent_step(agent, mode: str, state: LudensState, user_input: str) -> Lud
         # 4. 如果包含实质性写盘行为 (Commit)
         if result.commit and result.commit.artifact_name and result.commit.content:
             art_name = result.commit.artifact_name
-            # 双向守护拦截: 如果在结冰期则强硬切断写入，防止 Agent 违规撰写主线档案
-            if is_frozen:
+            # 双向守护拦截: 如果在结冰期且写入的不是日志/笔记类豁免工件，则强硬切断写入，防止 Agent 违规撰写主线档案
+            if is_frozen and art_name not in ["DEVLOG"]:
                 logger.warning(f"BLOCKED: {node_name} tried to commit '{art_name}' during frozen DEV_COACHING phase.")
                 state.last_error = f"Cannot commit canonical artifact {art_name} while artifact_frozen=True"
                 commit_flag = "BLOCKED"
@@ -178,11 +184,13 @@ class PMNode:
 
 class ENGNode:
     def execute(self, state: LudensState, user_input: str) -> LudensState:
-        # 阶段降级锁: 教练模式下锁死在 Discuss，任何指令无效
+        # 三路完全解耦：不同阶段导向不同接口
         if state.phase == Phase.DEV_COACHING.value:
-            mode = "DISCUSS"
+            mode = "COACH"
+        elif state.phase == Phase.ENG_COMMIT.value:
+            mode = "PLAN_COMMIT"
         else:
-            mode = "COMMIT" if state.phase == Phase.ENG_COMMIT.value else "DISCUSS"
+            mode = "PLAN_DISCUSS"
         return run_agent_step(_eng_agent, mode, state, user_input)
 
 class REVIEWNode:
