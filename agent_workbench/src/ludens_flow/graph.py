@@ -74,6 +74,9 @@ def run_agent_step(agent, mode: str, state: LudensState, user_input: str) -> Lud
         # 3. 合并状态的更新字段 (drafts, change_requests, review_gate 等)
         if result.state_updates:
             _merge_state_updates(state, result.state_updates)
+            
+        # 同步记录供终端回显的话术
+        state.last_assistant_message = result.assistant_message
 
         commit_flag = "N"
         # 4. 如果包含实质性写盘行为 (Commit)

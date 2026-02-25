@@ -62,6 +62,8 @@ class LudensState:
     # 复杂网关：status, targets, issues
     review_gate: Optional[Dict[str, Any]] = None  
     last_event: Optional[str] = None  # 用于 Router 处理自动跳转
+    last_assistant_message: Optional[str] = None  # 用于向外部 CLI 抛出模型的自然语言
+    last_error: Optional[str] = None
     
     # 文件元数据
     artifacts: Dict[str, ArtifactMeta] = field(default_factory=dict)

@@ -8,6 +8,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 import ludens_flow.state as st
 from ludens_flow.graph import graph_step
 
+try:
+    from dotenv import load_dotenv
+    # run_agents.py is in agent_workbench/, so parent is the root dir where .env lives
+    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+except ImportError:
+    pass
+
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
@@ -60,6 +67,12 @@ def main():
             print("\n>> Graph Engine Working...\n")
             # 不包揽任何分发或修改权限，一律喂给 Graph
             state = graph_step(state, user_input)
+            
+            # 若有模型自然语言返回，则立刻打印回显
+            if getattr(state, "last_assistant_message", None):
+                print(f"\n[🤖 Agent Reply]:\n{state.last_assistant_message}\n")
+                state.last_assistant_message = None  # 显示完即消
+                st.save_state(state)
             
         except KeyboardInterrupt:
             print("\nInterrupted by user. Exiting...")
