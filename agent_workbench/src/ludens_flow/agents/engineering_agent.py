@@ -14,8 +14,9 @@ logger = logging.getLogger(__name__)
 class EngineeringAgent(BaseAgent):
     name = "EngineeringAgent"
     system_prompt = (
-        "你是资深游戏主程(Engineering Agent)。负责基于 GDD 与 Project Plan，提供面向真实引擎(如 Unity)的实操架构指导。\n"
+        "你的名字是 Eon(伊恩)，你是资深游戏主程(Engineering Agent)。你负责基于 GDD 与 Project Plan 提供面向真实引擎(如 Unity)的实操架构指导。\n"
         "你需要确认开发框架与风格，最后产出包含目录结构、任务清单及风险的实施计划(IMPLEMENTATION_PLAN.md)。\n"
+        "你必须用干练、拟人化且非常专业的自然语言回复，不要输出任何 JSON 数据结构。"
     )
 
     def discuss(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
@@ -38,48 +39,19 @@ class EngineeringAgent(BaseAgent):
             f"已有 GDD：\n{gdd}\n\n"
             f"项目计划：\n{pm}\n"
             f"{dev_mode_context}\n"
-            f"目前讨论出或继承的草稿与风格记录：{eng_draft} | Preset: {style}\n\n"
             f"用户意图：{user_input}\n\n"
             "请执行以下操作：\n"
-            "1. 作为资深主程，必须向用户阐述并要求他选择以下 3 种【工程预设风格(Preset)】之一：\n"
+            "1. 作为资深主程 Eon，你要向用户阐述并探讨以下 3 种【工程预设风格(Preset)】之一：\n"
             "   - **A (Prototype-Readable)**：先跑起来，脚本细碎但清楚，适合带练和快速出 Demo。\n"
             "   - **B (Framework-Integrated)**：先立规矩再干活，适合长期维护和多人协作。\n"
             "   - **C (Feature-Slice)**：以玩法为单位“整包交付”，介于 A 和 B 之间，最适合持续加玩法但不想上大框架。\n"
-            "2. 根据用户反馈（如有），提供自然语言的架构梳理与答疑建议。\n"
-            "3. 【状态更新指令】在回复的最末尾，你**必须**输出一段更新总结的 JSON 块以记录系统大局。\n"
-            "格式必须为：\n"
-            "<<STATE_UPDATE_JSON>>\n"
-            "{{\n"
-            "  \"style_preset\": \"A 或 B 或 C 或 未定\",\n"
-            "  \"architecture_notes\": [\"...\"]\n"
-            "}}\n"
-            "<<END_STATE_UPDATE_JSON>>\n"
+            "2. 根据用户反馈（如有），提供亲和的自然语言的架构梳理与答疑建议。\n"
         )
         
-        reply = self._call(prompt, cfg)
+        reply = self._call(prompt, cfg, history=state.chat_history)
         
-        updates = {"drafts": {**state.drafts}}
-        draft_updates = dict(updates["drafts"].get("eng", {}))
+        updates = {}
         
-        pattern = r"<<STATE_UPDATE_JSON>>\s*(\{.*?\})\s*<<END_STATE_UPDATE_JSON>>"
-        match = re.search(pattern, reply, re.DOTALL)
-        
-        if match:
-            try:
-                extracted_data = json.loads(match.group(1))
-                if "style_preset" in extracted_data and extracted_data["style_preset"]:
-                    updates["style_preset"] = extracted_data.pop("style_preset")
-                draft_updates.update(extracted_data)
-                updates["drafts"]["eng"] = draft_updates
-                reply = reply[:match.start()].strip() + reply[match.end():].strip()
-            except Exception as e:
-                logger.warning(f"Failed to parse ENG <<STATE_UPDATE_JSON>> block: {e}")
-                draft_updates["current_discussion"] = reply
-                updates["drafts"]["eng"] = draft_updates
-        else:
-            draft_updates["current_discussion"] = reply
-            updates["drafts"]["eng"] = draft_updates
-
         # Step 4.4 Append options
         reply += "\n\n**请选择接下来的操作：**\n[1] 继续讨论\n[2] 定稿并生成\n[3] 回退到上一步 (PM_DISCUSS)"
         
@@ -91,14 +63,12 @@ class EngineeringAgent(BaseAgent):
     def plan_commit(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
         gdd = read_artifact("GDD")
         pm = read_artifact("PROJECT_PLAN")
-        draft = state.drafts.get("eng", {})
-        style = state.style_preset or "常规"
+        style = getattr(state, "style_preset", None) or "由本次对话记录决定"
         
         prompt = (
             f"依照用户坚决选定的工程风格：预设 {style}\n\n"
             f"GDD内容：\n{gdd}\n\n"
             f"Project Plan内容：\n{pm}\n\n"
-            f"之前讨论的工程技术储备：\n{draft}\n\n"
             "请直接输出一份给客户端程序员的 **IMPLEMENTATION_PLAN.md**。\n"
             "你必须包含且使用 Markdown 小标题详细阐明以下三个板块：\n"
             "1. **工程结构**：建议的具体目录、包结构或模块划分（支持树形展示）。\n"
@@ -106,13 +76,13 @@ class EngineeringAgent(BaseAgent):
             "3. **关键风险与替代方案**：列举 2-3 个技术刺客或选型风险点，以及若实现不顺的降级 Plan B。\n\n"
             "由于本输出将被系统拦截并落盘，请不要加上“好的主公，这是一份...”之类的客套废话，直接输出 Markdown 代码块或纯标题结构文本！"
         )
-        final_eng = self._call(prompt, cfg)
+        final_eng = self._call(prompt, cfg, history=state.chat_history)
         
         logger.info("[EngineeringAgent] Commit generated.")
         decisions = getattr(state, "decisions", []) + ["ENG committed"]
         
         return AgentResult(
-            assistant_message="工程架构蓝图已准备完毕。\n\n**系统即将自动流转至内部评审(REVIEW)阶段。**",
+            assistant_message="工程架构蓝图已准备完毕。\n\n**系统即将自动流转至内部评审(REVIEW)阶段。**\n\n*输入任意内容进入下一阶段*",
             state_updates={"decisions": decisions},
             commit=CommitSpec(
                 artifact_name="IMPLEMENTATION_PLAN",
@@ -181,7 +151,7 @@ class EngineeringAgent(BaseAgent):
             f"用户的当前需求/回复：\n{user_input}\n"
         )
         
-        reply = self._call(prompt, cfg)
+        reply = self._call(prompt, cfg, history=state.chat_history)
         logger.info("[EngineeringAgent] Coach instruction issued.")
         
         return AgentResult(

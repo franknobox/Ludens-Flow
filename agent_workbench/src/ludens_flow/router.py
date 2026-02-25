@@ -110,14 +110,17 @@ def route(
     next_phase = current_phase
     explanation = "Stay in current phase by default."
 
-    # --- 统一解析用户意图 ---
-    wants_commit = any(k in user_text for k in ["定稿", "生成", "开始执行", "commit"]) or user_text == "2"
-    wants_stay = any(k in user_text for k in ["继续", "再聊", "讨论"]) or user_text == "1"
-    wants_back = any(k in user_text for k in ["回退", "返回上一步"]) or user_text == "3"
+    # --- 统一解析用户意图（防误触修正） ---
+    # 规则：必须是单独敲击数字，或者句子极短(<=6)且包含关键字，防止长句闲谈如“生成式关卡”导致意外定稿
+    is_short_cmd = len(user_text) <= 8
     
-    opt_a = "a" in user_text or "按建议修改" in user_text
-    opt_b = "b" in user_text or "只改" in user_text
-    opt_c = "c" in user_text or "不改" in user_text or "进入开发" in user_text
+    wants_commit = user_text == "2" or (is_short_cmd and any(k in user_text for k in ["定稿", "生成", "执行", "commit"]))
+    wants_stay = user_text == "1" or (is_short_cmd and any(k in user_text for k in ["继续", "再聊", "讨论"]))
+    wants_back = user_text == "3" or (is_short_cmd and any(k in user_text for k in ["回退", "返回"]))
+    
+    opt_a = user_text == "a" or (is_short_cmd and "建议" in user_text)
+    opt_b = user_text == "b" or (is_short_cmd and "只改" in user_text)
+    opt_c = user_text == "c" or (is_short_cmd and "不改" in user_text)
 
     wants_unfreeze = any(k in user_text for k in ["解冻", "修改工件", "重新评审", "开启新迭代"])
 

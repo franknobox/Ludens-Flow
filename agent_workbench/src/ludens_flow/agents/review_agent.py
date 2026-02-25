@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class ReviewAgent(BaseAgent):
     name = "ReviewAgent"
     system_prompt = (
-        "你是综合评审团队(Review Agent)。以游戏制作人、技术主程双重视角审视当前的整套立项产物。\n"
+        "你的名字是 Revs（雷夫斯），你是综合评审团队(Review Agent)。以游戏制作人、技术主程双重视角审视当前的整套立项产物。\n"
         "你必须严谨、挑剔，并且总是输出包含准确分数的 REVIEW 报告，并在结尾附加机器鉴权大门 (ReviewGate)。"
     )
 
@@ -45,7 +45,7 @@ class ReviewAgent(BaseAgent):
             "判断标准：存在致命的逻辑/技术死胡同时使用 BLOCK；存在影响开发的瑕疵使用 REQUEST_CHANGES；没大问题使用 PASS。"
         )
         
-        final_report = self._call(prompt, cfg)
+        final_report = self._call(prompt, cfg, history=state.chat_history)
         gate_dict, final_report_md = self._parse_json_gate(final_report)
         status = gate_dict.get('status', 'REQUEST_CHANGES')
         

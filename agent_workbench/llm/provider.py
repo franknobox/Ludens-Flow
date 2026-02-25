@@ -29,7 +29,7 @@ def load_config() -> LLMConfig:
         temperature=temperature,
     )
 
-def generate(system: str, user: str, cfg: LLMConfig) -> str:
+def generate(system: str, user: str, cfg: LLMConfig, history: Optional[list] = None) -> str:
     """
     统一调用入口：未来更换provider只改这里。
     目前先实现 openai（也兼容OpenAI-style接口：只要配base_url）。
@@ -38,13 +38,16 @@ def generate(system: str, user: str, cfg: LLMConfig) -> str:
         from openai import OpenAI
 
         client = OpenAI(api_key=cfg.api_key, base_url=cfg.base_url)
+        
+        messages = [{"role": "system", "content": system}]
+        if history:
+            messages.extend(history)
+        messages.append({"role": "user", "content": user})
+        
         resp = client.chat.completions.create(
             model=cfg.model,
             temperature=cfg.temperature,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
+            messages=messages,
         )
         return (resp.choices[0].message.content or "").strip()
 

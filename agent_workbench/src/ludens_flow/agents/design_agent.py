@@ -8,65 +8,34 @@ from llm.provider import LLMConfig
 
 logger = logging.getLogger(__name__)
 
-import re
-
 class DesignAgent(BaseAgent):
     name = "DesignAgent"
     system_prompt = (
-        "你是一名拥有10年以上经验的资深游戏策划，擅长将发散的灵感转化为逻辑严密的GDD。\n"
-        "你的主要目标是厘清思路、为程序/美术提供可落盘的依据。\n"
+        "你的名字是 Dam (丹姆)，你是一名拥有 10 年以上经验的主设计师(游戏策划 Agent)。\n"
+        "你的主要目标是像一位人类主策一样与用户平易近人地交流，厘清他们的设计思路、核心循环和团队规模目标。\n"
+        "请绝对使用生动、自然、拟人化并且极其专业的自然语言对话，绝不要在聊天记录里输出任何刻板的 JSON 数据结构！"
     )
 
     def discuss(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
-        previous_draft = state.drafts.get("gdd", {})
-        
+        # 移除了所有槽位抽取的僵硬要求，放开手脚去聊天并借用 chat_history。
         prompt = (
-            f"用户的需求/反馈: {user_input}\n"
-            f"当前策划思路草案: {previous_draft}\n\n"
+            f"用户的需求/反馈: {user_input}\n\n"
             "请执行以下操作：\n"
-            "1. 提取或向用户确认关键信息（核心循环、MVP范围、题材、预期反馈等）。若用户未明确，提出补问。\n"
-            "2. 以自然语言流畅地回复用户，可以提供建议、扩展延伸或者询问细节。\n"
-            "3. 【状态更新指令】在回复的最末尾，你**必须**输出一段更新总结的 JSON 块。系统将用此记录你此时的工作记忆。\n"
-            "格式必须为：\n"
-            "<<STATE_UPDATE_JSON>>\n"
-            "{{\n"
-            "  \"core_loop\": \"...\",\n"
-            "  \"mvp_scope\": \"...\",\n"
-            "  \"open_questions\": [\"...\"],\n"
-            "  \"setting\": \"...\"\n"
-            "}}\n"
-            "<<END_STATE_UPDATE_JSON>>\n"
+            "1. 作为策划 Dam，与用户自然地交流本次的想法，提取或向用户探讨关键信息（核心玩法、范围、美术、队伍等）。\n"
+            "2. 如果有模糊地带，用友好的反问来牵引对方思考；如果用户给出了确认，请热烈地发散您的脑洞并予以专业肯定。\n"
+            "3. 保持自然、活泼。\n"
         )
         
-        reply = self._call(prompt, cfg)
+        # 将带有连贯记忆的任务发送给大模型
+        reply = self._call(prompt, cfg, history=state.chat_history)
         
-        updates = {"drafts": {**state.drafts}}
-        gdd_draft = dict(updates["drafts"].get("gdd", {}))
-        
-        # 使用正则解析 JSON
-        pattern = r"<<STATE_UPDATE_JSON>>\s*(\{.*?\})\s*<<END_STATE_UPDATE_JSON>>"
-        match = re.search(pattern, reply, re.DOTALL)
-        
-        if match:
-            try:
-                extracted_draft = json.loads(match.group(1))
-                gdd_draft.update(extracted_draft)
-                updates["drafts"]["gdd"] = gdd_draft
-                # 脱去 JSON 让用户看到的仅仅是自然对话
-                reply = reply[:match.start()].strip() + reply[match.end():].strip()
-            except Exception as e:
-                logger.warning(f"Failed to parse Design <<STATE_UPDATE_JSON>> block: {e}")
-                gdd_draft["current_discussion"] = reply
-                updates["drafts"]["gdd"] = gdd_draft
-        else:
-            gdd_draft["current_discussion"] = reply
-            updates["drafts"]["gdd"] = gdd_draft
-
+        # 拼接引导动作选项
         reply += "\n\n**请选择接下来的操作：**\n[1] 继续讨论\n[2] 定稿并生成\n[3] 回退到上一步 (已是初始阶段)"
         
+        # 纯自然语言回传给外界展示
         return AgentResult(
             assistant_message=reply.strip(),
-            state_updates=updates
+            state_updates={}
         )
 
     def commit(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
@@ -90,7 +59,7 @@ class DesignAgent(BaseAgent):
         decisions = getattr(state, "decisions", []) + ["GDD committed"]
         
         return AgentResult(
-            assistant_message="GDD 已定稿出炉，正交付总控归档。\n\n**系统即将自动流转至项目管理(PM)阶段。**",
+            assistant_message="GDD 已定稿出炉，正交付总控归档。\n\n**系统即将自动流转至项目管理(PM)阶段。**\n\n*输入任意内容进入下一阶段*",
             state_updates={"decisions": decisions},
             commit=CommitSpec(
                 artifact_name="GDD",

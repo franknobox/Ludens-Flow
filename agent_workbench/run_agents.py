@@ -63,6 +63,15 @@ def main():
                 
             if not user_input:
                 continue
+                
+            if user_input.lower() in ("/reset", "/restart"):
+                logger.info("Resetting workspace state...")
+                if st.STATE_FILE.exists():
+                    st.STATE_FILE.unlink()
+                # 重新加载（会自动拿到全新的纯净状态）
+                state = st.load_state()
+                print("\n✨ [System]: 记忆已清空，时空倒流回起点！")
+                continue
 
             print("\n>> Graph Engine Working...\n")
             # 不包揽任何分发或修改权限，一律喂给 Graph

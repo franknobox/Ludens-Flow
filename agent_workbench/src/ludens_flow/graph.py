@@ -77,6 +77,14 @@ def run_agent_step(agent, mode: str, state: LudensState, user_input: str) -> Lud
             
         # 同步记录供终端回显的话术
         state.last_assistant_message = result.assistant_message
+        
+        # 将本轮回话打包送进短期记忆体 (过滤空语句)
+        if user_input.strip() and result.assistant_message.strip():
+            state.chat_history.append({"role": "user", "content": user_input})
+            state.chat_history.append({"role": "assistant", "content": result.assistant_message})
+            # 设置阶段隔离/记忆断层：只保留最近 10 次对话(20条数据)，避免 token 在无限对练里被撑爆
+            if len(state.chat_history) > 20:
+                state.chat_history = state.chat_history[-20:]
 
         commit_flag = "N"
         # 4. 如果包含实质性写盘行为 (Commit)
@@ -168,6 +176,32 @@ class RouterNode:
             reason=result.explanation
         )
         
+        # 大阶段跃迁时自动清空历史语境并触发接力自我介绍
+        # 避免同部门间距跳转（如 GDD_DISCUSS 到 GDD_COMMIT）重复介绍
+        from_prefix = from_phase.split('_')[0]
+        to_prefix = to_phase.split('_')[0]
+        
+        if from_phase != to_phase:
+            # 清理旧时代记忆
+            if from_prefix != to_prefix or to_phase == "DEV_COACHING":
+                state.chat_history = []
+                logger.info(f"Memory wiped for phase transition setting up next Context.")
+                
+                # 为新登场的 Agent 强插一条虚拟开场白！
+                greeting = ""
+                if to_phase.startswith("GDD_"):
+                    greeting = "Hello，我是你的游戏主策划 Dam (丹姆)。很高兴接手这个项目的前期设计工作！你有什么天马行空的想法，直接砸过来吧！"
+                elif to_phase.startswith("PM_"):
+                    greeting = "你好！我是项目经理 Pax (帕克斯)。Dam 已经把需求同步过来了，我看过觉得很有意思。接下来我们来抓一抓排期和落地计划吧！"
+                elif to_phase.startswith("ENG_") or to_phase == "DEV_COACHING":
+                    greeting = "嗨！我是主程 Eon (伊恩)。前面的大饼我都看到了（笑）。接下来的技术选型和架构地基交给我，保证给你码踏实了。"
+                elif to_phase == "REVIEW":
+                    greeting = "各位好。我是终审节点 Revs (雷夫斯)。我这里的标准极其严格，不留情面，准备好接受全方位的查水表吧。"
+                    
+                if greeting:
+                    state.last_assistant_message = greeting
+                    state.chat_history.append({"role": "assistant", "content": greeting})
+
         state.phase = to_phase
         save_state(state)
         
@@ -219,23 +253,35 @@ def graph_step(state: LudensState, user_input: str) -> LudensState:
     单次大循环入口：
     由 Router 找门 -> 如果是需裁判节点直接弹开 -> 如果有对应的 Agent Node，则入内执行并返回
     """
+    old_phase = state.phase
+    
     # 1. 向调度器请求下一个状态
     router_node = RouterNode()
     router_node.execute(state, user_input)
     
-    print(f"\n[DEBUG] Graph Step - Router Output Phase: {state.phase}")
+    new_phase = state.phase
+    
+    print(f"\n[DEBUG] Graph Step - Router Output Phase: {new_phase}")
     
     # 若扭转后是用户打断人工选择节点（ POST_REVIEW_DECISION），则不进入任何 Agent 去无头调用。
-    if state.phase == Phase.POST_REVIEW_DECISION.value:
+    if new_phase == Phase.POST_REVIEW_DECISION.value:
          logger.info("Graph Paused at POST_REVIEW_DECISION for User selection.")
          return state
          
+    # 若存在跨 Agent 的流转，系统已注入新角色的寒暄 (last_assistant_message), 直接暂停挂起引擎将舞台交还给终端
+    old_prefix = old_phase.split('_')[0] if old_phase else ""
+    new_prefix = new_phase.split('_')[0]
+    
+    if old_phase != new_phase and (old_prefix != new_prefix or new_phase == "DEV_COACHING"):
+        logger.info(f"Cross-Agent transition detected ({old_phase} -> {new_phase}). Suspending graph to emit greeting.")
+        return state
+         
     # 2. 将路由指向具体的 Agent Node 交班
-    active_node = PHASE_NODE_MAP.get(state.phase)
+    active_node = PHASE_NODE_MAP.get(new_phase)
     print(f"[DEBUG] Graph Step - Active Node mapped: {active_node}")
     if active_node:
         state = active_node.execute(state, user_input)
     else:
-        logger.warning(f"Unhandled phase in Graph: {state.phase}")
+        logger.warning(f"Unhandled phase in Graph: {new_phase}")
         
     return state

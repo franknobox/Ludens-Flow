@@ -65,6 +65,9 @@ class LudensState:
     last_assistant_message: Optional[str] = None  # 用于向外部 CLI 抛出模型的自然语言
     last_error: Optional[str] = None
     
+    # 对话记忆：记录跨模型的流转对话上下文，格式为 {"role": "user/assistant", "content": "..."}
+    chat_history: List[Dict[str, str]] = field(default_factory=list)
+    
     # 文件元数据
     artifacts: Dict[str, ArtifactMeta] = field(default_factory=dict)
 

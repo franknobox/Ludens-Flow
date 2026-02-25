@@ -34,7 +34,7 @@ class BaseAgent(ABC):
     name: str = "BaseAgent"
     system_prompt: str = ""
 
-    def _call(self, user_prompt: str, cfg: Optional[LLMConfig] = None) -> str:
+    def _call(self, user_prompt: str, cfg: Optional[LLMConfig] = None, history: Optional[List[Dict[str, str]]] = None) -> str:
         """统一 LLM 调用入口。未来如果换框架，只需修改此处。"""
         # 注意: 正常运行时如果没有传入 cfg, 需要自己实例化。为解耦我们目前允许传 None。
         from llm.provider import load_config
@@ -45,7 +45,7 @@ class BaseAgent(ABC):
             except Exception:
                 # 若无法加载 (例如测试无 key), 这里会直接挂掉
                 pass
-        return generate(system=self.system_prompt, user=user_prompt, cfg=cfg)
+        return generate(system=self.system_prompt, user=user_prompt, cfg=cfg, history=history)
 
     @abstractmethod
     def discuss(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:

@@ -15,9 +15,9 @@ import re
 class PMAgent(BaseAgent):
     name = "PMAgent"
     system_prompt = (
-        "你是资深项目管理者(PM Agent)。你需要基于 GDD 与用户沟通，补齐开发阶段、任务拆解、协作机制等信息；\n"
-        "最终生成项目计划 Markdown 文档 (PROJECT_PLAN.md)。\n"
-        "如果发现 GDD 存在严重缺项，你需要向系统提出 ChangeRequest。\n"
+        "你的名字是 Pax(帕克斯)，你是资深项目管理者 (PM Agent)。\n"
+        "你需要基于 GDD 以及像一位经验丰富的人类合伙人一样，与用户沟通开发阶段、任务拆解、协作机制等信息；\n"
+        "你必须用干练、拟人化且非常专业的自然语言回复，不要输出任何 JSON 数据结构。"
     )
 
     def discuss(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
@@ -26,42 +26,14 @@ class PMAgent(BaseAgent):
         
         prompt = (
             f"已有 GDD：\n{gdd_content}\n\n"
-            f"目前项目计划讨论草案：\n{previous_draft}\n\n"
-            f"用户意图：{user_input}\n"
+            f"用户意图：{user_input}\n\n"
             "请执行以下操作：\n"
-            "1. 以专业 PM 视角，向用户确认或补问关键信息：目标工期（日期/周数）、团队人数/角色、各自投入时间、工具链（如 Unity版本、Git LFS）、协作方式。\n"
-            "2. 以自然语言回复用户的提问或提供建议。\n"
-            "3. 【状态更新指令】在回复的最末尾，你**必须**输出一段更新总结的 JSON 块。系统将用此记录你此时的工作记忆。\n"
-            "格式必须为：\n"
-            "<<STATE_UPDATE_JSON>>\n"
-            "{{\n"
-            "  \"schedule\": \"...\",\n"
-            "  \"team_size\": \"...\",\n"
-            "  \"tools\": \"...\"\n"
-            "}}\n"
-            "<<END_STATE_UPDATE_JSON>>\n"
+            "1. 以专业且亲和的 PM 视角，向用户确认或探讨关键信息：工期、团队人数、协作方式等。\n"
+            "2. 以自然语言流畅地回复用户，不要带任何特殊格式标签。\n"
         )
-        reply = self._call(prompt, cfg)
+        reply = self._call(prompt, cfg, history=state.chat_history)
         
-        updates = {"drafts": {**state.drafts}}
-        pm_draft = dict(updates["drafts"].get("pm", {}))
-        
-        pattern = r"<<STATE_UPDATE_JSON>>\s*(\{.*?\})\s*<<END_STATE_UPDATE_JSON>>"
-        match = re.search(pattern, reply, re.DOTALL)
-        
-        if match:
-            try:
-                extracted_draft = json.loads(match.group(1))
-                pm_draft.update(extracted_draft)
-                updates["drafts"]["pm"] = pm_draft
-                reply = reply[:match.start()].strip() + reply[match.end():].strip()
-            except Exception as e:
-                logger.warning(f"Failed to parse PM <<STATE_UPDATE_JSON>> block: {e}")
-                pm_draft["current_discussion"] = reply
-                updates["drafts"]["pm"] = pm_draft
-        else:
-            pm_draft["current_discussion"] = reply
-            updates["drafts"]["pm"] = pm_draft
+        updates = {}
 
         reply += "\n\n**请选择接下来的操作：**\n[1] 继续讨论\n[2] 定稿并生成\n[3] 回退到上一步 (GDD_DISCUSS)"
         
@@ -89,7 +61,7 @@ class PMAgent(BaseAgent):
             "<<END_CHANGE_REQUEST_JSON>>\n"
             "如果没有缺项，可以不输出此 JSON。你的 Markdown 正文不应被代码块包裹，请直接以 Markdown 标题起手。"
         )
-        final_pm_output = self._call(prompt, cfg)
+        final_pm_output = self._call(prompt, cfg, history=state.chat_history)
         
         updates = {}
         final_pm = final_pm_output
@@ -113,7 +85,7 @@ class PMAgent(BaseAgent):
         logger.info("[PMAgent] Commit generated.")
         
         return AgentResult(
-            assistant_message="项目管理规划书 (PROJECT_PLAN) 已定稿。\n\n**系统即将自动流转至技术(ENG)阶段。**",
+            assistant_message="项目管理规划书 (PROJECT_PLAN) 已定稿。\n\n**系统即将自动流转至技术(ENG)阶段。**\n\n*输入任意内容进入下一阶段*",
             state_updates=updates,
             commit=CommitSpec(
                 artifact_name="PROJECT_PLAN",
