@@ -1,12 +1,12 @@
 # Ludens-Flow — 项目状态
 
-> 最后更新：2026-02-20
+> 最后更新：2026-02-27
 
 ---
 
 ## 🏁 当前阶段
 
-**Baseline 验证完成 · 多Agent架构设计中**
+**多 Agent 架构 MVP 实现完成 · 基于状态机的工作流引擎已就绪**
 
 ---
 
@@ -14,56 +14,43 @@
 
 | 模块 | 描述 |
 |---|---|
-| `agent_workbench/llm/` | LLM 统一调用层（openai / OpenAI-compatible） |
-| `agent_workbench/run_baseline.py` | 串行基线流程：Design → PM → Engineering → Review |
-| `artifacts/gdd/GDD.md` | 首次 GDD 产物生成验证通过 |
-| `artifacts/pm/PROJECT_PLAN.md` | 项目计划产物生成验证通过 |
-| `artifacts/coding/IMPLEMENTATION_PLAN.md` | 实现计划产物生成验证通过 |
-| `artifacts/review/REVIEW_REPORT.md` | 评审报告产物生成验证通过 |
-| 终端输入模式 | 支持命令行参数 / 交互式 `input()` 两种方式 |
-| 终端进度反馈 | 每个 Agent 阶段打印 `[N/4]` 进度提示 |
-
-**最后成功运行阶段：** `review`（全流程 PASS）
+| `agent_workbench/src/ludens_flow/state.py` | 实现了 `LudensState` 全局状态中心，支持进程级别的持久化断点续传 |
+| `agent_workbench/src/ludens_flow/router.py` | 实现了基于 Phase 的核心路由大脑，负责状态流转、打回重做等逻辑 |
+| `agent_workbench/src/ludens_flow/graph.py` | 实现了 Graph 图节点调度器，对接路由与各执行实体 |
+| `agent_workbench/src/ludens_flow/artifacts.py` | 实现了核心产物（GDD、实现计划等）的单写入权与原子化版本落盘 |
+| `agent_workbench/src/ludens_flow/agents/` | 封装了四大核心节点：Design / PM / Engineering / Review |
+| **状态流转基线** | 完整跑通 Design → PM → Engineering → Review 并在必要时 Backflow 回退的环形图流转 |
 
 ---
 
-## 🔄 进行中
+## 🔄 进行中 / 开发计划 (Roadmap)
 
-- [ ] 多Agent架构重构方案设计
-  - 目标：`OrchestratorAgent` (1) + 专职子Agent (4) 的真正多Agent结构
-  - 核心增加：`SharedContext` 共享状态 · 迭代反馈循环 · Review PASS/FAIL 自动决策
+我们已将后续核心规划梳理至独立文档：[ROADMAP.md](docs/ROADMAP.md)
 
----
-
-## 📋 待办事项
-
-| 优先级 | 任务 |
-|---|---|
-| 🔴 高 | 抽取 `core/context.py`（SharedContext）|
-| 🔴 高 | 抽取 `agents/base.py`（BaseAgent 抽象类）|
-| 🔴 高 | 4个 `generate()` 迁移为独立 Agent 类 |
-| 🟡 中 | 实现 `OrchestratorAgent` + 迭代主控循环 |
-| 🟡 中 | Review Agent 解析 PASS/FAIL，注入阻塞问题 |
-| 🟢 低 | PM Agent + Engineering Agent 并行执行 |
-| 🟢 低 | 结构化输出（Pydantic 替代纯 Markdown 解析）|
+以下为核心摘要重点：
+- [ ] **稳定性与重构**：清理 `orchestrator.py` 等遗留冗余代码，强化崩溃恢复机制。
+- [ ] **Prompt 与 Schema 优化**：针对 Unity 开发新人优化提示词，并引入强结构化输出 (JSON Schemas) 保障流转稳定性。
+- [ ] **人设独立与可配**：将各 Agent 的 System Prompt 与用户画像 (User Profile) 抽离为独立配置文件，实现动态自适应对话。
+- [ ] **多模态与联网搜索**：集成 Web Search API 与图像识别 (如 GPT-4V)，解决时效性问题并允许处理截图/引擎报错。
+- [ ] **前端交互 UI**：设计并开发图形化前端（如 Gradio / Streamlit 等），将 CLI 交互升级为可视化的工作台与文件对比视图。
 
 ---
 
-## 📁 目录结构（当前）
+## 📁 目录结构（核心资产）
 
 ```
 Ludens-Flow/
 ├── agent_workbench/        # Agent 执行引擎
+│   ├── src/ludens_flow/    # 核心框架流转与逻辑代码 (State/Router/Graph/Artifacts)
+│   │   └── agents/         # 具体 Agent 实现 (Design/PM/Engineering/Review)
 │   ├── llm/                # LLM 调用层
-│   ├── run_baseline.py     # 当前入口（串行基线）
-│   └── README.md
-├── artifacts/              # Agent 产出工件
-│   ├── gdd/GDD.md
-│   ├── pm/PROJECT_PLAN.md
-│   ├── coding/IMPLEMENTATION_PLAN.md
-│   └── review/REVIEW_REPORT.md
-├── 00_meta/                # 规范与Schema
-├── docs/                   # 项目文档
+│   └── tests/              # 测试脚本与错误 dump
+├── docs/                   # 项目文档与规划
+│   └── ROADMAP.md          # 后续开发计划
+├── workspace/              # 运行时生成空间（执行产生，自动生成）
+│   ├── logs/               # trace.log/router.log 等运行日志
+│   ├── memory/             # 历史对话与 Agent 记忆
+│   └── state.json          # 全局流转状态存档
 ├── Unity/                  # Unity 游戏工程
 ├── .env                    # LLM配置（不入库）
 └── STATUS.md               # 本文件
@@ -85,4 +72,4 @@ Ludens-Flow/
 ## 🔗 相关文档
 
 - [Agent Workbench 使用指南](agent_workbench/README.md)
-- [多Agent重构计划](agent_workbench/README.md) *(规划中)*
+- [后续详细开发计划 (ROADMAP)](docs/ROADMAP.md)
