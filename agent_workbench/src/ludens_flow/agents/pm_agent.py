@@ -15,9 +15,10 @@ import re
 class PMAgent(BaseAgent):
     name = "PMAgent"
     system_prompt = (
-        "你的名字是 Pax(帕克斯)，你是资深项目管理者 (PM Agent)。\n"
-        "你需要基于 GDD 以及像一位经验丰富的人类合伙人一样，与用户沟通开发阶段、任务拆解、协作机制等信息；\n"
-        "你必须用干练、拟人化且非常专业的自然语言回复，不要输出任何 JSON 数据结构。"
+        "你的名字是 Pax (帕克斯)，你是一位擅长独立游戏项目的 PM Agent。\n"
+        "你深度理解小团队或个人开发者的节奏，了解 Unity 项目的工程目录结构与 Editor 工作流。\n"
+        "你的核心哲学是：控制 scope，快速验证，砍掉一切不必要的功能，让核心体验尽快跑起来。\n"
+        "你必须用干练、亲切且务实的自然语言回复，不要输出任何 JSON 数据结构。"
     )
 
     def discuss(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
@@ -28,8 +29,10 @@ class PMAgent(BaseAgent):
             f"已有 GDD：\n{gdd_content}\n\n"
             f"用户意图：{user_input}\n\n"
             "请执行以下操作：\n"
-            "1. 以专业且亲和的 PM 视角，向用户确认或探讨关键信息：工期、团队人数、协作方式等。\n"
-            "2. 以自然语言流畅地回复用户，不要带任何特殊格式标签。\n"
+            "1. 以独立游戏 PM 的视角，向用户确认或探讨关键排期信息：大致工期（以天/周为单位）、参与人数（默认 1-3 人小团队）。\n"
+            "2. 结合 GDD 中的功能，主动帮用户识别哪些功能是核心体验不可缺少的，哪些可以在 Game Jam 或 MVP 阶段果断砍掉。\n"
+            "3. 所有建议以 Unity PC Standalone（Editor 可以 Play Mode 验收）为默认交付目标，不主动引入跨平台或多人联网议题。\n"
+            "4. 以自然语言流畅地回复用户，不带任何特殊格式标签。\n"
         )
         reply = self._call(prompt, cfg, history=state.chat_history)
         
@@ -49,9 +52,13 @@ class PMAgent(BaseAgent):
         prompt = (
             f"已有 GDD：\n{gdd_content}\n\n"
             f"讨论共识：\n{draft_context}\n\n"
-            "1. 请输出一份详实的 PROJECT_PLAN.md。要求包含：Milestones (M0/M1/M2) 及验收标准、Task breakdown (按模块或按角色拆解)、协作方式与目录结构建议、风险与缓解方案。\n"
-            "2. 如果你发现 GDD 存在严重缺项导致无法顺利排期（例如完全没有提及核心战斗形式），请**务必**在回复正文的最后附加一节 ChangeRequest JSON 块。\n"
-            "格式必须为：\n"
+            "请输出一份适合独立游戏或 Game Jam 项目的 PROJECT_PLAN.md，要求：\n"
+            "1. **Milestones**：以 M0/M1/M2 划分，每个 Milestone 的验收标准必须是 Unity Editor Play Mode 可测试的具体状态（例如：M0 = 可在 Play Mode 中进入主场景并完成一次完整的游戏主循环）。\n"
+            "2. **Task Breakdown**：按 Unity 工程模块拆分任务，例如 Scripts / Prefabs / SceneSetup / Animations / Audio。每项任务应细化到「在 Unity 里要做什么」的程度，方便单人或小团队直接上手。\n"
+            "3. **Unity 目录结构建议**：输出一份适合本项目的 Assets/ 目录树，遵循 Unity 独立游戏项目惯例（如 _Scripts / _Prefabs / _Scenes / _Audio / _Art 等）。\n"
+            "4. **风险与缓解**：聚焦技术风险和 scope 蔓延风险，给出务实的应对建议。不涉及多人协作流程或商业发布计划。\n"
+            "5. 如果你发现 GDD 存在严重缺项导致无法顺利排期，请在回复正文最后附加 ChangeRequest JSON 块：\n"
+            "格式：\n"
             "<<CHANGE_REQUEST_JSON>>\n"
             "{\n"
             "  \"change_requests\": [\n"
@@ -75,7 +82,6 @@ class PMAgent(BaseAgent):
                 if "change_requests" in cr_data:
                     updates["change_requests"] = getattr(state, "change_requests", []) + cr_data["change_requests"]
                     logger.info(f"[PMAgent] Detected and appended {len(cr_data['change_requests'])} ChangeRequest(s).")
-                # 脱去 JSON，仅写入纯 Markdown 作为工件
                 final_pm = final_pm_output[:cr_match.start()].strip() + final_pm_output[cr_match.end():].strip()
             except Exception as e:
                 logger.warning(f"Failed to parse PM ChangeRequest JSON: {e}")

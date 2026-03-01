@@ -1,8 +1,13 @@
 import sys
 from pathlib import Path
-import logging
 
-sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
+_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(_ROOT))
+sys.path.insert(0, str(_ROOT / "src"))
+
+import logging
+import os
+os.chdir(_ROOT)
 
 from ludens_flow.state import init_state
 from ludens_flow.router import route, Phase
@@ -27,41 +32,44 @@ def test_routes_v2():
     state.review_gate = {
         "status": "REQUEST_CHANGES",
         "targets": ["ENG"],
-        "issues": [
-            {"target": "ENG", "severity": "MINOR", "desc": "Optimize loop"}
-        ]
+        "issues": [{"target": "ENG", "severity": "MINOR", "desc": "Optimize loop"}]
     }
-    p, e, u = route(state, "A - 按建议修改")
+    # 使用单字母 "a" 触发 opt_a
+    p, e, u = route(state, "a")
     assert p == Phase.ENG_DISCUSS.value, f"Expected ENG_DISCUSS, got {p}"
     
     logger.info("--- 测试 3.3.2 ReviewGate B回流 (过滤 MAJOR/BLOCK) ---")
-    # 如果只有MINOR，B选项直接放行
-    p, e, u = route(state, "B - 只改重点")
+    # 只有 MINOR -> B 选项直接放行到 DEV_COACHING
+    state.phase = Phase.POST_REVIEW_DECISION.value
+    state.review_gate["issues"] = [{"target": "ENG", "severity": "MINOR"}]
+    p, e, u = route(state, "b")
     assert p == Phase.DEV_COACHING.value, f"Expected DEV_COACHING, got {p}"
     
-    # 修改 issues 包含 MAJOR -> 应该回到靶向源头 PM (测试优先级 GDD>PM>ENG)
+    # 有 MAJOR -> 应该回到靶向源头 PM
+    state.phase = Phase.POST_REVIEW_DECISION.value
     state.review_gate["issues"] = [
         {"target": "ENG", "severity": "MINOR"},
         {"target": "PM", "severity": "MAJOR"}
     ]
-    p, e, u = route(state, "B")
+    p, e, u = route(state, "b")
     assert p == Phase.PM_DISCUSS.value, f"Expected PM_DISCUSS, got {p}"
 
     logger.info("--- 测试 3.4 冻结拦截与跳脱 ---")
     state.phase = Phase.DEV_COACHING.value
-    p, e, u = route(state, "我要定稿")
-    # 冻结期间提交被无视
-    assert p == Phase.DEV_COACHING.value
-    # 申请解冻
-    p, e, u = route(state, "好的，解冻工件吧")
-    assert p == Phase.ENG_DISCUSS.value
+    state.artifact_frozen = True
+    # 普通输入被拦截，保持在 DEV_COACHING
+    p, e, u = route(state, "定稿")
+    assert p == Phase.DEV_COACHING.value, f"Expected DEV_COACHING, got {p}"
+    # 解冻关键词触发解冻
+    p, e, u = route(state, "解冻")
+    assert p == Phase.ENG_DISCUSS.value, f"Expected ENG_DISCUSS, got {p}"
     assert u.get("artifact_frozen") is False
     
     logger.info("--- 测试 死循环拦截 ---")
     state.iteration_count = 10
     state.phase = Phase.GDD_DISCUSS.value
-    p, e, u = route(state, "随便说点啥")
-    assert p == Phase.DEV_COACHING.value
+    p, e, u = route(state, "随便")
+    assert p == Phase.DEV_COACHING.value, f"Expected DEV_COACHING (iter limit), got {p}"
     assert u.get("artifact_frozen") is True
     
     logger.info("✅ 测试通过: v2 拦截、默认跳转及 ReviewGate 靶向回流均符合预期")

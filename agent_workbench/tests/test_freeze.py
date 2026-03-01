@@ -1,8 +1,13 @@
 import sys
 from pathlib import Path
-import logging
 
-sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
+_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(_ROOT))
+sys.path.insert(0, str(_ROOT / "src"))
+
+import logging
+import os
+os.chdir(_ROOT)
 
 from ludens_flow.state import init_workspace, load_state, save_state
 from ludens_flow.artifacts import write_artifact, write_dev_note, write_patch, artifact_exists
@@ -17,7 +22,7 @@ def run_tests():
 
     logger.info("\n--- 测试 1: 进入 DEV_COACHING，开启 Artifact Freeze ---")
     state.phase = "DEV_COACHING"
-    state.artifact_frozen = True   # 模拟 router 的自动设置
+    state.artifact_frozen = True
     save_state(state)
     logger.info("状态已冻结 (artifact_frozen = True)")
 

@@ -14,8 +14,10 @@ logger = logging.getLogger(__name__)
 class ReviewAgent(BaseAgent):
     name = "ReviewAgent"
     system_prompt = (
-        "你的名字是 Revs（雷夫斯），你是综合评审团队(Review Agent)。以游戏制作人、技术主程双重视角审视当前的整套立项产物。\n"
-        "你必须严谨、挑剔，并且总是输出包含准确分数的 REVIEW 报告，并在结尾附加机器鉴权大门 (ReviewGate)。"
+        "你的名字是 Revs（雷夫斯），你是资深综合评审(Review Agent)，有丰富的 Unity 独立游戏开发与 Game Jam 经验。\n"
+        "你以「这个方案靠一两个人在有限时间内真的能做出来吗」的务实角度评审整套立项产物。\n"
+        "你同时具备策划视角与 Unity 技术视角，特别关注 scope 蔓延（Feature Creep）与技术过度设计问题。\n"
+        "你必须严谨、挑剔，并总是输出包含准确分数的 REVIEW 报告，并在结尾附加机器鉴权大门 (ReviewGate)。"
     )
 
     def discuss(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
@@ -28,9 +30,13 @@ class ReviewAgent(BaseAgent):
         impl = read_artifact("IMPLEMENTATION_PLAN")
         
         prompt = (
-            "请严格审视以下三份核心文档的一致性、scope控制、乐趣自洽度与工程风险：\n\n"
+            "请严格审视以下三份核心文档，从 Unity 独立游戏开发的角度评估一致性、可行性和 scope 健康度：\n\n"
             f"【GDD】\n{gdd}\n\n【PROJECT PLAN】\n{pm}\n\n【IMPLEMENTATION PLAN】\n{impl}\n\n"
-            "1. 请在正文区域输出一份专业的人类可读 Markdown 评审报告（包含对 Design 和 Engineering 的打分理由、风险指出与优缺点总结）。\n"
+            "1. 请在正文区域输出一份专业的 Markdown 评审报告，包含以下维度：\n"
+            "   - **创意与设计评审**：核心玩法是否清晰，游戏体验是否自洽，有何亮点与潜在问题。\n"
+            "   - **Unity 工程可执行性审计**：IMPLEMENTATION_PLAN 中描述的架构在 Unity 里是否有真实可用的实现手段？对于当前规模（默认小团队/个人）是否过度设计或遗漏关键技术点？\n"
+            "   - **Scope 健康度检查**：GDD 和 PM Plan 中是否存在 Feature Creep？有哪些功能在 Game Jam 或独立项目 MVP 阶段应该果断砍掉？\n"
+            "   - **风险综合分析**：列出 2-3 个最可能导致项目卡壳的技术或设计风险，并给出针对性建议。\n"
             "2. 在整个回复的末尾，**必须**输出一段 JSON 数据驱动的 ReviewGate，格式如下：\n"
             "<<REVIEW_GATE_JSON>>\n"
             "{\n"
@@ -38,11 +44,11 @@ class ReviewAgent(BaseAgent):
             "  \"targets\": [\"GDD\", \"PM\", \"ENG\"], // 指示退回修改的阶段，可以为空数组\n"
             "  \"scores\": {\"design\": 8, \"engineering\": 7}, // 必须在 0-10 之间\n"
             "  \"issues\": [\n"
-            "    {\"target\": \"ENG\", \"severity\": \"MAJOR\", \"summary\": \"架构不支持需求\", \"fix_hint\": \"建议改用 ECS\"}\n"
+            "    {\"target\": \"ENG\", \"severity\": \"MAJOR\", \"summary\": \"架构不支持需求\", \"fix_hint\": \"建议改用事件总线解耦\"}\n"
             "  ] // 可以为空数组\n"
             "}\n"
             "<<END_REVIEW_GATE_JSON>>\n\n"
-            "判断标准：存在致命的逻辑/技术死胡同时使用 BLOCK；存在影响开发的瑕疵使用 REQUEST_CHANGES；没大问题使用 PASS。"
+            "判断标准：存在致命的逻辑/技术死胡同时使用 BLOCK；存在影响开发的重要瑕疵使用 REQUEST_CHANGES；整体健康使用 PASS。"
         )
         
         final_report = self._call(prompt, cfg, history=state.chat_history)
@@ -57,7 +63,6 @@ class ReviewAgent(BaseAgent):
             "decisions": decisions
         }
         
-        # Step 4.4 针对 Review 阶段特有的打回/开火车提示菜单
         msg = f"终极评审揭晓！裁决判定：**{status}** (系统评定分: {gate_dict.get('score', 'N/A')})\n\n"
         msg += "**请对本次评审做出指示：**\n"
         msg += "[A] 接受建议（携带问题报告回流对应阶段）\n"
@@ -117,7 +122,6 @@ class ReviewAgent(BaseAgent):
         
         if design_score < 6 or eng_score < 6:
             gate_data["status"] = "REQUEST_CHANGES"
-            # 确保持有 target 以便图引擎知道回流到哪
             if "targets" not in gate_data or not gate_data["targets"]:
                 gate_data["targets"] = ["GDD"] if design_score < 6 else ["ENG"]
                 

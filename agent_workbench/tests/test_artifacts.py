@@ -1,17 +1,26 @@
 import sys
 from pathlib import Path
+
+# 统一路径配置
+_ROOT = Path(__file__).resolve().parents[1]  # agent_workbench/
+sys.path.insert(0, str(_ROOT))
+sys.path.insert(0, str(_ROOT / "src"))
+
 import logging
-
-# 添加 src 到路径，方便绝对导入
-sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
-
 from ludens_flow.state import init_workspace, load_state, save_state
 from ludens_flow.artifacts import write_artifact, read_artifact, artifact_exists
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
+# 统一使用绝对路径指向工作区
+WORKSPACE = _ROOT / "workspace"
+
 def run_tests():
+    # 切换工作目录确保相对路径正确
+    import os
+    os.chdir(_ROOT)
+
     logger.info("初始化工作区并加载 State...")
     init_workspace()
     state = load_state()
@@ -42,12 +51,10 @@ def run_tests():
         logger.info(f"✅ 成功拦截了不合法的内部常量错误: {str(e)}")
         
     logger.info("\n--- 测试 5: read_artifact 与空文件重建 ---")
-    # 把 GDD 偷偷删掉
-    gdd_path = Path("workspace/GDD.md")
+    gdd_path = WORKSPACE / "GDD.md"
     if gdd_path.exists():
         gdd_path.unlink()
     
-    # 在不存在的情况下强制读取，应当报错出 log 并在磁盘恢复空文件
     lost_content = read_artifact("GDD")
     logger.info(f"✅ 从磁盘重建空件读取结果为: '{lost_content}', 磁盘实体重新创建存在与否: {artifact_exists('GDD')}")
     
