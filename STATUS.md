@@ -20,6 +20,9 @@
 | `agent_workbench/src/ludens_flow/artifacts.py` | 实现了核心产物（GDD、实现计划等）的单写入权与原子化版本落盘 |
 | `agent_workbench/src/ludens_flow/agents/` | 封装了四大核心节点：Design / PM / Engineering / Review |
 | **状态流转基线** | 完整跑通 Design → PM → Engineering → Review 并在必要时 Backflow 回退的环形图流转 |
+| **独立 Unity 游戏开发特化 (新)** | 将四大子 Agent 提示词重构：默认基于 Unity 引擎进行独立开发/Game Jam，剔除商业化及联机内容，产出实用的底层目录架构。 |
+| **CI 与端到端测试覆盖 (新)** | 修复并重构全部 7 个核心图流转测试，补齐跨 Agent 状态流转断言。通过新增带超时保护的全链路真实 LLM 测试，确保 Prompt 与状态机可靠性。 |
+| **代码精简与隔离** | 移除了无关的早期里程碑测试文件与废弃的 `orchestrator.py` 以及过时的调度代码。实现了严格的测试环境状态目录隔离。 |
 
 ---
 
@@ -28,8 +31,7 @@
 我们已将后续核心规划梳理至独立文档：[ROADMAP.md](docs/ROADMAP.md)
 
 以下为核心摘要重点：
-- [ ] **稳定性与重构**：清理 `orchestrator.py` 等遗留冗余代码，强化崩溃恢复机制。
-- [ ] **Prompt 与 Schema 优化**：针对 Unity 开发新人优化提示词，并引入强结构化输出 (JSON Schemas) 保障流转稳定性。
+- [ ] **Prompt 与 Schema 优化**：引入强结构化输出 (JSON Schemas) 保障流转稳定性。
 - [ ] **人设独立与可配**：将各 Agent 的 System Prompt 与用户画像 (User Profile) 抽离为独立配置文件，实现动态自适应对话。
 - [ ] **多模态与联网搜索**：集成 Web Search API 与图像识别 (如 GPT-4V)，解决时效性问题并允许处理截图/引擎报错。
 - [ ] **前端交互 UI**：设计并开发图形化前端（如 Gradio / Streamlit 等），将 CLI 交互升级为可视化的工作台与文件对比视图。

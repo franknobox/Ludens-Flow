@@ -273,8 +273,13 @@ def graph_step(state: LudensState, user_input: str) -> LudensState:
     new_prefix = new_phase.split('_')[0]
     
     if old_phase != new_phase and (old_prefix != new_prefix or new_phase == "DEV_COACHING"):
-        logger.info(f"Cross-Agent transition detected ({old_phase} -> {new_phase}). Suspending graph to emit greeting.")
-        return state
+        # POSt_REVIEW_DECISION → DEV_COACHING 不需要暂停发送 Greeting，因为用户已经在决策界面，
+        # 无需再介绍 Eon，直接进入 DEV_COACHING 执行第一轮 coach 即可
+        is_post_review_to_dev = (old_phase == Phase.POST_REVIEW_DECISION.value and new_phase == Phase.DEV_COACHING.value)
+        if not is_post_review_to_dev:
+            logger.info(f"Cross-Agent transition detected ({old_phase} -> {new_phase}). Suspending graph to emit greeting.")
+            return state
+
          
     # 2. 将路由指向具体的 Agent Node 交班
     active_node = PHASE_NODE_MAP.get(new_phase)

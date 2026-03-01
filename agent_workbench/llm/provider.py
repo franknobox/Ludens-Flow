@@ -37,7 +37,8 @@ def generate(system: str, user: str, cfg: LLMConfig, history: Optional[list] = N
     if cfg.provider == "openai":
         from openai import OpenAI
 
-        client = OpenAI(api_key=cfg.api_key, base_url=cfg.base_url)
+        # 默认 120 秒超时，防止遇到后端（例如 Moonshot Kimi）网络波动挂起不返回。
+        client = OpenAI(api_key=cfg.api_key, base_url=cfg.base_url, timeout=120.0)
         
         messages = [{"role": "system", "content": system}]
         if history:
