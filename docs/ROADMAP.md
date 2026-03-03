@@ -34,3 +34,46 @@
   - **交互工作台**：实现在前端能进行多轮对话干预，同时用左右分屏等形式支持对核心资产工件 (Artifacts) 进行版本的对比、查看与手动编辑。
 - **负责人**：
 - **进度动态**：
+
+---
+
+## 🔭 远期规划 (Long-term Vision)
+
+> 以下为探索性方向，不设硬性排期，视近期计划完成进度逐步推进。
+
+## 6. 多项目工作台化 (Multi-Project Workspace)
+- **核心目标**：支持同时管理多个独立项目，每个项目拥有独立的状态、工件和对话记忆，无需每次 reset 重来。
+- **具体方向**：
+  - 将 `workspace/` 改为 `workspaces/<project_id>/` 的多目录结构，每个项目独立存储 `state.json`、`USER_PROFILE.md`、各阶段工件文件等。
+  - CLI / 前端支持"新建项目 / 切换项目 / 列出项目"操作。
+  - 引入轻量的项目索引文件（如 `workspaces/index.json`），记录各项目名称、创建时间、当前阶段等元信息。
+- **负责人**：
+- **进度动态**：
+
+## 7. RAG 知识检索增强 (Retrieval-Augmented Generation)
+- **核心目标**：让 Agent 在回答时能检索外部知识库，突破 LLM 训练数据的时效性和准确性限制。
+- **具体方向**：
+  - 对历史项目工件（GDD、Plan 等）和用户画像做 embedding 索引，支持跨项目的经验检索。
+  - 接入 Unity 官方文档 / API Reference 的离线向量库，让 Eon 在 Coaching 阶段能精确引用最新的 Unity API。
+  - 可选技术栈：`chromadb` / `faiss` + `text-embedding-3-small`。
+- **负责人**：
+- **进度动态**：
+
+## 8. Agent 能力 Skills 化 (Skill-based Agent Architecture)
+- **核心目标**：将 Agent 的能力从"一整块 prompt"拆解为可组合、可插拔的独立 Skill 模块，提升复用性与可扩展性。
+- **具体方向**：
+  - 定义统一的 Skill 接口规范（输入/输出/触发条件），例如 `ArchitectureSkill`、`CodeReviewSkill`、`ScopeAnalysisSkill`。
+  - Agent 在执行时根据当前任务上下文动态加载所需 Skills，而非依赖一个巨型 system prompt。
+  - 长期可实现 Agent 之间的 Skill 共享（例如 Eon 和 Revs 共享 `UnityBestPracticeSkill`）。
+- **负责人**：
+- **进度动态**：
+
+## 9. Unity 工程文件接入 (Unity Project Integration)
+- **核心目标**：让 Agent 能直接感知和操作用户本地的 Unity 工程文件，从"纯文本规划"升级为"实际代码级辅助"。
+- **具体方向**：
+  - 读取 Unity 项目的 `Assets/` 目录结构，让 Eon 在 Coaching 时参考用户的实际代码组织。
+  - 解析 `.cs` 脚本文件，支持代码片段级别的问答、Review 和重构建议。
+  - 探索对 `.unity` / `.prefab` / `.asset` 等 Unity 序列化文件的 YAML 层解析，实现场景结构和 Prefab 依赖的自动分析。
+  - 长期目标：Agent 能直接生成 `.cs` 脚本文件并写入 Unity 工程目录。
+- **负责人**：
+- **进度动态**：
