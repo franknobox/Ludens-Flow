@@ -104,9 +104,9 @@ def run_agent_step(agent, mode: str, state: LudensState, user_input: str) -> Lud
                     # 针对 Review 特殊说明原因
                     commit_reason = f"Review Auto-Gate, decision: {result.state_updates['review_gate'].get('status', 'PND')}"
                 
-                logger.error(f">>>>> WRITE ARTIFACT CRITICAL GUARD <<<<<")
-                logger.error(f"Type of content: {type(result.commit.content)}")
-                logger.error(f"Val of content: {repr(result.commit.content)}")
+                logger.debug(f">>>>> WRITE ARTIFACT GUARD <<<<<")
+                logger.debug(f"Type of content: {type(result.commit.content)}")
+                logger.debug(f"Content preview: {repr(result.commit.content[:100])}...")
 
                 # 写盘并计入 artifacts.log
                 write_artifact(
@@ -187,20 +187,66 @@ class RouterNode:
                 state.chat_history = []
                 logger.info(f"Memory wiped for phase transition setting up next Context.")
                 
+                # 检测是否为评审回流场景
+                is_backflow = from_phase in ("POST_REVIEW_DECISION", "REVIEW") and to_phase.endswith("_DISCUSS")
+                review_context = ""
+                if is_backflow and state.review_gate:
+                    issues = state.review_gate.get("issues", [])
+                    if issues:
+                        review_context = "\n\n📋 **评审反馈摘要（需要你本轮重点修正）**：\n"
+                        for issue in issues:
+                            tgt = issue.get("target", "?")
+                            sev = issue.get("severity", "?")
+                            summary = issue.get("summary", "")
+                            hint = issue.get("fix_hint", "")
+                            review_context += f"- [{sev}] ({tgt}) {summary}"
+                            if hint:
+                                review_context += f" → 建议：{hint}"
+                            review_context += "\n"
+                
+                # 回流时注入已有工件内容作为上下文
+                artifact_context = ""
+                if is_backflow:
+                    from ludens_flow.artifacts import read_artifact
+                    if to_phase.startswith("GDD_"):
+                        existing = read_artifact("GDD")
+                        if existing.strip():
+                            artifact_context = f"\n\n📄 **当前 GDD 版本内容**：\n{existing}"
+                    elif to_phase.startswith("PM_"):
+                        existing = read_artifact("PROJECT_PLAN")
+                        if existing.strip():
+                            artifact_context = f"\n\n📄 **当前 PROJECT_PLAN 版本内容**：\n{existing}"
+                    elif to_phase.startswith("ENG_"):
+                        existing = read_artifact("IMPLEMENTATION_PLAN")
+                        if existing.strip():
+                            artifact_context = f"\n\n📄 **当前 IMPLEMENTATION_PLAN 版本内容**：\n{existing}"
+                
                 # 为新登场的 Agent 强插一条虚拟开场白！
                 greeting = ""
                 if to_phase.startswith("GDD_"):
-                    greeting = "Hello，我是你的游戏主策划 Dam (丹姆)。很高兴接手这个项目的前期设计工作！你有什么天马行空的想法，直接砸过来吧！"
+                    if is_backflow:
+                        greeting = "我是 Dam (丹姆)，评审团 Revs 把你打回来找我了。我已经看过评审意见了，让我们一起把 GDD 打磨得更扎实！"
+                    else:
+                        greeting = "Hello，我是你的游戏主策划 Dam (丹姆)。很高兴接手这个项目的前期设计工作！你有什么天马行空的想法，直接砸过来吧！"
                 elif to_phase.startswith("PM_"):
-                    greeting = "你好！我是项目经理 Pax (帕克斯)。Dam 已经把需求同步过来了，我看过觉得很有意思。接下来我们来抓一抓排期和落地计划吧！"
+                    if is_backflow:
+                        greeting = "Pax (帕克斯) 重新上线。评审反馈已收到，我们来调整一下排期和计划吧！"
+                    else:
+                        greeting = "你好！我是项目经理 Pax (帕克斯)。Dam 已经把需求同步过来了，我看过觉得很有意思。接下来我们来抓一抓排期和落地计划吧！"
                 elif to_phase.startswith("ENG_") or to_phase == "DEV_COACHING":
-                    greeting = "嗨！我是主程 Eon (伊恩)。前面的大饼我都看到了（笑）。接下来的技术选型和架构地基交给我，保证给你码踏实了。"
+                    if is_backflow:
+                        greeting = "Eon (伊恩) 回来了。评审的技术问题我看到了，这次咱们把架构地基夯实！"
+                    else:
+                        greeting = "嗨！我是主程 Eon (伊恩)。前面的大饼我都看到了（笑）。接下来的技术选型和架构地基交给我，保证给你码踏实了。"
                 elif to_phase == "REVIEW":
                     greeting = "各位好。我是终审节点 Revs (雷夫斯)。我这里的标准极其严格，不留情面，准备好接受全方位的查水表吧。"
+                
+                # 拼接完整的开场消息
+                full_greeting = greeting + review_context + artifact_context
                     
-                if greeting:
-                    state.last_assistant_message = greeting
-                    state.chat_history.append({"role": "assistant", "content": greeting})
+                if full_greeting.strip():
+                    state.last_assistant_message = full_greeting
+                    state.chat_history.append({"role": "assistant", "content": full_greeting})
 
         state.phase = to_phase
         save_state(state)

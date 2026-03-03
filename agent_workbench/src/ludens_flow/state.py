@@ -56,9 +56,6 @@ class LudensState:
     change_requests: List[Dict[str, Any]] = field(default_factory=list)
     decisions: List[str] = field(default_factory=list)
     
-    # 修改 style_preset 类型使得它能正常容纳字符串
-    style_preset: Optional[str] = None
-    
     # 复杂网关：status, targets, issues
     review_gate: Optional[Dict[str, Any]] = None  
     last_event: Optional[str] = None  # 用于 Router 处理自动跳转

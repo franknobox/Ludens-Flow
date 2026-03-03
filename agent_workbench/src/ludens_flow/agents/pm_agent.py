@@ -23,10 +23,15 @@ class PMAgent(BaseAgent):
 
     def discuss(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
         gdd_content = read_artifact("GDD")
-        previous_draft = state.drafts.get("pm", {})
+        existing_pm = read_artifact("PROJECT_PLAN")
+        
+        pm_context = ""
+        if existing_pm.strip():
+            pm_context = f"**当前已有的 PROJECT_PLAN 文档内容**（如果是回流修改阶段，请在此基础上修订）：\n{existing_pm}\n\n"
         
         prompt = (
             f"已有 GDD：\n{gdd_content}\n\n"
+            f"{pm_context}"
             f"用户意图：{user_input}\n\n"
             "请执行以下操作：\n"
             "1. 以独立游戏 PM 的视角，向用户确认或探讨关键排期信息：大致工期（以天/周为单位）、参与人数（默认 1-3 人小团队）。\n"
@@ -47,12 +52,10 @@ class PMAgent(BaseAgent):
 
     def commit(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
         gdd_content = read_artifact("GDD")
-        draft_context = state.drafts.get("pm", {})
         
         prompt = (
             f"已有 GDD：\n{gdd_content}\n\n"
-            f"讨论共识：\n{draft_context}\n\n"
-            "请输出一份适合独立游戏或 Game Jam 项目的 PROJECT_PLAN.md，要求：\n"
+            "请基于我们之前的完整讨论记录，输出一份适合独立游戏或 Game Jam 项目的 PROJECT_PLAN.md，要求：\n"
             "1. **Milestones**：以 M0/M1/M2 划分，每个 Milestone 的验收标准必须是 Unity Editor Play Mode 可测试的具体状态（例如：M0 = 可在 Play Mode 中进入主场景并完成一次完整的游戏主循环）。\n"
             "2. **Task Breakdown**：按 Unity 工程模块拆分任务，例如 Scripts / Prefabs / SceneSetup / Animations / Audio。每项任务应细化到「在 Unity 里要做什么」的程度，方便单人或小团队直接上手。\n"
             "3. **Unity 目录结构建议**：输出一份适合本项目的 Assets/ 目录树，遵循 Unity 独立游戏项目惯例（如 _Scripts / _Prefabs / _Scenes / _Audio / _Art 等）。\n"
@@ -86,7 +89,7 @@ class PMAgent(BaseAgent):
             except Exception as e:
                 logger.warning(f"Failed to parse PM ChangeRequest JSON: {e}")
 
-        updates["decisions"] = getattr(state, "decisions", []) + ["PM committed"]
+        updates["decisions"] = ["PM committed"]
 
         logger.info("[PMAgent] Commit generated.")
         

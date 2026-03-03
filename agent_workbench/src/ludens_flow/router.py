@@ -188,8 +188,40 @@ def route(
 
     elif current_phase == Phase.REVIEW.value:
         if last_event == "REVIEW_DONE":
-            next_phase = Phase.POST_REVIEW_DECISION.value
-            explanation = "Review completed, awaiting final user decision."
+            # 一步到位：如果用户在看到 ReviewAgent 的 A/B/C 选项后已经做出选择，直接执行
+            gate = state.review_gate or {}
+            gate_status = gate.get("status", "PASS")
+            gate_targets = gate.get("targets", [])
+            gate_issues = gate.get("issues", [])
+
+            if opt_a:
+                if not gate_targets:
+                    next_phase = Phase.GDD_DISCUSS.value
+                else:
+                    next_phase = _get_backflow_phase(gate_targets)
+                explanation = f"User Option A: Flowing back to target ({next_phase})."
+                updates["iteration_count"] = state.iteration_count + 1
+            elif opt_b:
+                serious_targets = [
+                    issue.get("target", "GDD") for issue in gate_issues
+                    if issue.get("severity", "").upper() in ("BLOCK", "MAJOR")
+                ]
+                if not serious_targets:
+                    explanation = "Option B: No BLOCK/MAJOR issues. Flowing to DEV_COACHING."
+                    next_phase = Phase.DEV_COACHING.value
+                    updates["artifact_frozen"] = True
+                else:
+                    next_phase = _get_backflow_phase(serious_targets)
+                    explanation = f"User Option B: Flowing back to major issues target ({next_phase})."
+                    updates["iteration_count"] = state.iteration_count + 1
+            elif opt_c or gate_status == "PASS":
+                next_phase = Phase.DEV_COACHING.value
+                explanation = "User Option C or PASS: Entering DEV_COACHING and freezing artifacts."
+                updates["artifact_frozen"] = True
+            else:
+                # 用户未做有效选择，降落到 POST_REVIEW_DECISION 等待
+                next_phase = Phase.POST_REVIEW_DECISION.value
+                explanation = "Review completed, awaiting user decision (A/B/C)."
 
     elif current_phase == Phase.POST_REVIEW_DECISION.value:
         # Step 3.3 核心流转机制

@@ -57,7 +57,7 @@ class ReviewAgent(BaseAgent):
         
         logger.info(f"[ReviewAgent] Commit generated, Gate status resolved to: {status}")
         
-        decisions = getattr(state, "decisions", []) + [f"Review concluded with {status}"]
+        decisions = [f"Review concluded with {status}"]
         updates = {
             "review_gate": gate_dict,
             "decisions": decisions

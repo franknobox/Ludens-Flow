@@ -80,7 +80,7 @@ class EngineeringAgent(BaseAgent):
         final_eng = self._call(prompt, cfg, history=state.chat_history)
         
         logger.info("[EngineeringAgent] Commit generated.")
-        decisions = getattr(state, "decisions", []) + ["ENG committed"]
+        decisions = ["ENG committed"]
         
         return AgentResult(
             assistant_message="工程架构蓝图已准备完毕。\n\n**系统即将自动流转至内部评审(REVIEW)阶段。**\n\n*输入任意内容进入下一阶段*",

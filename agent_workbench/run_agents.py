@@ -51,6 +51,7 @@ def main():
         if phase == "POST_REVIEW_DECISION":
              print("\n> [ACTION REQUIRED] Review completed. Please route next steps:")
              print("  A: Redirect back to DISCUSS phase to fix targets.")
+             print("  B: Only fix BLOCK/MAJOR issues (skip minor ones).")
              print("  C: Force Approve and proceed to DEV_COACHING.")
              
         try:

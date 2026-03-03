@@ -61,8 +61,10 @@ def generate(system: str, user: str, cfg: LLMConfig, history: Optional[list] = N
             err_msg = str(e).lower()
             # 兼容 Kimi k2.5 / OpenAI o1 等自带固化推理参数、禁止强行设置采样率的模型
             # 最安全的后撤步是：当遭遇 API 阻断，抹除掉任何自定义的 temperature/top_p，依赖接口本身的默认值。
-            if "temperature" in err_msg or "only 1" in err_msg or "only allowed" in err_msg or "invalid" in err_msg:
+            # 仅针对采样参数（temperature/top_p）相关的 API 拒绝进行回退重试
+            if "temperature" in err_msg or "top_p" in err_msg:
                 kwargs.pop("temperature", None)
+                kwargs.pop("top_p", None)
                 resp = client.chat.completions.create(**kwargs)
             else:
                 raise e
