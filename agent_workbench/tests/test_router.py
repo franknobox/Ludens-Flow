@@ -7,7 +7,12 @@ sys.path.insert(0, str(_ROOT / "src"))
 
 import logging
 import os
+import tempfile
 os.chdir(_ROOT)
+os.environ.setdefault(
+    "LUDENS_WORKSPACE_DIR",
+    str((Path(tempfile.gettempdir()) / "ludens_flow_tests" / "test_router").resolve()),
+)
 
 from ludens_flow.state import init_state, save_state
 from ludens_flow.router import route, Phase

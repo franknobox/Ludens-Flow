@@ -7,7 +7,12 @@ sys.path.insert(0, str(_ROOT / "src"))
 
 import logging
 import os
+import tempfile
 os.chdir(_ROOT)
+os.environ.setdefault(
+    "LUDENS_WORKSPACE_DIR",
+    str((Path(tempfile.gettempdir()) / "ludens_flow_tests" / "test_freeze").resolve()),
+)
 
 from ludens_flow.state import init_workspace, load_state, save_state
 from ludens_flow.artifacts import write_artifact, write_dev_note, write_patch, artifact_exists

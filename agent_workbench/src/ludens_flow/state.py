@@ -8,23 +8,26 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from ludens_flow.paths import (
+    get_artifact_paths,
+    get_dev_notes_dir,
+    get_logs_dir,
+    get_memory_dir,
+    get_patches_dir,
+    get_state_file,
+    get_workspace_dir,
+)
+
 logger = logging.getLogger(__name__)
 
 # --- 常量定义 ---
-WORKSPACE_DIR = Path("workspace")
-LOGS_DIR = WORKSPACE_DIR / "logs"
-MEMORY_DIR = WORKSPACE_DIR / "memory"
-DEV_NOTES_DIR = WORKSPACE_DIR / "dev_notes"
-PATCHES_DIR = WORKSPACE_DIR / "patches"
-STATE_FILE = WORKSPACE_DIR / "state.json"
-
-ARTIFACT_PATHS = {
-    "gdd": WORKSPACE_DIR / "GDD.md",
-    "pm": WORKSPACE_DIR / "PROJECT_PLAN.md",
-    "eng": WORKSPACE_DIR / "IMPLEMENTATION_PLAN.md",
-    "review": WORKSPACE_DIR / "REVIEW_REPORT.md",
-    "devlog": DEV_NOTES_DIR / "DEVLOG.md",
-}
+WORKSPACE_DIR = get_workspace_dir()
+LOGS_DIR = get_logs_dir()
+MEMORY_DIR = get_memory_dir()
+DEV_NOTES_DIR = get_dev_notes_dir()
+PATCHES_DIR = get_patches_dir()
+STATE_FILE = get_state_file()
+ARTIFACT_PATHS = get_artifact_paths()
 
 
 # --- 数据结构 ---
@@ -93,36 +96,44 @@ class LudensState:
 
 def init_workspace() -> None:
     """初始化运行工作区，确保必备目录与空文件存在"""
-    for d in [WORKSPACE_DIR, LOGS_DIR, MEMORY_DIR, DEV_NOTES_DIR, PATCHES_DIR]:
+    workspace_dir = get_workspace_dir()
+    logs_dir = get_logs_dir()
+    memory_dir = get_memory_dir()
+    dev_notes_dir = get_dev_notes_dir()
+    patches_dir = get_patches_dir()
+    artifact_paths = get_artifact_paths()
+
+    for d in [workspace_dir, logs_dir, memory_dir, dev_notes_dir, patches_dir]:
         d.mkdir(parents=True, exist_ok=True)
         
-    for path in ARTIFACT_PATHS.values():
+    for path in artifact_paths.values():
         if not path.exists():
             path.touch()
 
 
 def init_state() -> LudensState:
     """构建初始默认状态"""
+    artifact_paths = get_artifact_paths()
     return LudensState(
         phase="GDD_DISCUSS",
         iteration_count=0,
         max_iterations=6,
         artifacts={
-            "gdd": ArtifactMeta(path=str(ARTIFACT_PATHS["gdd"]), owner="DesignAgent"),
-            "pm": ArtifactMeta(path=str(ARTIFACT_PATHS["pm"]), owner="PMAgent"),
-            "eng": ArtifactMeta(path=str(ARTIFACT_PATHS["eng"]), owner="EngineeringAgent"),
-            "review": ArtifactMeta(path=str(ARTIFACT_PATHS["review"]), owner="ReviewAgent"),
+            "gdd": ArtifactMeta(path=str(artifact_paths["gdd"]), owner="DesignAgent"),
+            "pm": ArtifactMeta(path=str(artifact_paths["pm"]), owner="PMAgent"),
+            "eng": ArtifactMeta(path=str(artifact_paths["eng"]), owner="EngineeringAgent"),
+            "review": ArtifactMeta(path=str(artifact_paths["review"]), owner="ReviewAgent"),
         }
     )
 
 
-def load_state(path: str | Path = STATE_FILE) -> LudensState:
+def load_state(path: str | Path | None = None) -> LudensState:
     """
     加载持久化状态。
     若文件不存在：返回全新初始状态。
     若文件解析失败：备份坏档，并返回初始状态，防止死锁。
     """
-    path = Path(path)
+    path = Path(path) if path is not None else get_state_file()
     if not path.exists():
         logger.info(f"State file {path} not found. Creating a new state.")
         return init_state()
@@ -145,12 +156,12 @@ def load_state(path: str | Path = STATE_FILE) -> LudensState:
         return init_state()
 
 
-def save_state(state: LudensState, path: str | Path = STATE_FILE) -> None:
+def save_state(state: LudensState, path: str | Path | None = None) -> None:
     """
     原子写入状态文件。
     先写到同目录的 tmp 文件，再重命名覆盖，防止中途断电损坏文件。
     """
-    path = Path(path)
+    path = Path(path) if path is not None else get_state_file()
     path.parent.mkdir(parents=True, exist_ok=True)
     
     # 将 state 转换为 dict，处理可能的特殊类型
@@ -186,8 +197,9 @@ def write_trace_log(action: str, node: str, phase: str, frozen: bool, event_or_c
     entering: ts | node | phase | frozen | last_event
     leaving: ts | node | commit=Y/N | error=...
     """
-    LOGS_DIR.mkdir(parents=True, exist_ok=True)
-    trace_file = LOGS_DIR / "trace.log"
+    logs_dir = get_logs_dir()
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    trace_file = logs_dir / "trace.log"
     ts = _now_iso()
     with open(trace_file, "a", encoding="utf-8") as f:
         if action.upper() == "ENTER":
@@ -200,8 +212,9 @@ def write_router_log(iteration: int, from_phase: str, to_phase: str, choice: str
     router.log: 每次 Router 决策
     ts | iter | from_phase -> to_phase | choice | gate | frozen | reason
     """
-    LOGS_DIR.mkdir(parents=True, exist_ok=True)
-    router_file = LOGS_DIR / "router.log"
+    logs_dir = get_logs_dir()
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    router_file = logs_dir / "router.log"
     ts = _now_iso()
     with open(router_file, "a", encoding="utf-8") as f:
         f.write(f"[{ts}] | iter={iteration} | {from_phase} -> {to_phase} | choice={choice} | gate={gate} | frozen={frozen} | reason={reason}\n")

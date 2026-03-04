@@ -6,11 +6,10 @@ from pathlib import Path
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
-from ludens_flow.state import LudensState, LOGS_DIR
+from ludens_flow.paths import get_logs_dir
+from ludens_flow.state import LudensState
 
 logger = logging.getLogger(__name__)
-
-ROUTER_LOG_FILE = LOGS_DIR / "router.log"
 
 
 class Phase(str, Enum):
@@ -62,7 +61,9 @@ def _log_route(old_phase: str, new_phase: str, explanation: str,
         f"{user_choice} {gate_info}reason=\"{explanation}\" {art_info}\n"
     )
     
-    with open(ROUTER_LOG_FILE, "a", encoding="utf-8") as f:
+    router_log_file = get_logs_dir() / "router.log"
+    router_log_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(router_log_file, "a", encoding="utf-8") as f:
         f.write(log_line)
         
     logger.info(f"Router Decision: {old_phase} -> {new_phase} ({explanation})")

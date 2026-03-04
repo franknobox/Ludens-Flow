@@ -5,15 +5,15 @@ from pathlib import Path
 # 添加 src 到路径，方便绝对导入
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
-import ludens_flow.state as st
-from ludens_flow.graph import graph_step
-
 try:
     from dotenv import load_dotenv
     # run_agents.py is in agent_workbench/, so parent is the root dir where .env lives
     load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 except ImportError:
     pass
+
+import ludens_flow.state as st
+from ludens_flow.graph import graph_step
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -67,8 +67,9 @@ def main():
                 
             if user_input.lower() in ("/reset", "/restart"):
                 logger.info("Resetting workspace state...")
-                if st.STATE_FILE.exists():
-                    st.STATE_FILE.unlink()
+                state_file = st.get_state_file()
+                if state_file.exists():
+                    state_file.unlink()
                 # 重新加载（会自动拿到全新的纯净状态）
                 state = st.load_state()
                 print("\n✨ [System]: 记忆已清空，时空倒流回起点！")

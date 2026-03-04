@@ -20,7 +20,12 @@ sys.path.insert(0, str(_ROOT))
 sys.path.insert(0, str(_ROOT / "src"))
 
 import os
+import tempfile
 os.chdir(_ROOT)
+os.environ.setdefault(
+    "LUDENS_WORKSPACE_DIR",
+    str((Path(tempfile.gettempdir()) / "ludens_flow_tests" / "test_happy_path").resolve()),
+)
 
 # ── 解析参数 ──────────────────────────────────────────────────────────────────
 parser = argparse.ArgumentParser(add_help=False)
@@ -136,8 +141,7 @@ def run_happy_path():
     print("=" * 56)
 
     # ── 清理并初始化 ──
-    st.WORKSPACE_DIR = _ROOT / "workspace"
-    (st.WORKSPACE_DIR / "state.json").unlink(missing_ok=True)
+    st.get_state_file().unlink(missing_ok=True)
     st.init_workspace()
     state = st.load_state()
     assert state.phase == Phase.GDD_DISCUSS.value

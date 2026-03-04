@@ -5,38 +5,42 @@ import os
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict
 
-from ludens_flow.state import LudensState, ArtifactMeta, ARTIFACT_PATHS, LOGS_DIR, DEV_NOTES_DIR, PATCHES_DIR
+from ludens_flow.paths import get_artifact_paths, get_dev_notes_dir, get_logs_dir, get_patches_dir
+from ludens_flow.state import LudensState, ArtifactMeta
 
 logger = logging.getLogger(__name__)
 
-ARTIFACTS_LOG_FILE = LOGS_DIR / "artifacts.log"
+def _artifacts_log_file() -> Path:
+    return get_logs_dir() / "artifacts.log"
 
 # --- 1. 统一工件注册表 (Registry) ---
 # 定义每个核心工件的枚举名称、物理路径和唯一拥有的 Agent（单写入权）
-ARTIFACT_REGISTRY = {
-    "GDD": {
-        "path": ARTIFACT_PATHS["gdd"],
-        "owner": "DesignAgent"
-    },
-    "PROJECT_PLAN": {
-        "path": ARTIFACT_PATHS["pm"],
-        "owner": "PMAgent"
-    },
-    "IMPLEMENTATION_PLAN": {
-        "path": ARTIFACT_PATHS["eng"],
-        "owner": "EngineeringAgent"
-    },
-    "REVIEW_REPORT": {
-        "path": ARTIFACT_PATHS["review"],
-        "owner": "ReviewAgent"
-    },
-    "DEVLOG": {
-        "path": ARTIFACT_PATHS["devlog"],
-        "owner": "EngineeringAgent"
+def _artifact_registry() -> Dict[str, Dict[str, str | Path]]:
+    artifact_paths = get_artifact_paths()
+    return {
+        "GDD": {
+            "path": artifact_paths["gdd"],
+            "owner": "DesignAgent"
+        },
+        "PROJECT_PLAN": {
+            "path": artifact_paths["pm"],
+            "owner": "PMAgent"
+        },
+        "IMPLEMENTATION_PLAN": {
+            "path": artifact_paths["eng"],
+            "owner": "EngineeringAgent"
+        },
+        "REVIEW_REPORT": {
+            "path": artifact_paths["review"],
+            "owner": "ReviewAgent"
+        },
+        "DEVLOG": {
+            "path": artifact_paths["devlog"],
+            "owner": "EngineeringAgent"
+        }
     }
-}
 
 
 def _now_iso() -> str:
@@ -51,19 +55,21 @@ def compute_hash(content: str) -> str:
 
 def artifact_exists(name: str) -> bool:
     """检查注册表中指定名字的工件实体文件是否存在"""
-    if name not in ARTIFACT_REGISTRY:
+    registry = _artifact_registry()
+    if name not in registry:
         return False
-    return ARTIFACT_REGISTRY[name]["path"].exists()
+    return registry[name]["path"].exists()
 
 
 def read_artifact(name: str) -> str:
     """
     读取工件内容，若不存在则返回空字符串并尝试创建空文件。
     """
-    if name not in ARTIFACT_REGISTRY:
+    registry = _artifact_registry()
+    if name not in registry:
         raise ValueError(f"Unknown artifact name: {name}")
     
-    path = ARTIFACT_REGISTRY[name]["path"]
+    path = registry[name]["path"]
     
     if not path.exists():
         logger.warning(f"Artifact file {path} missing on read. Recreating empty file.")
@@ -84,7 +90,8 @@ def write_artifact(name: str, content: str, reason: str, actor: str, state: Lude
     4. 更新传入的 state.artifacts 元数据 (version++, hash, timestamp)
     5. 记录追踪日志
     """
-    if name not in ARTIFACT_REGISTRY:
+    registry = _artifact_registry()
+    if name not in registry:
         raise ValueError(f"Unknown artifact name: {name}")
     
     # --- 0. 结冰校验 (Freeze Guard) ---
@@ -95,7 +102,7 @@ def write_artifact(name: str, content: str, reason: str, actor: str, state: Lude
              f"Please use write_dev_note or write_patch instead."
          )
          
-    registry_info = ARTIFACT_REGISTRY[name]
+    registry_info = registry[name]
     expected_owner = registry_info["owner"]
     path: Path = registry_info["path"]
     
@@ -149,7 +156,9 @@ def write_artifact(name: str, content: str, reason: str, actor: str, state: Lude
     
     # 写入 artifacts.log
     # 格式: ts | artifact | version | hash8 | actor | reason
-    with open(ARTIFACTS_LOG_FILE, "a", encoding="utf-8") as f:
+    artifacts_log_file = _artifacts_log_file()
+    artifacts_log_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(artifacts_log_file, "a", encoding="utf-8") as f:
         f.write(f"[{meta.updated_at}] | artifact={name} | v{meta.version} | hash={new_hash[:8]} | actor={actor} | reason={reason}\n")
     
     logger.info(f"Artifact {name} updated to v{meta.version} by {actor}.")
@@ -162,12 +171,13 @@ def write_dev_note(title: str, content: str) -> Path:
     写入一封持续开发笔记 (Dev Notes)，例如 DECISIONS.md。
     这类文件位于 workspace/dev_notes/ 下，允许在冻结期间覆写或追加。
     """
-    DEV_NOTES_DIR.mkdir(parents=True, exist_ok=True)
+    dev_notes_dir = get_dev_notes_dir()
+    dev_notes_dir.mkdir(parents=True, exist_ok=True)
     
     # 简单的清理处理，确保可用作文件名
     safe_title = "".join(c if c.isalnum() else "_" for c in title)
     filename = f"{safe_title}.md"
-    path = DEV_NOTES_DIR / filename
+    path = dev_notes_dir / filename
     
     with open(path, "a", encoding="utf-8") as f: # 这里采追加模式，防盖掉历史
         f.write("\n\n" + f"# {_now_iso()}\n" + content + "\n")
@@ -181,9 +191,10 @@ def write_patch(patch_id: str, content: str) -> Path:
     写入一封变更补丁 (Patch)。
     位于 workspace/patches/ 下，记录改变建议，但不操作基线本身。
     """
-    PATCHES_DIR.mkdir(parents=True, exist_ok=True)
+    patches_dir = get_patches_dir()
+    patches_dir.mkdir(parents=True, exist_ok=True)
     filename = f"PATCH_{patch_id}.md"
-    path = PATCHES_DIR / filename
+    path = patches_dir / filename
     
     with open(path, "w", encoding="utf-8") as f:
         f.write(content + "\n")

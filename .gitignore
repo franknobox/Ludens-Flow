@@ -192,3 +192,5 @@ workspace/logs/
 workspace/memory/
 workspace/*.md
 workspace/state.json
+workspace/dev_notes/LEGACY_WORKSPACE_MIGRATION_*.md
+agent_workbench/workspace/

@@ -7,7 +7,12 @@ sys.path.insert(0, str(_ROOT / "src"))
 
 import logging
 import os
+import tempfile
 os.chdir(_ROOT)
+os.environ.setdefault(
+    "LUDENS_WORKSPACE_DIR",
+    str((Path(tempfile.gettempdir()) / "ludens_flow_tests" / "test_step5_graph_engine").resolve()),
+)
 
 import ludens_flow.state as st
 from ludens_flow.graph import graph_step, run_agent_step
@@ -67,11 +72,10 @@ def test_step5_graph_e2e():
     logger.info("==========================================\n")
 
     # 强制清理（绝对路径）
-    state_file = _ROOT / "workspace" / "state.json"
+    state_file = st.get_state_file()
     if state_file.exists():
         state_file.unlink()
 
-    st.WORKSPACE_DIR = _ROOT / "workspace"
     st.init_workspace()
     state = st.load_state()
 
@@ -116,7 +120,6 @@ def test_step5_graph_e2e():
 def test_step5_graph_frozen_guard():
     """ 验收场景 2: POST_REVIEW 选 C 后的冰封期防御测试 """
     logger.info("\n--- 启动冰封守护测试 ---")
-    st.WORKSPACE_DIR = _ROOT / "workspace"
     state = st.load_state()
     
     state.phase = Phase.DEV_COACHING.value
