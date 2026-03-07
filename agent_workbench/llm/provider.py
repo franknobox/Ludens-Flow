@@ -1,7 +1,7 @@
 from __future__ import annotations
 import os
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Any, Union, Dict, List
 
 @dataclass
 class LLMConfig:
@@ -29,20 +29,21 @@ def load_config() -> LLMConfig:
         temperature=temperature,
     )
 
-def generate(system: str, user: str, cfg: LLMConfig, history: Optional[list] = None) -> str:
+def generate(system: str, user: str | list, cfg: LLMConfig, history: Optional[list] = None, tools: Optional[list] = None) -> Any:
     """
     统一调用入口：未来更换provider只改这里。
     目前先实现 openai（也兼容OpenAI-style接口：只要配base_url）。
     """
     if cfg.provider == "openai":
         from openai import OpenAI
-
+        
         # 默认 120 秒超时，防止遇到后端（例如 Moonshot Kimi）网络波动挂起不返回。
         client = OpenAI(api_key=cfg.api_key, base_url=cfg.base_url, timeout=120.0)
         
-        messages = [{"role": "system", "content": system}]
+        messages: List[Dict[str, Any]] = [{"role": "system", "content": system}]
         if history:
             messages.extend(history)
+            
         messages.append({"role": "user", "content": user})
         
         # 构建基础请求载荷
@@ -51,6 +52,9 @@ def generate(system: str, user: str, cfg: LLMConfig, history: Optional[list] = N
             "messages": messages,
         }
         
+        if tools:
+            kwargs["tools"] = tools
+            
         # O1/O3 等推理模型以及 kimi k2.5 拒绝手动设置采样参数，提前过滤以防触发不必要的 400 重传延迟
         if cfg.temperature is not None and not any(m in cfg.model.lower() for m in ["k2.5", "o1", "o3", "reasoning"]):
             kwargs["temperature"] = cfg.temperature
@@ -69,6 +73,12 @@ def generate(system: str, user: str, cfg: LLMConfig, history: Optional[list] = N
             else:
                 raise e
                 
-        return (resp.choices[0].message.content or "").strip()
+        message = resp.choices[0].message
+        
+        # 如果返回了 tool_calls，则直接返回整个 message 对象交由上层处理
+        if hasattr(message, "tool_calls") and message.tool_calls:
+            return message
+            
+        return (message.content or "").strip()
 
     raise RuntimeError(f"Unsupported LLM_PROVIDER: {cfg.provider}")

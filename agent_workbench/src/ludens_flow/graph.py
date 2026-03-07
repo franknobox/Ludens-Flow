@@ -79,7 +79,13 @@ def run_agent_step(agent, mode: str, state: LudensState, user_input: str) -> Lud
         state.last_assistant_message = result.assistant_message
         
         # 将本轮回话打包送进短期记忆体 (过滤空语句)
-        if user_input.strip() and result.assistant_message.strip():
+        has_meaningful_input = False
+        if isinstance(user_input, list):
+            has_meaningful_input = bool(user_input)  # Not empty list
+        else:
+            has_meaningful_input = bool(user_input.strip())
+            
+        if has_meaningful_input and result.assistant_message.strip():
             state.chat_history.append({"role": "user", "content": user_input})
             state.chat_history.append({"role": "assistant", "content": result.assistant_message})
             # 设置阶段隔离/记忆断层：只保留最近 10 次对话(20条数据)，避免 token 在无限对练里被撑爆

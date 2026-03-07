@@ -1,7 +1,7 @@
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from ludens_flow.state import LudensState
 from llm.provider import LLMConfig, generate
@@ -34,18 +34,90 @@ class BaseAgent(ABC):
     name: str = "BaseAgent"
     system_prompt: str = ""
 
-    def _call(self, user_prompt: str, cfg: Optional[LLMConfig] = None, history: Optional[List[Dict[str, str]]] = None) -> str:
-        """统一 LLM 调用入口。未来如果换框架，只需修改此处。"""
-        # 注意: 正常运行时如果没有传入 cfg, 需要自己实例化。为解耦我们目前允许传 None。
+    def _call(self, user_prompt: Union[str, list], cfg: Optional[LLMConfig] = None, history: Optional[List[Dict[str, Any]]] = None, tools: Optional[list] = None) -> str:
+        """统一 LLM 调用入口。支持自动多轮 Tool Calling 处理。"""
         from llm.provider import load_config
         if cfg is None:
-            # 安全后备方案
             try:
                 cfg = load_config()
             except Exception:
-                # 若无法加载 (例如测试无 key), 这里会直接挂掉
                 pass
-        return generate(system=self.system_prompt, user=user_prompt, cfg=cfg, history=history)
+                
+        if history is None:
+            history = []
+        else:
+            # Create a shallow copy so we don't mutate the caller's history
+            history = list(history)
+            
+        max_tool_iterations = 5
+        iterations = 0
+        
+        # Initial call
+        response = generate(system=self.system_prompt, user=user_prompt, cfg=cfg, history=history, tools=tools)
+        
+        while hasattr(response, "tool_calls") and response.tool_calls and iterations < max_tool_iterations:
+            iterations += 1
+            
+            # Need to append the assistant's request to call the tool to the history
+            # The 'generate' function appends the exact user_prompt at the end of history,
+            # so to continue the conversation robustly when tool calling, we must assimilate
+            # the original user_prompt into history, and send a blank user_prompt for subsequent calls
+            if iterations == 1:
+               history.append({"role": "user", "content": user_prompt})
+               user_prompt = "Please continue." # Provide a neutral continuation prompt
+            
+            assistant_msg = {
+                "role": "assistant", 
+                "content": response.content,
+                "tool_calls": [
+                    {
+                        "id": tc.id,
+                        "type": tc.type,
+                        "function": {
+                            "name": tc.function.name,
+                            "arguments": tc.function.arguments
+                        }
+                    } for tc in response.tool_calls
+                ]
+            }
+            history.append(assistant_msg)
+            
+            # Execute all requested tools
+            for tool_call in response.tool_calls:
+                tool_name = tool_call.function.name
+                tool_args_str = tool_call.function.arguments
+                
+                try:
+                    import json
+                    args = json.loads(tool_args_str)
+                    
+                    if tool_name == "web_search":
+                        from ludens_flow.tools.search import web_search
+                        query = args.get("query", "")
+                        logger.info(f"Agent executing tool: {tool_name} with query: '{query}'")
+                        tool_result = web_search(query)
+                    else:
+                        tool_result = f"Error: Tool '{tool_name}' not found."
+                        
+                except Exception as e:
+                    tool_result = f"Error executing tool {tool_name}: {e}"
+                
+                # Append tool result to history
+                history.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": str(tool_result)
+                })
+                
+            # Request LLM to continue with tool results
+            response = generate(system=self.system_prompt, user=user_prompt, cfg=cfg, history=history, tools=tools)
+
+        if hasattr(response, "tool_calls"):
+             logger.warning(f"Agent exceeded maximum tool iterations ({max_tool_iterations}). Forcing exit.")
+             return (response.content or "").strip()
+             
+        # Normal string response
+        return str(response)
 
     @abstractmethod
     def discuss(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:

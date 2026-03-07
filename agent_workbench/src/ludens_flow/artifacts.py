@@ -5,7 +5,7 @@ import os
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Union
 
 from ludens_flow.paths import get_artifact_paths, get_dev_notes_dir, get_logs_dir, get_patches_dir
 from ludens_flow.state import LudensState, ArtifactMeta
@@ -17,7 +17,7 @@ def _artifacts_log_file() -> Path:
 
 # --- 1. 统一工件注册表 (Registry) ---
 # 定义每个核心工件的枚举名称、物理路径和唯一拥有的 Agent（单写入权）
-def _artifact_registry() -> Dict[str, Dict[str, str | Path]]:
+def _artifact_registry() -> Dict[str, Dict[str, Union[str, Path]]]:
     artifact_paths = get_artifact_paths()
     return {
         "GDD": {

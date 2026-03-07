@@ -6,6 +6,7 @@ from typing import Optional, Dict, Any
 from ludens_flow.agents.base import BaseAgent, AgentResult, CommitSpec
 from ludens_flow.state import LudensState
 from ludens_flow.artifacts import read_artifact
+from ludens_flow.tools.search import SEARCH_TOOL_SCHEMA
 from llm.provider import LLMConfig
 
 logger = logging.getLogger(__name__)
@@ -50,7 +51,7 @@ class EngineeringAgent(BaseAgent):
             "3. 根据用户反馈，提供亲和的自然语言架构梳理与答疑。\n"
         )
         
-        reply = self._call(prompt, cfg, history=state.chat_history)
+        reply = self._call(prompt, cfg, history=state.chat_history, tools=[SEARCH_TOOL_SCHEMA])
         
         updates = {}
         
@@ -77,7 +78,7 @@ class EngineeringAgent(BaseAgent):
             "3. **关键风险与替代方案**：列举 2-3 个 Unity 开发中的技术刺客（如物理层级冲突、动画状态机复杂度、Scene 切换时的数据持久化等），以及若实现不顺的降级 Plan B。\n\n"
             "由于本输出将被系统拦截并落盘，请不要加上客套废话，直接输出 Markdown 结构文本！"
         )
-        final_eng = self._call(prompt, cfg, history=state.chat_history)
+        final_eng = self._call(prompt, cfg, history=state.chat_history, tools=[SEARCH_TOOL_SCHEMA])
         
         logger.info("[EngineeringAgent] Commit generated.")
         decisions = ["ENG committed"]
@@ -153,7 +154,7 @@ class EngineeringAgent(BaseAgent):
             f"用户的当前需求/回复：\n{user_input}\n"
         )
         
-        reply = self._call(prompt, cfg, history=state.chat_history)
+        reply = self._call(prompt, cfg, history=state.chat_history, tools=[SEARCH_TOOL_SCHEMA])
         logger.info("[EngineeringAgent] Coach instruction issued.")
         
         return AgentResult(
