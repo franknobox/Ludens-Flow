@@ -6,7 +6,7 @@ import tempfile
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from ludens_flow.paths import (
     get_artifact_paths,
@@ -127,7 +127,7 @@ def init_state() -> LudensState:
     )
 
 
-def load_state(path: str | Path | None = None) -> LudensState:
+def load_state(path: Optional[Union[str, Path]] = None) -> LudensState:
     """
     加载持久化状态。
     若文件不存在：返回全新初始状态。
@@ -156,7 +156,7 @@ def load_state(path: str | Path | None = None) -> LudensState:
         return init_state()
 
 
-def save_state(state: LudensState, path: str | Path | None = None) -> None:
+def save_state(state: LudensState, path: Optional[Union[str, Path]] = None) -> None:
     """
     原子写入状态文件。
     先写到同目录的 tmp 文件，再重命名覆盖，防止中途断电损坏文件。

@@ -96,7 +96,13 @@ def route(
     """
     # 兼容没有初始化的状况
     current_phase = state.phase or Phase.GDD_DISCUSS.value
-    user_text = user_input.strip().lower()
+    
+    # Extract text content safely if user_input is a multimodal list
+    if isinstance(user_input, list):
+        text_parts = [item.get("text", "") for item in user_input if item.get("type") == "text"]
+        user_text = " ".join(text_parts).strip().lower()
+    else:
+        user_text = str(user_input).strip().lower()
     
     updates: Dict[str, Any] = {}
     if not state.phase:
