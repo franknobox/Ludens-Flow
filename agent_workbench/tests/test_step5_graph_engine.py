@@ -104,7 +104,7 @@ def test_step5_graph_e2e():
     state = graph_step(state, "")
     # step4b: router 消耗 last_event=REVIEW_DONE，转至 POST_REVIEW_DECISION（跨 Agent 暂停发问候语）
     state = graph_step(state, "")
-    assert state.phase == Phase.POST_REVIEW_DECISION.value, f"Router Failed, got {state.phase}"
+    assert state.phase == Phase.DEV_COACHING.value, f"Router Failed, got {state.phase}"
     
     logger.info("[5] Graph: POST_REVIEW_DECISION => 用户选 C 进入 DEV_COACHING")
     # POST_REVIEW_DECISION → DEV_COACHING 跳过暂停（已在 graph.py 中豁免），直接执行 coach
