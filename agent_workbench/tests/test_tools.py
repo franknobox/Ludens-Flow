@@ -1,0 +1,90 @@
+import base64
+import os
+import sys
+import unittest
+import builtins
+from pathlib import Path
+from unittest.mock import patch
+
+_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(_ROOT))
+sys.path.insert(0, str(_ROOT / "src"))
+
+os.chdir(_ROOT)
+
+from ludens_flow.tools import search as search_tool
+from run_agents import parse_user_input
+
+
+# 1x1 transparent PNG
+_TINY_PNG_B64 = (
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2M4X8AAAAASUVORK5CYII="
+)
+
+
+class _MockDDGS:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def text(self, query: str, max_results: int = 5):
+        yield {
+            "title": f"Result for {query}",
+            "href": "https://example.com",
+            "body": f"Top {max_results} mock result",
+        }
+
+
+class ToolsTests(unittest.TestCase):
+    def test_web_search_returns_error_when_ddgs_missing(self):
+        with patch("ludens_flow.tools.search.DDGS", None):
+            result = search_tool.web_search("unity test")
+        self.assertIn("Web Search is disabled", result)
+
+    def test_web_search_uses_mocked_ddgs(self):
+        with patch("ludens_flow.tools.search.DDGS", _MockDDGS):
+            result = search_tool.web_search("unity", max_results=2)
+        self.assertIn("Result for unity", result)
+        self.assertIn("https://example.com", result)
+
+    def test_parse_user_input_without_image_returns_plain_text(self):
+        parsed = parse_user_input("hello world")
+        self.assertIsInstance(parsed, str)
+        self.assertEqual(parsed, "hello world")
+
+    def test_parse_user_input_with_image_returns_multimodal_payload(self):
+        image_path = _ROOT / "test_dummy.png"
+        image_path.write_bytes(base64.b64decode(_TINY_PNG_B64))
+        try:
+            real_import = builtins.__import__
+
+            def _import_without_pil(name, globals=None, locals=None, fromlist=(), level=0):
+                if name == "PIL" or name.startswith("PIL."):
+                    raise ImportError("mock no pillow")
+                return real_import(name, globals, locals, fromlist, level)
+
+            with patch("builtins.__import__", side_effect=_import_without_pil):
+                parsed = parse_user_input("look test_dummy.png please")
+            self.assertIsInstance(parsed, list)
+            self.assertTrue(any(item.get("type") == "image_url" for item in parsed))
+            image_items = [item for item in parsed if item.get("type") == "image_url"]
+            self.assertTrue(image_items[0]["image_url"]["url"].startswith("data:image/"))
+        finally:
+            image_path.unlink(missing_ok=True)
+
+    @unittest.skipUnless(
+        os.getenv("RUN_INTERNET_TESTS") == "1",
+        "Set RUN_INTERNET_TESTS=1 to run real web search integration test.",
+    )
+    def test_web_search_real_integration(self):
+        result = search_tool.web_search("latest unity version", max_results=1)
+        self.assertIsInstance(result, str)
+        self.assertTrue(result.strip())
+        self.assertNotIn("Web Search is disabled", result)
+        self.assertNotIn("Web search failed:", result)
+
+
+if __name__ == "__main__":
+    unittest.main()

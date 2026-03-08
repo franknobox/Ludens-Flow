@@ -34,6 +34,10 @@ def get_memory_dir() -> Path:
     return get_workspace_dir() / "memory"
 
 
+def get_images_dir() -> Path:
+    return get_workspace_dir() / "images"
+
+
 def get_dev_notes_dir() -> Path:
     return get_workspace_dir() / "dev_notes"
 

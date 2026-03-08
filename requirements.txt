@@ -1,0 +1,9 @@
+# Core runtime
+openai>=1.0.0
+python-dotenv>=1.0.0
+
+# Search capability
+ddgs>=9.11.2
+
+# Multimodal image preprocessing (recommended for stable image-token size)
+Pillow>=10.0.0
