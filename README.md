@@ -22,7 +22,7 @@ Ludens-Flow makes development decisions **traceable, reviewable, and reproducibl
 - **Ludens**，源自*Homo Ludens*，强调游戏作为一种创造性的人类过程。
 - **Flow**，指结构化、可控的开发流程。
 
-Ludens-Flow**并不**旨在自动生成完整对局。
+Ludens-Flow**并不**旨在自动生成完整游戏。
 相反，它专注于**结构化、协调和审查游戏开发过程本身**。
 
 通过围绕显式伪造物协调多个专门代理
