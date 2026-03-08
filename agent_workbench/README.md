@@ -46,7 +46,7 @@ pip install fastapi "uvicorn[standard]"
 uvicorn agent_workbench.api:app --reload
 ```
 
-浏览器访问 **http://127.0.0.1:8000/** 即可使用。左侧为「同事」列表（Dam / Pax / Eon / Revs），右侧为对话区；评审完成后可选择 A/B/C 按钮。
+浏览器访问 **http://127.0.0.1:8000/** 即可使用。
 
 ## 🔄 核心阶段与智能体矩阵
 

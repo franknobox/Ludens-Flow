@@ -44,12 +44,28 @@ class ChatRequest(BaseModel):
     images: list[str] | None = None  # data URI 列表，如 data:image/png;base64,...
 
 
+def _phase_to_agent_key(phase: str | None) -> str:
+    if not phase:
+        return "system"
+    if phase.startswith("GDD_"):
+        return "design"
+    if phase.startswith("PM_"):
+        return "pm"
+    if phase.startswith("ENG_") or phase == "DEV_COACHING":
+        return "engineering"
+    if phase.startswith("REVIEW") or phase == "POST_REVIEW_DECISION":
+        return "review"
+    return "system"
+
+
 def _state_to_json(state) -> dict:
     return {
         "phase": state.phase,
+        "current_agent": _phase_to_agent_key(state.phase),
         "iteration_count": state.iteration_count,
         "artifact_frozen": getattr(state, "artifact_frozen", False),
         "chat_history": getattr(state, "chat_history", []),
+        "transcript_history": getattr(state, "transcript_history", []),
         "last_error": getattr(state, "last_error"),
         "review_gate": getattr(state, "review_gate"),
     }
