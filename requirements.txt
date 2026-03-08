@@ -2,6 +2,10 @@
 openai>=1.0.0
 python-dotenv>=1.0.0
 
+# Web API (frontend)
+fastapi>=0.100.0
+uvicorn[standard]>=0.22.0
+
 # Search capability
 ddgs>=9.11.2
 

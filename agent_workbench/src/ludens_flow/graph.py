@@ -21,6 +21,55 @@ _eng_agent = EngineeringAgent()
 _review_agent = ReviewAgent()
 
 
+def _phase_to_agent_name(phase: str) -> str:
+    if not phase:
+        return "System"
+    if phase.startswith("GDD_"):
+        return "DesignAgent"
+    if phase.startswith("PM_"):
+        return "PMAgent"
+    if phase.startswith("ENG_") or phase == "DEV_COACHING":
+        return "EngineeringAgent"
+    if phase.startswith("REVIEW") or phase == "POST_REVIEW_DECISION":
+        return "ReviewAgent"
+    return "System"
+
+
+def _user_input_to_text(user_input: Any) -> str:
+    if isinstance(user_input, str):
+        return user_input
+    if isinstance(user_input, list):
+        text_parts = []
+        image_count = 0
+        for item in user_input:
+            if not isinstance(item, dict):
+                continue
+            if item.get("type") == "text":
+                text_val = item.get("text", "")
+                if text_val:
+                    text_parts.append(str(text_val))
+            elif item.get("type") == "image_url":
+                image_count += 1
+        text = " ".join(text_parts).strip()
+        if image_count > 0:
+            return f"{text} [images:{image_count}]".strip()
+        return text
+    return str(user_input)
+
+
+def _append_transcript(state: LudensState, role: str, content: str, phase: str, agent: str) -> None:
+    state.transcript_history.append(
+        {
+            "role": role,
+            "content": content,
+            "phase": phase,
+            "agent": agent,
+        }
+    )
+    if len(state.transcript_history) > 500:
+        state.transcript_history = state.transcript_history[-500:]
+
+
 def _merge_state_updates(state: LudensState, updates: Dict[str, Any]) -> None:
     """处理并合并 Agent 返回的数据到 global state"""
     if "drafts" in updates:
@@ -43,7 +92,7 @@ def _merge_state_updates(state: LudensState, updates: Dict[str, Any]) -> None:
         state.review_gate = updates["review_gate"]
 
 
-def run_agent_step(agent, mode: str, state: LudensState, user_input: str) -> LudensState:
+def run_agent_step(agent, mode: str, state: LudensState, user_input: Any) -> LudensState:
     """
     Graph 中“执行一个节点”的标准工具函数
     内部按顺序：记录 trace-进入 -> 调用 agent -> 合并状态 -> 写物料 -> 盖状态 -> 记录 trace-退出 -> 抛错收拢
@@ -86,8 +135,11 @@ def run_agent_step(agent, mode: str, state: LudensState, user_input: str) -> Lud
             has_meaningful_input = bool(user_input.strip())
             
         if has_meaningful_input and result.assistant_message.strip():
-            state.chat_history.append({"role": "user", "content": user_input})
+            user_text = _user_input_to_text(user_input)
+            state.chat_history.append({"role": "user", "content": user_text})
             state.chat_history.append({"role": "assistant", "content": result.assistant_message})
+            _append_transcript(state, "user", user_text, current_phase, node_name)
+            _append_transcript(state, "assistant", result.assistant_message, current_phase, node_name)
             # 设置阶段隔离/记忆断层：只保留最近 10 次对话(20条数据)，避免 token 在无限对练里被撑爆
             if len(state.chat_history) > 20:
                 state.chat_history = state.chat_history[-20:]
@@ -253,6 +305,13 @@ class RouterNode:
                 if full_greeting.strip():
                     state.last_assistant_message = full_greeting
                     state.chat_history.append({"role": "assistant", "content": full_greeting})
+                    _append_transcript(
+                        state,
+                        "assistant",
+                        full_greeting,
+                        to_phase,
+                        _phase_to_agent_name(to_phase),
+                    )
 
         state.phase = to_phase
         save_state(state)
