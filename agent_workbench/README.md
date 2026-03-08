@@ -27,13 +27,26 @@ LLM_TEMPERATURE=0.2
 pip install openai python-dotenv
 ```
 
-### 3️⃣ 启动交互式终端
+### 3️⃣ 启动方式
 
-一切就绪后，在**项目根目录**运行以下命令，唤醒智能体网络引擎进入互动环节：
+**方式 A：交互式终端**
+
+在**项目根目录**运行：
 
 ```bash
 python agent_workbench/run_agents.py
 ```
+
+**方式 B：飞书风格 Web 前端**
+
+在**项目根目录**安装 Web 依赖并启动 API 服务：
+
+```bash
+pip install fastapi "uvicorn[standard]"
+uvicorn agent_workbench.api:app --reload
+```
+
+浏览器访问 **http://127.0.0.1:8000/** 即可使用。左侧为「同事」列表（Dam / Pax / Eon / Revs），右侧为对话区；评审完成后可选择 A/B/C 按钮。
 
 ## 🔄 核心阶段与智能体矩阵
 
