@@ -144,11 +144,8 @@ def main():
                 
             if raw_input.lower() in ("/reset", "/restart"):
                 logger.info("Resetting workspace state...")
-                state_file = st.get_state_file()
-                if state_file.exists():
-                    state_file.unlink()
                 # 重新加载（会自动拿到全新的纯净状态）
-                state = st.load_state()
+                state = st.reset_workspace_state(clear_images=True)
                 print("\n✨ [System]: 记忆已清空，时空倒流回起点！")
                 continue
 

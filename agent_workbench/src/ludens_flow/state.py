@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Union
 from ludens_flow.paths import (
     get_artifact_paths,
     get_dev_notes_dir,
+    get_images_dir,
     get_logs_dir,
     get_memory_dir,
     get_patches_dir,
@@ -99,16 +100,42 @@ def init_workspace() -> None:
     workspace_dir = get_workspace_dir()
     logs_dir = get_logs_dir()
     memory_dir = get_memory_dir()
+    images_dir = get_images_dir()
     dev_notes_dir = get_dev_notes_dir()
     patches_dir = get_patches_dir()
     artifact_paths = get_artifact_paths()
 
-    for d in [workspace_dir, logs_dir, memory_dir, dev_notes_dir, patches_dir]:
+    for d in [workspace_dir, logs_dir, memory_dir, images_dir, dev_notes_dir, patches_dir]:
         d.mkdir(parents=True, exist_ok=True)
         
     for path in artifact_paths.values():
         if not path.exists():
             path.touch()
+
+
+def clear_images_dir() -> Path:
+    """Delete all files/subdirectories under workspace/images and keep the folder."""
+    images_dir = get_images_dir()
+    images_dir.mkdir(parents=True, exist_ok=True)
+
+    for entry in images_dir.iterdir():
+        if entry.is_dir():
+            shutil.rmtree(entry, ignore_errors=True)
+        else:
+            entry.unlink(missing_ok=True)
+    return images_dir
+
+
+def reset_workspace_state(clear_images: bool = True) -> LudensState:
+    """
+    Reset persisted runtime state for a fresh session.
+    - Remove state.json if present.
+    - Optionally clear workspace/images.
+    """
+    get_state_file().unlink(missing_ok=True)
+    if clear_images:
+        clear_images_dir()
+    return load_state()
 
 
 def init_state() -> LudensState:
