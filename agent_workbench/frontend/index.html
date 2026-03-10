@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -23,12 +24,17 @@
       --mono: Consolas, Monaco, "Courier New", monospace;
     }
 
-    * { box-sizing: border-box; }
-    html, body {
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
       margin: 0;
       height: 100%;
       overflow: hidden;
     }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
       color: var(--text);
@@ -78,12 +84,14 @@
       flex-direction: column;
       gap: 4px;
     }
+
     .side-foot {
       padding: 10px 8px 12px;
       border-top: 1px solid rgba(255, 255, 255, 0.08);
       display: flex;
       justify-content: flex-start;
     }
+
     .reset-btn {
       width: 74px;
       height: 30px;
@@ -96,7 +104,10 @@
       letter-spacing: 0.2px;
       cursor: pointer;
     }
-    .reset-btn:hover { background: #b91c1c; }
+
+    .reset-btn:hover {
+      background: #b91c1c;
+    }
 
     .side-item {
       width: 100%;
@@ -113,11 +124,16 @@
       font-size: 13px;
       cursor: pointer;
     }
-    .side-item:hover { background: rgba(255, 255, 255, 0.08); }
+
+    .side-item:hover {
+      background: rgba(255, 255, 255, 0.08);
+    }
+
     .side-item.active {
       background: rgba(47, 99, 255, 0.22);
       border-color: rgba(47, 99, 255, 0.6);
     }
+
     .side-item .tag {
       font-size: 10px;
       border-radius: 999px;
@@ -144,13 +160,18 @@
       gap: 10px;
       flex-wrap: wrap;
     }
-    .main-header strong { font-size: 15px; }
+
+    .main-header strong {
+      font-size: 15px;
+    }
+
     .meta {
       display: flex;
       align-items: center;
       gap: 8px;
       flex-wrap: wrap;
     }
+
     .badge {
       display: inline-flex;
       align-items: center;
@@ -161,6 +182,7 @@
       background: var(--primary-weak);
       color: var(--primary);
     }
+
     .badge.readonly {
       background: #fff2e8;
       color: #ad6800;
@@ -186,15 +208,18 @@
       flex-direction: column;
       gap: 12px;
     }
+
     .msg {
       display: flex;
       gap: 10px;
       max-width: 82%;
     }
+
     .msg.user {
       align-self: flex-end;
       flex-direction: row-reverse;
     }
+
     .avatar {
       width: 32px;
       height: 32px;
@@ -208,14 +233,21 @@
       background: #8fa3bf;
       flex-shrink: 0;
     }
-    .msg.user .avatar { background: var(--primary); }
 
-    .bubble-wrap { min-width: 0; }
+    .msg.user .avatar {
+      background: var(--primary);
+    }
+
+    .bubble-wrap {
+      min-width: 0;
+    }
+
     .sender {
       font-size: 11px;
       color: var(--muted);
       margin-bottom: 4px;
     }
+
     .bubble {
       border-radius: var(--radius);
       padding: 10px 12px;
@@ -224,8 +256,14 @@
       word-break: break-word;
       box-shadow: 0 1px 2px rgba(31, 41, 55, 0.08);
     }
-    .msg.user .bubble { background: var(--user-bubble); }
-    .msg.agent .bubble { background: var(--agent-bubble); }
+
+    .msg.user .bubble {
+      background: var(--user-bubble);
+    }
+
+    .msg.agent .bubble {
+      background: var(--agent-bubble);
+    }
 
     .file-panel {
       border: 1px solid var(--line);
@@ -236,12 +274,14 @@
       display: flex;
       flex-direction: column;
     }
+
     .file-title {
       padding: 10px 14px;
       border-bottom: 1px solid var(--line);
       font-size: 12px;
       color: var(--muted);
     }
+
     .file-content {
       margin: 0;
       padding: 14px;
@@ -259,11 +299,13 @@
       background: #fff;
       padding: 10px 14px;
     }
+
     .input-row {
       display: flex;
       gap: 8px;
       align-items: flex-end;
     }
+
     textarea {
       flex: 1;
       min-height: 38px;
@@ -277,7 +319,11 @@
       outline: none;
       background: #fff;
     }
-    textarea:focus { border-color: var(--primary); }
+
+    textarea:focus {
+      border-color: var(--primary);
+    }
+
     .btn {
       height: 36px;
       padding: 0 14px;
@@ -288,10 +334,12 @@
       cursor: pointer;
       font-size: 13px;
     }
+
     .btn:disabled {
       opacity: 0.6;
       cursor: not-allowed;
     }
+
     .btn-line {
       height: 36px;
       padding: 0 12px;
@@ -310,11 +358,13 @@
       gap: 8px;
       flex-wrap: wrap;
     }
+
     .thumbs {
       display: flex;
       gap: 6px;
       flex-wrap: wrap;
     }
+
     .thumb {
       width: 46px;
       height: 46px;
@@ -323,11 +373,13 @@
       overflow: hidden;
       position: relative;
     }
+
     .thumb img {
       width: 100%;
       height: 100%;
       object-fit: cover;
     }
+
     .thumb .remove {
       position: absolute;
       top: 1px;
@@ -352,16 +404,19 @@
       padding: 10px;
       display: none;
     }
+
     .decision p {
       margin: 0 0 8px;
       font-size: 12px;
       color: var(--muted);
     }
+
     .decision .row {
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
     }
+
     .decision .row button {
       height: 32px;
       padding: 0 10px;
@@ -371,6 +426,7 @@
       color: #2f3a4a;
       cursor: pointer;
     }
+
     .error {
       margin-top: 8px;
       color: var(--danger);
@@ -378,16 +434,24 @@
       min-height: 16px;
     }
 
-    input[type="file"] { display: none; }
+    input[type="file"] {
+      display: none;
+    }
 
     @media (max-width: 1100px) {
-      .app { grid-template-columns: 200px minmax(0, 1fr) 200px; }
+      .app {
+        grid-template-columns: 200px minmax(0, 1fr) 200px;
+      }
     }
+
     @media (max-width: 760px) {
-      .app { grid-template-columns: 168px minmax(0, 1fr) 168px; }
+      .app {
+        grid-template-columns: 168px minmax(0, 1fr) 168px;
+      }
     }
   </style>
 </head>
+
 <body>
   <div class="app">
     <aside class="sidebar left">
@@ -563,7 +627,7 @@
           renderMain();
           renderAgentList();
           renderFileList();
-          loadFileContentIfNeeded(f.id);
+          loadFileContent(f.id);
         };
         list.appendChild(btn);
       });
@@ -667,8 +731,7 @@
       stateModel.files = data.files || [];
     }
 
-    async function loadFileContentIfNeeded(fileId) {
-      if (fileCache[fileId] !== undefined) return;
+    async function loadFileContent(fileId) {
       try {
         const r = await fetch(`${API}/api/workspace/files/${encodeURIComponent(fileId)}/content`);
         const d = await r.json();
@@ -677,6 +740,11 @@
         fileCache[fileId] = `Load failed: ${err.message}`;
       }
       if (currentView.type === "file" && currentView.id === fileId) renderMain();
+    }
+
+    async function refreshAllFileCache() {
+      const promises = stateModel.files.map(f => loadFileContent(f.id));
+      await Promise.all(promises);
     }
 
     function readFileAsDataUrl(file) {
@@ -734,6 +802,7 @@
         if (d.error) setError(d.error);
         await loadState();
         await loadFileList();
+        await refreshAllFileCache();
         renderAgentList();
         renderFileList();
         renderMain();
@@ -779,7 +848,7 @@
         this.value = "";
         for (const f of files) {
           if (!f.type.startsWith("image/")) continue;
-          try { pendingImages.push(await readFileAsDataUrl(f)); } catch (_) {}
+          try { pendingImages.push(await readFileAsDataUrl(f)); } catch (_) { }
         }
         renderThumbs();
       });
@@ -802,4 +871,5 @@
     init();
   </script>
 </body>
+
 </html>

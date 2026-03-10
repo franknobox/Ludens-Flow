@@ -188,9 +188,9 @@ marimo/_lsp/
 __marimo__/
 
 
-workspace/logs/
-workspace/memory/
-workspace/*.md
-workspace/state.json
-workspace/dev_notes/LEGACY_WORKSPACE_MIGRATION_*.md
+# Runtime workspace: ignore everything except the docs file below.
+workspace/**
+!workspace/
+!workspace/README.md
+
 agent_workbench/workspace/

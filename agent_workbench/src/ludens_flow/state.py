@@ -127,13 +127,35 @@ def clear_images_dir() -> Path:
     return images_dir
 
 
+def _clear_artifact_files() -> None:
+    """将所有工件文件清空（重置为空文件），并清理 dev_notes 和 patches 目录。"""
+    artifact_paths = get_artifact_paths()
+    for path in artifact_paths.values():
+        if path.exists():
+            path.write_text("", encoding="utf-8")
+        else:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.touch()
+
+    # 清理 dev_notes 和 patches 下的内容
+    for d in [get_dev_notes_dir(), get_patches_dir()]:
+        if d.exists():
+            for entry in d.iterdir():
+                if entry.is_dir():
+                    shutil.rmtree(entry, ignore_errors=True)
+                else:
+                    entry.unlink(missing_ok=True)
+
+
 def reset_workspace_state(clear_images: bool = True) -> LudensState:
     """
     Reset persisted runtime state for a fresh session.
     - Remove state.json if present.
+    - Clear all artifact files to empty.
     - Optionally clear workspace/images.
     """
     get_state_file().unlink(missing_ok=True)
+    _clear_artifact_files()
     if clear_images:
         clear_images_dir()
     return load_state()

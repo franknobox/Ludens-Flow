@@ -43,6 +43,7 @@ python agent_workbench/run_agents.py
 
 ```bash
 pip install fastapi "uvicorn[standard]"
+
 uvicorn agent_workbench.api:app --reload
 ```
 
