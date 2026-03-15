@@ -37,7 +37,7 @@ pip install openai python-dotenv
 python agent_workbench/run_agents.py
 ```
 
-**方式 B：飞书风格 Web 前端**
+**方式 B：Web 前端**
 
 在**项目根目录**安装 Web 依赖并启动 API 服务：
 

@@ -1,77 +1,68 @@
-# Ludens-Flow — 项目状态
+# Ludens-Flow 项目状态
 
-> 最后更新：2026-02-27
-
----
-
-## 🏁 当前阶段
-
-**多 Agent 架构 MVP 实现完成 · 基于状态机的工作流引擎已就绪**
+> 最后更新：2026-03-16
 
 ---
 
-## ✅ 已完成
+## 当前状态
 
-| 模块 | 描述 |
+项目已完成多 Agent 工作流的可运行主链路，并具备基础前端、图片输入和可选联网搜索能力。当前阶段的重点已从“能跑通”转向“稳定优化与体验打磨”。
+
+---
+
+## 已完成
+
+| 模块 | 当前状态 |
 |---|---|
-| `agent_workbench/src/ludens_flow/state.py` | 实现了 `LudensState` 全局状态中心，支持进程级别的持久化断点续传 |
-| `agent_workbench/src/ludens_flow/router.py` | 实现了基于 Phase 的核心路由大脑，负责状态流转、打回重做等逻辑 |
-| `agent_workbench/src/ludens_flow/graph.py` | 实现了 Graph 图节点调度器，对接路由与各执行实体 |
-| `agent_workbench/src/ludens_flow/artifacts.py` | 实现了核心产物（GDD、实现计划等）的单写入权与原子化版本落盘 |
-| `agent_workbench/src/ludens_flow/agents/` | 封装了四大核心节点：Design / PM / Engineering / Review |
-| **状态流转基线** | 完整跑通 Design → PM → Engineering → Review 并在必要时 Backflow 回退的环形图流转 |
-| **独立 Unity 游戏开发特化 (新)** | 将四大子 Agent 提示词重构：默认基于 Unity 引擎进行独立开发/Game Jam，剔除商业化及联机内容，产出实用的底层目录架构。 |
-| **CI 与端到端测试覆盖 (新)** | 修复并重构全部 7 个核心图流转测试，补齐跨 Agent 状态流转断言。通过新增带超时保护的全链路真实 LLM 测试，确保 Prompt 与状态机可靠性。 |
-| **代码精简与隔离** | 移除了无关的早期里程碑测试文件与废弃的 `orchestrator.py` 以及过时的调度代码。实现了严格的测试环境状态目录隔离。 |
+| 多 Agent 状态机工作流 | 已完成 Design -> PM -> Engineering -> Review 主链路与回流机制 |
+| 状态持久化 | 已具备 `LudensState` 持久化、阶段切换、对话历史和 transcript 历史记录 |
+| Artifact 管理 | 已支持 GDD、PROJECT_PLAN、IMPLEMENTATION_PLAN、REVIEW_REPORT、DEVLOG 的读写与落盘 |
+| Web API | 已提供 `/api/state`、`/api/chat`、`/api/reset` 以及工作区文件读取接口 |
+| 前端工作台 | 已具备文件栏、Agent 栏、中心对话区、只读历史查看、图片上传与会话重置 |
+| 多模态输入 | 已支持文本 + 图片输入，前端可上传图片并转换为多模态消息 |
+| 联网搜索 | 已接入 `ddgs` 搜索工具；未安装依赖时会降级为不可用而不阻塞主流程 |
+| Workspace 规范化 | 已统一为根级 `workspace/`，运行时目录自动生成，旧路径已迁移清理 |
+| 版本控制清理 | `workspace/` 已整体忽略，仅保留说明文档，避免日志和运行时状态入库 |
+| 测试 | 已包含状态机、router、artifact、freeze、workspace reset、tools 等测试文件 |
 
 ---
 
-## 🔄 进行中 / 开发计划 (Roadmap)
+## 当前已知情况
 
-我们已将后续核心规划梳理至独立文档：[ROADMAP.md](docs/ROADMAP.md)
-
-以下为核心摘要重点：
-- [ ] **Prompt 与 Schema 优化**：引入强结构化输出 (JSON Schemas) 保障流转稳定性。
-- [ ] **人设独立与可配**：将各 Agent 的 System Prompt 与用户画像 (User Profile) 抽离为独立配置文件，实现动态自适应对话。
-- [ ] **多模态与联网搜索**：集成 Web Search API 与图像识别 (如 GPT-4V)，解决时效性问题并允许处理截图/引擎报错。
-- [ ] **前端交互 UI**：设计并开发图形化前端（如 Gradio / Streamlit 等），将 CLI 交互升级为可视化的工作台与文件对比视图。
+- 联网搜索依赖 `ddgs`，属于可选能力；未安装时搜索功能不可用，但系统其余能力可正常运行。
+- 当前前端已可用于演示和基本交互，但仍处于“配合性优化”阶段，不是最终形态。
+- `workspace/` 为运行时数据区，不应作为版本化资产管理。
 
 ---
 
-## 📁 目录结构（核心资产）
+## 下一步重点
 
-```
+当前后续开发计划已同步到 [ROADMAP.md](e:/GitDesktop/Ludens-Flow/docs/ROADMAP.md)，近期优先级如下：
+
+1. 稳定优化，包括多模态扩展后的输入流、状态流和异常处理优化。
+2. 独立系统人设与用户人设文件，降低 prompt 和角色配置耦合。
+3. Prompt 优化与结构化输出（Schemas），提高输出稳定性和可消费性。
+4. 多项目工作台化，支持多项目隔离的运行空间与上下文切换。
+5. 前端的配合性优化，继续改善工作台交互、状态展示和只读/编辑边界。
+
+---
+
+## 关键目录
+
+```text
 Ludens-Flow/
-├── agent_workbench/        # Agent 执行引擎
-│   ├── src/ludens_flow/    # 核心框架流转与逻辑代码 (State/Router/Graph/Artifacts)
-│   │   └── agents/         # 具体 Agent 实现 (Design/PM/Engineering/Review)
-│   ├── llm/                # LLM 调用层
-│   └── tests/              # 测试脚本与错误 dump
+├── agent_workbench/        # 多 Agent 引擎、API、前端与测试
 ├── docs/                   # 项目文档与规划
-│   └── ROADMAP.md          # 后续开发计划
-├── workspace/              # 运行时生成空间（执行产生，自动生成）
-│   ├── logs/               # trace.log/router.log 等运行日志
-│   ├── memory/             # 历史对话与 Agent 记忆
-│   └── state.json          # 全局流转状态存档
-├── Unity/                  # Unity 游戏工程
-├── .env                    # LLM配置（不入库）
-└── STATUS.md               # 本文件
+├── workspace/              # 运行时工作区（自动生成，默认不入库）
+├── Unity/                  # Unity 项目目录
+├── requirements.txt        # Python 依赖
+└── STATUS.md               # 当前项目状态摘要
 ```
 
 ---
 
-## ⚙️ 环境信息
+## 相关文档
 
-| 项目 | 值 |
-|---|---|
-| LLM Provider | `openai`（Moonshot AI 兼容接口） |
-| Model | `kimi-k2-turbo-preview` |
-| Base URL | `https://api.moonshot.cn/v1` |
-| Python | 3.x |
-
----
-
-## 🔗 相关文档
-
-- [Agent Workbench 使用指南](agent_workbench/README.md)
-- [后续详细开发计划 (ROADMAP)](docs/ROADMAP.md)
+- [Agent Workbench 使用说明](e:/GitDesktop/Ludens-Flow/agent_workbench/README.md)
+- [Roadmap](e:/GitDesktop/Ludens-Flow/docs/ROADMAP.md)
+- [Workspace 说明](e:/GitDesktop/Ludens-Flow/workspace/README.md)
