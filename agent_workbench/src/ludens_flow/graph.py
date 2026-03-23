@@ -106,26 +106,75 @@ def run_agent_step(agent, mode: str, state: LudensState, user_input: Any) -> Lud
     
     print(f"[DEBUG] run_agent_step - Calling agent: {node_name} Mode: {mode}")    
     try:
-        # 2. 调用 agent 的指定方法
-        if mode == "DISCUSS":
-            result: AgentResult = agent.discuss(state, user_input)
-        elif mode == "COMMIT":
-            result: AgentResult = agent.commit(state, user_input)
-        elif mode == "PLAN_DISCUSS":
-            result: AgentResult = getattr(agent, "plan_discuss")(state, user_input)
-        elif mode == "PLAN_COMMIT":
-            result: AgentResult = getattr(agent, "plan_commit")(state, user_input)
-        elif mode == "COACH":
-            result: AgentResult = getattr(agent, "coach")(state, user_input)
-        else:
-            raise ValueError(f"Unknown agent mode: {mode}")
+        # Dynamically append [PROFILE_UPDATE] instruction and inject user profile
+        orig_prompt = getattr(agent, "system_prompt", "") or ""
+        profile_instruction = (
+            "请从用户输入中提取人物信息，并按要求输出：\n提取信息包括但不限于：nickname（昵称/姓名），preferences（风格/喜好），project_goals（项目目标/需求/开发内容)\n输出格式："
+            "[PROFILE_UPDATE] key: value\n"
+            "例如：[PROFILE_UPDATE] nickname: Alice\n"
+        )
+        try:
+            from ludens_flow.user_profile import load_profile
+            profile_text = load_profile(max_chars=2000)
+            if profile_text.strip():
+                agent.system_prompt = orig_prompt + profile_instruction + "\n\n---\n你在回答涉及用户身份、偏好、项目目标等问题时，必须优先参考下方的用户画像\n" + profile_text
+            else:
+                agent.system_prompt = orig_prompt + profile_instruction
+            
+        except Exception as e:
+            logger.warning(f"Failed to load user profile: {e}")
+            agent.system_prompt = orig_prompt + profile_instruction
+
+        # Call the agent's method
+        result = None
+        try:
+            if mode == "DISCUSS":
+                result: AgentResult = agent.discuss(state, user_input)
+            elif mode == "COMMIT":
+                result: AgentResult = agent.commit(state, user_input)
+            elif mode == "PLAN_DISCUSS":
+                result: AgentResult = getattr(agent, "plan_discuss")(state, user_input)
+            elif mode == "PLAN_COMMIT":
+                result: AgentResult = getattr(agent, "plan_commit")(state, user_input)
+            elif mode == "COACH":
+                result: AgentResult = getattr(agent, "coach")(state, user_input)
+            else:
+                raise ValueError(f"Unknown agent mode: {mode}")
+        finally:
+            # 恢复 agent 的 system_prompt，防止污染后续调用
+            agent.system_prompt = orig_prompt
+ 
+        # 在合并状态更新前，尝试从 assistant_message 中解析出 profile 更新标记
+        try:
+            parsed_profile_updates = getattr(result, "profile_updates", None) or []
+            if not parsed_profile_updates and hasattr(agent, "extract_profile_updates"):
+                try:
+                    parsed_profile_updates = agent.extract_profile_updates(result.assistant_message or "")
+                except Exception as e:
+                    logger.debug(f"Failed to extract profile updates from agent output: {e}")
+                    parsed_profile_updates = []
+
+            if parsed_profile_updates:
+                # 将解析出的建议回填到 result.profile_updates，后续统一由 graph 处理写入
+                result.profile_updates = parsed_profile_updates
+            
+        except Exception as e:
+            logger.warning(f"Error while parsing profile updates: {e}")
 
         # 3. 合并状态的更新字段 (drafts, change_requests, review_gate 等)
         if result.state_updates:
             _merge_state_updates(state, result.state_updates)
             
         # 同步记录供终端回显的话术
-        state.last_assistant_message = result.assistant_message
+        def _strip_profile_update_lines(text: str) -> str:
+            import re
+            if not text:
+                return text
+            lines = text.splitlines()
+            filtered = [line for line in lines if not re.match(r"^\s*\[PROFILE_UPDATE\]", line, re.IGNORECASE)]
+            return "\n".join(filtered).strip()
+
+        state.last_assistant_message = _strip_profile_update_lines(result.assistant_message)
         
         # 将本轮回话打包送进短期记忆体 (过滤空语句)
         has_meaningful_input = False
@@ -190,6 +239,15 @@ def run_agent_step(agent, mode: str, state: LudensState, user_input: Any) -> Lud
         # 5. 持久化数据
         state.last_error = None  # 正常执行后清理报错记录
         save_state(state)
+
+        # Agent 提交了 profile_updates，则合并写入 USER_PROFILE.md，该写入不受 artifact_frozen 限制
+        try:
+            if getattr(result, "profile_updates", None):
+                from ludens_flow.user_profile import update_profile
+                if update_profile(result.profile_updates, author=node_name):
+                    logger.info(f"Merged {len(result.profile_updates)} profile updates from {node_name} into USER_PROFILE.md")
+        except Exception as e:
+            logger.warning(f"Failed to merge profile updates: {e}")
         
         # 6. 记录 trace: LEAVE
         write_trace_log("LEAVE", node_name, current_phase, is_frozen, commit_flag)

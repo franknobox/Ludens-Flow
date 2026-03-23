@@ -23,6 +23,7 @@ class AgentResult:
     state_updates: Dict[str, Any] = field(default_factory=dict)  # 需要合并给 `LudensState` 的增量属性
     commit: Optional[CommitSpec] = None              # 当处于 COMMIT 节点时的写入凭证 
     events: List[str] = field(default_factory=list)  # 追加事件，比如触发自动路由的 ["*_COMMITTED"] 等
+    profile_updates: List[str] = field(default_factory=list)  # Agent 提议写入用户画像的条目（将交由总控合并写入）
 
 
 class BaseAgent(ABC):
@@ -118,6 +119,53 @@ class BaseAgent(ABC):
              
         # Normal string response
         return str(response)
+
+    def extract_profile_updates(self, assistant_text: str) -> List[str]:
+        """
+        从 LLM 输出中提取以 [PROFILE_UPDATE] 标记的条目，返回条目字符串列表（去除空白）。
+        支持行内格式：
+          [PROFILE_UPDATE] nickname: Alice
+        或者多条并列的行。
+        """
+        import re, json
+        if not assistant_text:
+            return []
+        lines = assistant_text.splitlines()
+        updates: List[str] = []
+        pattern = re.compile(r"^\s*\[PROFILE_UPDATE\]\s*(.*)$", re.IGNORECASE)
+        for line in lines:
+            m = pattern.match(line)
+            if not m:
+                continue
+            payload = m.group(1).strip()
+            if not payload:
+                continue
+            # 如果 payload 看起来像 JSON，尝试解析成多条字符串
+            if (payload.startswith("{") and payload.endswith("}")) or (payload.startswith("[") and payload.endswith("]")):
+                try:
+                    parsed = json.loads(payload)
+                    # 如果是 dict，将每个键值对作为一条更新；如果是 list，则把元素转为字符串
+                    if isinstance(parsed, dict):
+                        for k, v in parsed.items():
+                            updates.append(f"{k}: {v}")
+                    elif isinstance(parsed, list):
+                        for item in parsed:
+                            updates.append(str(item))
+                except Exception:
+                    # 解析失败则保留原始 payload
+                    updates.append(payload)
+            else:
+                updates.append(payload)
+
+        # 去重并保持顺序
+        seen = set()
+        result = []
+        for u in updates:
+            key = u.strip()
+            if key and key not in seen:
+                seen.add(key)
+                result.append(key)
+        return result
 
     @abstractmethod
     def discuss(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
