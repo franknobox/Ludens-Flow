@@ -95,7 +95,7 @@ def write_artifact(name: str, content: str, reason: str, actor: str, state: Lude
         raise ValueError(f"Unknown artifact name: {name}")
     
     # --- 0. 结冰校验 (Freeze Guard) ---
-    if getattr(state, "artifact_frozen", False):
+    if getattr(state, "artifact_frozen", False) and name != "DEVLOG":
          raise PermissionError(
              f"System is currently in DEV_COACHING (Artifact Frozen state). "
              f"Canonical artifact '{name}' is locked and cannot be modified. "
@@ -124,10 +124,14 @@ def write_artifact(name: str, content: str, reason: str, actor: str, state: Lude
         "GDD": "gdd",
         "PROJECT_PLAN": "pm",
         "IMPLEMENTATION_PLAN": "eng",
-        "REVIEW_REPORT": "review"
+        "REVIEW_REPORT": "review",
+        "DEVLOG": "devlog",
     }
     state_key = state_key_map[name]
-    meta: ArtifactMeta = state.artifacts[state_key]
+    meta: ArtifactMeta = state.artifacts.get(state_key)
+    if meta is None:
+        meta = ArtifactMeta(path=str(path), owner=str(expected_owner))
+        state.artifacts[state_key] = meta
 
     # --- 2. 原子写文件 ---
     path.parent.mkdir(parents=True, exist_ok=True)

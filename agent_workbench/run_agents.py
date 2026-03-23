@@ -24,21 +24,42 @@ logger = logging.getLogger(__name__)
 
 from typing import Union
 
+
+def _extract_image_path_candidates(text: str) -> list[tuple[str, str]]:
+    """Return [(matched_text, path_text)] for likely local image paths."""
+    ext_pattern = r"(?:png|jpg|jpeg|webp)"
+    patterns = [
+        rf'(?P<matched>"(?P<path>[^"\r\n]+\.(?:{ext_pattern}))")',
+        rf"(?P<matched>'(?P<path>[^'\r\n]+\.(?:{ext_pattern}))')",
+        rf"(?P<matched>(?<!\S)(?P<path>(?:[A-Za-z]:[\\/]|\.{{1,2}}[\\/]|[\\/])[^\r\n<>|?*]+?\.(?:{ext_pattern}))(?=$|\s))",
+        rf'(?P<matched>(?<!\S)(?P<path>[A-Za-z0-9_.\-\\/]+\.(?:{ext_pattern}))(?=$|\s))',
+    ]
+
+    seen: set[tuple[str, str]] = set()
+    candidates: list[tuple[str, str]] = []
+    for pattern in patterns:
+        for match in re.finditer(pattern, text, re.IGNORECASE):
+            matched_text = match.group("matched")
+            path_text = match.group("path")
+            key = (matched_text, path_text)
+            if key in seen:
+                continue
+            if any(path_text in existing_path for _, existing_path in candidates):
+                continue
+            seen.add(key)
+            candidates.append((matched_text, path_text))
+    return candidates
+
 def parse_user_input(text: str) -> Union[str, list]:
     """
     Parse the user input for local file paths representing images.
     If an image is found, convert the file to a base64 data URI and 
     return a multimodal payload list. Otherwise returning the string.
     """
-    # Regex to find potential absolute or relative local file paths ending in image extensions
-    img_pattern = r'([a-zA-Z0-9_./\\-]+\.(?:png|jpg|jpeg|webp))'
-    matches = re.finditer(img_pattern, text, re.IGNORECASE)
-    
     payload = []
     text_content = text
-    
-    for match in matches:
-        file_path_str = match.group(1)
+
+    for matched_text, file_path_str in _extract_image_path_candidates(text):
         path = Path(file_path_str)
         if path.is_file():
             try:
@@ -78,7 +99,7 @@ def parse_user_input(text: str) -> Union[str, list]:
                     }
                 })
                 # Remove the path from the text so it doesn't clutter the LLM context unnecessarily
-                text_content = text_content.replace(file_path_str, "").strip()
+                text_content = text_content.replace(matched_text, "").strip()
             except Exception as e:
                 logger.warning(f"Could not read image file {path}: {e}")
                 

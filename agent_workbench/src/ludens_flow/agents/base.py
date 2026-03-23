@@ -11,32 +11,28 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class CommitSpec:
-    """Agent 向外界抛出写文件的具体配方凭证"""
-    artifact_name: str      # 要写入的核心工件名字，例如 "GDD"
-    content: str            # 将要写入的内容文本
-    reason: str             # 写该版文件的起因，例如 "User confirmed commit"
+    """Agent 交给 Graph 的落盘描述。"""
+    artifact_name: str      # 目标工件名
+    content: str            # 最终内容
+    reason: str             # 写入原因
 
 @dataclass
 class AgentResult:
-    """每个 Agent 通用的标准返回字典包装接口"""
-    assistant_message: str                           # 要显示给用户的自然语言回复
-    state_updates: Dict[str, Any] = field(default_factory=dict)  # 需要合并给 `LudensState` 的增量属性
-    commit: Optional[CommitSpec] = None              # 当处于 COMMIT 节点时的写入凭证 
-    events: List[str] = field(default_factory=list)  # 追加事件，比如触发自动路由的 ["*_COMMITTED"] 等
-    profile_updates: List[str] = field(default_factory=list)  # Agent 提议写入用户画像的条目（将交由总控合并写入）
+    """Agent 标准返回结构。"""
+    assistant_message: str                           # 给用户的自然语言回复
+    state_updates: Dict[str, Any] = field(default_factory=dict)  # 要合并回 LudensState 的增量更新
+    commit: Optional[CommitSpec] = None              # 定稿阶段的落盘描述
+    events: List[str] = field(default_factory=list)  # 供 Router 消费的事件
+    profile_updates: List[str] = field(default_factory=list)  # 待写入用户画像的条目
 
 
 class BaseAgent(ABC):
-    """
-    BaseAgent 的全新两段式架构：
-    1. discuss() -> AgentResult: 不直接落盘核心文档，只存草稿 (state.drafts) / 发起对话
-    2. commit()  -> AgentResult: 当用户要求定稿时调用，生成带有 CommitSpec 凭据的结果交给外界写入
-    """
+    """所有 Agent 的公共基类。约定 discuss 负责对话，commit 负责定稿。"""
     name: str = "BaseAgent"
     system_prompt: str = ""
 
     def _call(self, user_prompt: Union[str, list], cfg: Optional[LLMConfig] = None, history: Optional[List[Dict[str, Any]]] = None, tools: Optional[list] = None) -> str:
-        """统一 LLM 调用入口。支持自动多轮 Tool Calling 处理。"""
+        """统一 LLM 调用入口，处理配置和多轮 tool calling。"""
         from llm.provider import load_config
         if cfg is None:
             try:
@@ -47,25 +43,22 @@ class BaseAgent(ABC):
         if history is None:
             history = []
         else:
-            # Create a shallow copy so we don't mutate the caller's history
+            # 避免直接改调用方传入的 history。
             history = list(history)
             
         max_tool_iterations = 5
         iterations = 0
         
-        # Initial call
+        # 首轮模型调用。
         response = generate(system=self.system_prompt, user=user_prompt, cfg=cfg, history=history, tools=tools)
         
         while hasattr(response, "tool_calls") and response.tool_calls and iterations < max_tool_iterations:
             iterations += 1
             
-            # Need to append the assistant's request to call the tool to the history
-            # The 'generate' function appends the exact user_prompt at the end of history,
-            # so to continue the conversation robustly when tool calling, we must assimilate
-            # the original user_prompt into history, and send a blank user_prompt for subsequent calls
+            # 首轮工具调用时，把原始用户输入补进 history，后续改用中性续写提示。
             if iterations == 1:
                history.append({"role": "user", "content": user_prompt})
-               user_prompt = "Please continue." # Provide a neutral continuation prompt
+               user_prompt = "Please continue."
             
             assistant_msg = {
                 "role": "assistant", 
@@ -83,7 +76,7 @@ class BaseAgent(ABC):
             }
             history.append(assistant_msg)
             
-            # Execute all requested tools
+            # 执行模型请求的工具。
             for tool_call in response.tool_calls:
                 tool_name = tool_call.function.name
                 tool_args_str = tool_call.function.arguments
@@ -103,30 +96,25 @@ class BaseAgent(ABC):
                 except Exception as e:
                     tool_result = f"Error executing tool {tool_name}: {e}"
                 
-                # Append tool result to history
+                # 把工具结果回灌给模型。
                 history.append({
                     "role": "tool",
                     "tool_call_id": tool_call.id,
                     "content": str(tool_result)
                 })
                 
-            # Request LLM to continue with tool results
+            # 继续请求模型生成最终回复。
             response = generate(system=self.system_prompt, user=user_prompt, cfg=cfg, history=history, tools=tools)
 
         if hasattr(response, "tool_calls"):
              logger.warning(f"Agent exceeded maximum tool iterations ({max_tool_iterations}). Forcing exit.")
              return (response.content or "").strip()
              
-        # Normal string response
+        # 普通文本响应。
         return str(response)
 
     def extract_profile_updates(self, assistant_text: str) -> List[str]:
-        """
-        从 LLM 输出中提取以 [PROFILE_UPDATE] 标记的条目，返回条目字符串列表（去除空白）。
-        支持行内格式：
-          [PROFILE_UPDATE] nickname: Alice
-        或者多条并列的行。
-        """
+        """提取 [PROFILE_UPDATE] 行，并标准化为字符串列表。"""
         import re, json
         if not assistant_text:
             return []
@@ -140,11 +128,11 @@ class BaseAgent(ABC):
             payload = m.group(1).strip()
             if not payload:
                 continue
-            # 如果 payload 看起来像 JSON，尝试解析成多条字符串
+            # 支持把 JSON payload 拆成多条更新。
             if (payload.startswith("{") and payload.endswith("}")) or (payload.startswith("[") and payload.endswith("]")):
                 try:
                     parsed = json.loads(payload)
-                    # 如果是 dict，将每个键值对作为一条更新；如果是 list，则把元素转为字符串
+                    # dict 展开为 key/value，list 展开为逐条字符串。
                     if isinstance(parsed, dict):
                         for k, v in parsed.items():
                             updates.append(f"{k}: {v}")
@@ -152,12 +140,12 @@ class BaseAgent(ABC):
                         for item in parsed:
                             updates.append(str(item))
                 except Exception:
-                    # 解析失败则保留原始 payload
+                    # 解析失败时保留原始文本。
                     updates.append(payload)
             else:
                 updates.append(payload)
 
-        # 去重并保持顺序
+        # 去重并保持顺序。
         seen = set()
         result = []
         for u in updates:
@@ -169,17 +157,10 @@ class BaseAgent(ABC):
 
     @abstractmethod
     def discuss(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
-        """
-        供 Router 分派在 *_DISCUSS 节点使用的入口。
-        应该读取用户的意图并利用 LLM 作答；必要时把临时构思丢进 state_updates 的 drafts 字段里。
-        """
+        """讨论阶段入口。"""
         ...
 
     @abstractmethod
     def commit(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
-        """
-        供 Router 分派在 *_COMMIT 节点使用的入口。
-        此时直接将草稿转化成完整的标记语言，或通过 LLM 生成终版内容，将它包装进 CommitSpec 内返回。
-        注意：Agent 绝对不能在此处动用 open/writeFile！
-        """
+        """定稿阶段入口。"""
         ...

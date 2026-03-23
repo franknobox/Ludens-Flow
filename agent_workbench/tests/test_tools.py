@@ -74,6 +74,45 @@ class ToolsTests(unittest.TestCase):
         finally:
             image_path.unlink(missing_ok=True)
 
+    def test_parse_user_input_with_absolute_image_path_returns_multimodal_payload(self):
+        image_path = (_ROOT / "test_dummy_abs.png").resolve()
+        image_path.write_bytes(base64.b64decode(_TINY_PNG_B64))
+        try:
+            real_import = builtins.__import__
+
+            def _import_without_pil(name, globals=None, locals=None, fromlist=(), level=0):
+                if name == "PIL" or name.startswith("PIL."):
+                    raise ImportError("mock no pillow")
+                return real_import(name, globals, locals, fromlist, level)
+
+            with patch("builtins.__import__", side_effect=_import_without_pil):
+                parsed = parse_user_input(f"look {image_path} please")
+            self.assertIsInstance(parsed, list)
+            self.assertTrue(any(item.get("type") == "image_url" for item in parsed))
+        finally:
+            image_path.unlink(missing_ok=True)
+
+    def test_parse_user_input_with_absolute_image_path_containing_spaces_returns_multimodal_payload(self):
+        image_dir = (_ROOT / "test image dir")
+        image_dir.mkdir(exist_ok=True)
+        image_path = (image_dir / "test image spaced.png").resolve()
+        image_path.write_bytes(base64.b64decode(_TINY_PNG_B64))
+        try:
+            real_import = builtins.__import__
+
+            def _import_without_pil(name, globals=None, locals=None, fromlist=(), level=0):
+                if name == "PIL" or name.startswith("PIL."):
+                    raise ImportError("mock no pillow")
+                return real_import(name, globals, locals, fromlist, level)
+
+            with patch("builtins.__import__", side_effect=_import_without_pil):
+                parsed = parse_user_input(f"look {image_path} please")
+            self.assertIsInstance(parsed, list)
+            self.assertTrue(any(item.get("type") == "image_url" for item in parsed))
+        finally:
+            image_path.unlink(missing_ok=True)
+            image_dir.rmdir()
+
     @unittest.skipUnless(
         os.getenv("RUN_INTERNET_TESTS") == "1",
         "Set RUN_INTERNET_TESTS=1 to run real web search integration test.",

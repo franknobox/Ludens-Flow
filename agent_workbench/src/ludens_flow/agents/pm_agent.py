@@ -12,7 +12,9 @@ logger = logging.getLogger(__name__)
 
 import re
 
+
 class PMAgent(BaseAgent):
+    """负责项目计划阶段的讨论、范围收敛和定稿。"""
     name = "PMAgent"
     system_prompt = (
         "你的名字是 Pax (帕克斯)，你是一位擅长独立游戏项目的 PM Agent。\n"
@@ -22,6 +24,7 @@ class PMAgent(BaseAgent):
     )
 
     def discuss(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
+        # 回流修改时，把现有 PROJECT_PLAN 一起带入讨论。
         gdd_content = read_artifact("GDD")
         existing_pm = read_artifact("PROJECT_PLAN")
         
@@ -29,6 +32,7 @@ class PMAgent(BaseAgent):
         if existing_pm.strip():
             pm_context = f"**当前已有的 PROJECT_PLAN 文档内容**（如果是回流修改阶段，请在此基础上修订）：\n{existing_pm}\n\n"
         
+        # discuss 负责排期、范围和 MVP 收敛，不直接落盘正式计划。
         prompt = (
             f"已有 GDD：\n{gdd_content}\n\n"
             f"{pm_context}"
@@ -51,6 +55,7 @@ class PMAgent(BaseAgent):
         )
 
     def commit(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
+        # commit 输出最终 PROJECT_PLAN，并解析附带的变更请求。
         gdd_content = read_artifact("GDD")
         
         prompt = (
@@ -83,7 +88,8 @@ class PMAgent(BaseAgent):
             try:
                 cr_data = json.loads(cr_match.group(1))
                 if "change_requests" in cr_data:
-                    updates["change_requests"] = getattr(state, "change_requests", []) + cr_data["change_requests"]
+                    # 这里只回传本轮新请求，具体合并由 Graph 统一处理。
+                    updates["change_requests"] = cr_data["change_requests"]
                     logger.info(f"[PMAgent] Detected and appended {len(cr_data['change_requests'])} ChangeRequest(s).")
                 final_pm = final_pm_output[:cr_match.start()].strip() + final_pm_output[cr_match.end():].strip()
             except Exception as e:

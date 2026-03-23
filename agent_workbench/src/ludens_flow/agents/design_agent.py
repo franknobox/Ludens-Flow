@@ -8,7 +8,9 @@ from llm.provider import LLMConfig
 
 logger = logging.getLogger(__name__)
 
+
 class DesignAgent(BaseAgent):
+    """负责 GDD 阶段的讨论和定稿。"""
     name = "DesignAgent"
     system_prompt = (
         "你的名字是 Dam (丹姆)，你是一名拥有丰富经验的游戏策划(Design Agent)，专注于 Unity 独立游戏与 Game Jam 项目。\n"
@@ -18,6 +20,7 @@ class DesignAgent(BaseAgent):
     )
 
     def discuss(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
+        # 回流修改时，把当前 GDD 一并带入讨论上下文。
         from ludens_flow.artifacts import read_artifact
         existing_gdd = read_artifact("GDD")
         
@@ -25,6 +28,7 @@ class DesignAgent(BaseAgent):
         if existing_gdd.strip():
             gdd_context = f"**当前已有的 GDD 文档内容**（如果是回流修改阶段，请在此基础上修订而非从零开始）：\n{existing_gdd}\n\n"
         
+        # discuss 只收敛需求和玩法方向，不直接生成最终工件。
         prompt = (
             f"{gdd_context}"
             f"用户的需求/反馈: {user_input}\n\n"
@@ -46,6 +50,7 @@ class DesignAgent(BaseAgent):
         )
 
     def commit(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
+        # commit 直接输出可落盘的最终版 GDD。
         prompt = (
             "请基于我们之前的完整讨论记录，将其中已经明确的信息整合为一份规范化 GDD (Game Design Document) Markdown 文档。\n"
             "面向使用 Unity 引擎的独立开发者或小型 Game Jam 团队。\n\n"

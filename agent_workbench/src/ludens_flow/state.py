@@ -173,6 +173,7 @@ def init_state() -> LudensState:
             "pm": ArtifactMeta(path=str(artifact_paths["pm"]), owner="PMAgent"),
             "eng": ArtifactMeta(path=str(artifact_paths["eng"]), owner="EngineeringAgent"),
             "review": ArtifactMeta(path=str(artifact_paths["review"]), owner="ReviewAgent"),
+            "devlog": ArtifactMeta(path=str(artifact_paths["devlog"]), owner="EngineeringAgent"),
         }
     )
 
