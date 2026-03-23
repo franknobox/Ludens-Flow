@@ -102,9 +102,9 @@ class EngineeringAgent(BaseAgent):
 
     def plan_discuss(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
         # 工程讨论依赖前置的 GDD / PROJECT_PLAN，必要时也带上当前 IMPLEMENTATION_PLAN。
-        gdd = read_artifact("GDD")
-        pm = read_artifact("PROJECT_PLAN")
-        impl_plan = read_artifact("IMPLEMENTATION_PLAN")
+        gdd = read_artifact("GDD", project_id=state.project_id)
+        pm = read_artifact("PROJECT_PLAN", project_id=state.project_id)
+        impl_plan = read_artifact("IMPLEMENTATION_PLAN", project_id=state.project_id)
 
         detected_style = self._extract_style_preset(user_input)
         style = detected_style or state.style_preset or "None"
@@ -142,8 +142,8 @@ class EngineeringAgent(BaseAgent):
 
     def plan_commit(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
         # 定稿态把已确认 preset 固化到 IMPLEMENTATION_PLAN。
-        gdd = read_artifact("GDD")
-        pm = read_artifact("PROJECT_PLAN")
+        gdd = read_artifact("GDD", project_id=state.project_id)
+        pm = read_artifact("PROJECT_PLAN", project_id=state.project_id)
         resolved_style = self._resolve_style_preset(state, user_input)
         style = resolved_style or getattr(state, "style_preset", None) or "由本次对话记录决定"
 
@@ -178,7 +178,7 @@ class EngineeringAgent(BaseAgent):
 
     def coach(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
         # DEV_COACHING 只做辅导，不改主工件。
-        impl_plan = read_artifact("IMPLEMENTATION_PLAN")
+        impl_plan = read_artifact("IMPLEMENTATION_PLAN", project_id=state.project_id)
         resolved_style = self._resolve_style_preset(state, user_input)
         style = resolved_style or state.style_preset or "常规"
 

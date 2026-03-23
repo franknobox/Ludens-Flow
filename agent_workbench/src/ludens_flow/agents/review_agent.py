@@ -25,9 +25,9 @@ class ReviewAgent(BaseAgent):
         return AgentResult(assistant_message="Review Agent is in DISCUSS mode. Usually we jump direct to COMMIT.")
 
     def commit(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
-        gdd = read_artifact("GDD")
-        pm = read_artifact("PROJECT_PLAN")
-        impl = read_artifact("IMPLEMENTATION_PLAN")
+        gdd = read_artifact("GDD", project_id=state.project_id)
+        pm = read_artifact("PROJECT_PLAN", project_id=state.project_id)
+        impl = read_artifact("IMPLEMENTATION_PLAN", project_id=state.project_id)
         
         prompt = (
             "请严格审视以下三份核心文档，从 Unity 独立游戏开发的角度评估一致性、可行性和 scope 健康度：\n\n"

@@ -25,8 +25,8 @@ class PMAgent(BaseAgent):
 
     def discuss(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
         # 回流修改时，把现有 PROJECT_PLAN 一起带入讨论。
-        gdd_content = read_artifact("GDD")
-        existing_pm = read_artifact("PROJECT_PLAN")
+        gdd_content = read_artifact("GDD", project_id=state.project_id)
+        existing_pm = read_artifact("PROJECT_PLAN", project_id=state.project_id)
         
         pm_context = ""
         if existing_pm.strip():
@@ -56,7 +56,7 @@ class PMAgent(BaseAgent):
 
     def commit(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
         # commit 输出最终 PROJECT_PLAN，并解析附带的变更请求。
-        gdd_content = read_artifact("GDD")
+        gdd_content = read_artifact("GDD", project_id=state.project_id)
         
         prompt = (
             f"已有 GDD：\n{gdd_content}\n\n"

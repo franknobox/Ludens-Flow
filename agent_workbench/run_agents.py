@@ -18,6 +18,7 @@ except ImportError:
 
 import ludens_flow.state as st
 from ludens_flow.graph import graph_step
+from ludens_flow.paths import create_project, list_projects, resolve_project_id, set_active_project_id
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -130,6 +131,9 @@ def main():
         # 显示当前身位和重要错误
         phase = state.phase
         err = getattr(state, "last_error", None)
+        project_label = state.project_id or "(unknown)"
+
+        print(f"\n[Current Project]: {project_label}")
 
         if phase == "DEV_COACHING":
             print("\n" + "★"*50)
@@ -166,8 +170,43 @@ def main():
             if raw_input.lower() in ("/reset", "/restart"):
                 logger.info("Resetting workspace state...")
                 # 重新加载（会自动拿到全新的纯净状态）
-                state = st.reset_workspace_state(clear_images=True)
+                state = st.reset_workspace_state(clear_images=True, project_id=state.project_id)
                 print("\n✨ [System]: 记忆已清空，时空倒流回起点！")
+                continue
+
+            if raw_input.lower() == "/projects":
+                projects = list_projects()
+                current_project = resolve_project_id(state.project_id)
+                print("\n[Projects]")
+                print(f"* active: {current_project}")
+                if not projects:
+                    print("- (no named projects yet)")
+                else:
+                    for project in projects:
+                        marker = "*" if project["id"] == current_project else "-"
+                        print(f"{marker} {project['id']}  {project['title']}")
+                continue
+
+            if raw_input.lower().startswith("/project new "):
+                project_id = raw_input[len("/project new "):].strip()
+                if not project_id:
+                    print("Usage: /project new <project_id>")
+                    continue
+                meta = create_project(project_id, set_active=True)
+                st.init_workspace(project_id=meta["id"])
+                state = st.load_state(project_id=meta["id"])
+                print(f"\n✨ [System]: 已创建并切换到项目 {meta['id']}")
+                continue
+
+            if raw_input.lower().startswith("/project use "):
+                project_id = raw_input[len("/project use "):].strip()
+                if not project_id:
+                    print("Usage: /project use <project_id>")
+                    continue
+                active_project = set_active_project_id(project_id)
+                st.init_workspace(project_id=active_project)
+                state = st.load_state(project_id=active_project)
+                print(f"\n✨ [System]: 已切换到项目 {active_project}")
                 continue
 
             # Parse input for potential images

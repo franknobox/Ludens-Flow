@@ -5,22 +5,22 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
-from ludens_flow.paths import get_workspace_dir
+from ludens_flow.paths import get_workspace_dir, resolve_project_id
 
 logger = logging.getLogger(__name__)
 
 # 用户画像文件的读写入口。
 # 这里负责定位 USER_PROFILE.md、创建模板和合并追加条目。
 
-def _find_workspace_dir(start_path: Optional[Path] = None) -> Path:
+def _find_workspace_dir(start_path: Optional[Path] = None, project_id: Optional[str] = None) -> Path:
     """返回当前生效的工作区目录。"""
     _ = start_path
-    return get_workspace_dir()
+    return get_workspace_dir(resolve_project_id(project_id))
 
 
-def _profile_path() -> Path:
+def _profile_path(project_id: Optional[str] = None) -> Path:
     """返回 USER_PROFILE.md 路径，并确保工作区目录存在。"""
-    ws = _find_workspace_dir()
+    ws = _find_workspace_dir(project_id=project_id)
     ws.mkdir(parents=True, exist_ok=True)
     return ws / "USER_PROFILE.md"
 
@@ -36,9 +36,9 @@ _TEMPLATE = """
 """.lstrip()
 
 
-def load_profile(max_chars: int = 2000) -> str:
+def load_profile(max_chars: int = 2000, project_id: Optional[str] = None) -> str:
     """读取画像文件；缺失或空文件时自动补模板。"""
-    path = _profile_path()
+    path = _profile_path(project_id)
     if not path.exists():
         try:
             path.write_text(_TEMPLATE, encoding="utf-8")
@@ -58,13 +58,13 @@ def load_profile(max_chars: int = 2000) -> str:
         return _TEMPLATE[:max_chars]
 
 
-def update_profile(entries: List[str], author: str = "agent") -> bool:
+def update_profile(entries: List[str], author: str = "agent", project_id: Optional[str] = None) -> bool:
     """把新条目追加到 USER_PROFILE.md，跳过空值和重复内容。"""
     if not entries:
         return False
 
     # 先确保目标文件存在，再读取当前内容做去重。
-    path = _profile_path()
+    path = _profile_path(project_id)
     try:
         if not path.exists():
             path.write_text(_TEMPLATE, encoding="utf-8")

@@ -18,6 +18,7 @@ except ImportError:
 import ludens_flow.state as st
 from ludens_flow.graph import graph_step
 from ludens_flow.artifacts import read_artifact
+from ludens_flow.paths import create_project, list_projects, resolve_project_id, set_active_project_id
 
 # 复用 run_agents 的输入解析（含图片路径）
 from run_agents import parse_user_input
@@ -44,6 +45,11 @@ class ChatRequest(BaseModel):
     images: list[str] | None = None  # data URI 列表，如 data:image/png;base64,...
 
 
+class ProjectRequest(BaseModel):
+    project_id: str
+    title: str | None = None
+
+
 def _phase_to_agent_key(phase: str | None) -> str:
     if not phase:
         return "system"
@@ -60,6 +66,7 @@ def _phase_to_agent_key(phase: str | None) -> str:
 
 def _state_to_json(state) -> dict:
     return {
+        "project_id": getattr(state, "project_id", None),
         "phase": state.phase,
         "current_agent": _phase_to_agent_key(state.phase),
         "iteration_count": state.iteration_count,
@@ -123,8 +130,39 @@ def post_chat(req: ChatRequest):
 
 @app.post("/api/reset")
 def post_reset():
-    state = st.reset_workspace_state(clear_images=True)
+    state = st.load_state()
+    state = st.reset_workspace_state(clear_images=True, project_id=getattr(state, "project_id", None))
     return _state_to_json(state)
+
+
+@app.get("/api/projects")
+def get_projects():
+    return {
+        "active_project": resolve_project_id(),
+        "projects": list_projects(),
+    }
+
+
+@app.post("/api/projects")
+def post_project(req: ProjectRequest):
+    meta = create_project(req.project_id, title=req.title, set_active=True)
+    st.init_workspace(project_id=meta["id"])
+    state = st.load_state(project_id=meta["id"])
+    return {
+        "project": meta,
+        "state": _state_to_json(state),
+    }
+
+
+@app.post("/api/projects/{project_id}/select")
+def select_project(project_id: str):
+    active_project = set_active_project_id(project_id)
+    st.init_workspace(project_id=active_project)
+    state = st.load_state(project_id=active_project)
+    return {
+        "active_project": active_project,
+        "state": _state_to_json(state),
+    }
 
 
 # 工作区文件（Agent 产出）列表与内容
@@ -144,10 +182,11 @@ def list_workspace_files():
 
 @app.get("/api/workspace/files/{file_id}/content")
 def get_workspace_file_content(file_id: str):
+    state = st.load_state()
     for f in WORKSPACE_FILES:
         if f["id"] == file_id:
             try:
-                content = read_artifact(f["artifact"])
+                content = read_artifact(f["artifact"], project_id=getattr(state, "project_id", None))
                 return {"id": file_id, "name": f["name"], "content": content}
             except Exception as e:
                 logger.warning(f"Read artifact {file_id}: {e}")

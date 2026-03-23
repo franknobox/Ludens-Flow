@@ -61,7 +61,7 @@ def _log_route(old_phase: str, new_phase: str, explanation: str,
         f"{user_choice} {gate_info}reason=\"{explanation}\" {art_info}\n"
     )
     
-    router_log_file = get_logs_dir() / "router.log"
+    router_log_file = get_logs_dir(getattr(state, "project_id", None) if state else None) / "router.log"
     router_log_file.parent.mkdir(parents=True, exist_ok=True)
     with open(router_log_file, "a", encoding="utf-8") as f:
         f.write(log_line)

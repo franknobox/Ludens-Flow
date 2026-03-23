@@ -14,6 +14,7 @@ os.environ.setdefault(
     str((Path(tempfile.gettempdir()) / "ludens_flow_tests" / "test_regressions").resolve()),
 )
 
+from ludens_flow.agents.engineering_agent import EngineeringAgent
 from ludens_flow.agents.pm_agent import PMAgent
 from ludens_flow.artifacts import read_artifact, write_artifact
 from ludens_flow.graph import _merge_state_updates
@@ -54,6 +55,32 @@ class RegressionTests(unittest.TestCase):
         self.assertEqual(len(state.change_requests), 2)
         self.assertEqual(state.change_requests[0]["target"], "PM")
         self.assertEqual(state.change_requests[1]["target"], "GDD")
+
+    def test_engineering_style_preset_is_persisted_and_recoverable(self):
+        agent = EngineeringAgent()
+        agent._call = lambda *args, **kwargs: "mock reply"
+
+        state = init_state()
+
+        discuss_result = agent.plan_discuss(state, "我们就用 Preset B")
+        self.assertEqual(discuss_result.state_updates.get("style_preset"), "B")
+
+        state.style_preset = "B"
+        commit_result = agent.plan_commit(state, "定稿")
+        self.assertEqual(commit_result.state_updates.get("decisions"), ["ENG committed"])
+        self.assertNotIn("style_preset", commit_result.state_updates)
+
+        state.style_preset = None
+        state.chat_history = [
+            {"role": "user", "content": "这次选 Preset C，保持 feature slice。"},
+            {"role": "assistant", "content": "收到。"},
+        ]
+
+        recovered_commit = agent.plan_commit(state, "定稿")
+        self.assertEqual(recovered_commit.state_updates.get("style_preset"), "C")
+
+        recovered_coach = agent.coach(state, "下一步怎么落地？")
+        self.assertEqual(recovered_coach.state_updates.get("style_preset"), "C")
 
 
 if __name__ == "__main__":

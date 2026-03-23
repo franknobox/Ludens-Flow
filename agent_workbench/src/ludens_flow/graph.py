@@ -103,7 +103,7 @@ def run_agent_step(agent, mode: str, state: LudensState, user_input: Any) -> Lud
     is_frozen = getattr(state, "artifact_frozen", False)
     
     # 节点入口日志。
-    write_trace_log("ENTER", node_name, current_phase, is_frozen, state.last_event or "NONE")
+    write_trace_log("ENTER", node_name, current_phase, is_frozen, state.last_event or "NONE", project_id=state.project_id)
     
     print(f"[DEBUG] run_agent_step - Calling agent: {node_name} Mode: {mode}")    
     try:
@@ -116,7 +116,7 @@ def run_agent_step(agent, mode: str, state: LudensState, user_input: Any) -> Lud
         )
         try:
             from ludens_flow.user_profile import load_profile
-            profile_text = load_profile(max_chars=2000)
+            profile_text = load_profile(max_chars=2000, project_id=state.project_id)
             if profile_text.strip():
                 agent.system_prompt = orig_prompt + profile_instruction + "\n\n---\n你在回答涉及用户身份、偏好、项目目标等问题时，必须优先参考下方的用户画像\n" + profile_text
             else:
@@ -204,7 +204,7 @@ def run_agent_step(agent, mode: str, state: LudensState, user_input: Any) -> Lud
                 state.last_error = f"Cannot commit canonical artifact {art_name} while artifact_frozen=True"
                 commit_flag = "BLOCKED"
                 save_state(state)
-                write_trace_log("LEAVE", node_name, current_phase, is_frozen, commit_flag)
+                write_trace_log("LEAVE", node_name, current_phase, is_frozen, commit_flag, project_id=state.project_id)
                 return state
             else:
                 commit_reason = result.commit.reason or "Agent initiated commit"
@@ -222,7 +222,8 @@ def run_agent_step(agent, mode: str, state: LudensState, user_input: Any) -> Lud
                     content=result.commit.content, 
                     reason=commit_reason, 
                     actor=node_name, 
-                    state=state
+                    state=state,
+                    project_id=state.project_id,
                 )
                 commit_flag = "Y"
                 
@@ -245,13 +246,13 @@ def run_agent_step(agent, mode: str, state: LudensState, user_input: Any) -> Lud
         try:
             if getattr(result, "profile_updates", None):
                 from ludens_flow.user_profile import update_profile
-                if update_profile(result.profile_updates, author=node_name):
+                if update_profile(result.profile_updates, author=node_name, project_id=state.project_id):
                     logger.info(f"Merged {len(result.profile_updates)} profile updates from {node_name} into USER_PROFILE.md")
         except Exception as e:
             logger.warning(f"Failed to merge profile updates: {e}")
         
         # 节点出口日志。
-        write_trace_log("LEAVE", node_name, current_phase, is_frozen, commit_flag)
+        write_trace_log("LEAVE", node_name, current_phase, is_frozen, commit_flag, project_id=state.project_id)
 
     except Exception as e:
         # 节点异常在这里收口，避免整条链路直接中断。
@@ -259,7 +260,7 @@ def run_agent_step(agent, mode: str, state: LudensState, user_input: Any) -> Lud
         logger.error(f"[Agent Error] {node_name} execution failed: {err_msg}")
         state.last_error = err_msg
         save_state(state)
-        write_trace_log("LEAVE", node_name, current_phase, is_frozen, "N", error=err_msg)
+        write_trace_log("LEAVE", node_name, current_phase, is_frozen, "N", error=err_msg, project_id=state.project_id)
 
     return state
 
@@ -287,7 +288,8 @@ class RouterNode:
             choice=user_input,
             gate=gate_status,
             frozen=getattr(state, "artifact_frozen", False),
-            reason=result.explanation
+            reason=result.explanation,
+            project_id=state.project_id,
         )
         
         # 跨 Agent 切换时，重置短期上下文并准备交接信息。
@@ -322,15 +324,15 @@ class RouterNode:
                 if is_backflow:
                     from ludens_flow.artifacts import read_artifact
                     if to_phase.startswith("GDD_"):
-                        existing = read_artifact("GDD")
+                        existing = read_artifact("GDD", project_id=state.project_id)
                         if existing.strip():
                             artifact_context = f"\n\n📄 **当前 GDD 版本内容**：\n{existing}"
                     elif to_phase.startswith("PM_"):
-                        existing = read_artifact("PROJECT_PLAN")
+                        existing = read_artifact("PROJECT_PLAN", project_id=state.project_id)
                         if existing.strip():
                             artifact_context = f"\n\n📄 **当前 PROJECT_PLAN 版本内容**：\n{existing}"
                     elif to_phase.startswith("ENG_"):
-                        existing = read_artifact("IMPLEMENTATION_PLAN")
+                        existing = read_artifact("IMPLEMENTATION_PLAN", project_id=state.project_id)
                         if existing.strip():
                             artifact_context = f"\n\n📄 **当前 IMPLEMENTATION_PLAN 版本内容**：\n{existing}"
                 

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 from ludens_flow.paths import (
+    create_project,
     get_artifact_paths,
     get_dev_notes_dir,
     get_images_dir,
@@ -17,19 +18,11 @@ from ludens_flow.paths import (
     get_patches_dir,
     get_state_file,
     get_workspace_dir,
+    resolve_project_id,
+    touch_project,
 )
 
 logger = logging.getLogger(__name__)
-
-# --- 常量定义 ---
-WORKSPACE_DIR = get_workspace_dir()
-LOGS_DIR = get_logs_dir()
-MEMORY_DIR = get_memory_dir()
-DEV_NOTES_DIR = get_dev_notes_dir()
-PATCHES_DIR = get_patches_dir()
-STATE_FILE = get_state_file()
-ARTIFACT_PATHS = get_artifact_paths()
-
 
 # --- 数据结构 ---
 
@@ -46,6 +39,8 @@ class ArtifactMeta:
 @dataclass
 class LudensState:
     """系统全局运行状态"""
+    project_id: Optional[str] = None
+
     # 流程控制
     phase: str = "GDD_DISCUSS"
     iteration_count: int = 0
@@ -94,17 +89,48 @@ class LudensState:
         return state
 
 
+def _artifact_owner_map() -> Dict[str, str]:
+    return {
+        "gdd": "DesignAgent",
+        "pm": "PMAgent",
+        "eng": "EngineeringAgent",
+        "review": "ReviewAgent",
+        "devlog": "EngineeringAgent",
+    }
+
+
+def _sync_artifact_meta(state: LudensState, project_id: Optional[str] = None) -> LudensState:
+    resolved = resolve_project_id(project_id if project_id is not None else state.project_id)
+    artifact_paths = get_artifact_paths(resolved)
+    owners = _artifact_owner_map()
+
+    state.project_id = resolved
+    for key, path in artifact_paths.items():
+        meta = state.artifacts.get(key)
+        if meta is None:
+            state.artifacts[key] = ArtifactMeta(path=str(path), owner=owners[key])
+            continue
+        meta.path = str(path)
+        meta.owner = owners[key]
+    return state
+
+
 # --- 核心函数 ---
 
-def init_workspace() -> None:
+def init_workspace(project_id: Optional[str] = None) -> None:
     """初始化运行工作区，确保必备目录与空文件存在"""
-    workspace_dir = get_workspace_dir()
-    logs_dir = get_logs_dir()
-    memory_dir = get_memory_dir()
-    images_dir = get_images_dir()
-    dev_notes_dir = get_dev_notes_dir()
-    patches_dir = get_patches_dir()
-    artifact_paths = get_artifact_paths()
+    resolved = resolve_project_id(project_id)
+    if resolved:
+        create_project(resolved)
+        touch_project(resolved)
+
+    workspace_dir = get_workspace_dir(resolved)
+    logs_dir = get_logs_dir(resolved)
+    memory_dir = get_memory_dir(resolved)
+    images_dir = get_images_dir(resolved)
+    dev_notes_dir = get_dev_notes_dir(resolved)
+    patches_dir = get_patches_dir(resolved)
+    artifact_paths = get_artifact_paths(resolved)
 
     for d in [workspace_dir, logs_dir, memory_dir, images_dir, dev_notes_dir, patches_dir]:
         d.mkdir(parents=True, exist_ok=True)
@@ -114,9 +140,9 @@ def init_workspace() -> None:
             path.touch()
 
 
-def clear_images_dir() -> Path:
+def clear_images_dir(project_id: Optional[str] = None) -> Path:
     """Delete all files/subdirectories under workspace/images and keep the folder."""
-    images_dir = get_images_dir()
+    images_dir = get_images_dir(resolve_project_id(project_id))
     images_dir.mkdir(parents=True, exist_ok=True)
 
     for entry in images_dir.iterdir():
@@ -127,9 +153,10 @@ def clear_images_dir() -> Path:
     return images_dir
 
 
-def _clear_artifact_files() -> None:
+def _clear_artifact_files(project_id: Optional[str] = None) -> None:
     """将所有工件文件清空（重置为空文件），并清理 dev_notes 和 patches 目录。"""
-    artifact_paths = get_artifact_paths()
+    resolved = resolve_project_id(project_id)
+    artifact_paths = get_artifact_paths(resolved)
     for path in artifact_paths.values():
         if path.exists():
             path.write_text("", encoding="utf-8")
@@ -138,7 +165,7 @@ def _clear_artifact_files() -> None:
             path.touch()
 
     # 清理 dev_notes 和 patches 下的内容
-    for d in [get_dev_notes_dir(), get_patches_dir()]:
+    for d in [get_dev_notes_dir(resolved), get_patches_dir(resolved)]:
         if d.exists():
             for entry in d.iterdir():
                 if entry.is_dir():
@@ -147,24 +174,27 @@ def _clear_artifact_files() -> None:
                     entry.unlink(missing_ok=True)
 
 
-def reset_workspace_state(clear_images: bool = True) -> LudensState:
+def reset_workspace_state(clear_images: bool = True, project_id: Optional[str] = None) -> LudensState:
     """
     Reset persisted runtime state for a fresh session.
     - Remove state.json if present.
     - Clear all artifact files to empty.
     - Optionally clear workspace/images.
     """
-    get_state_file().unlink(missing_ok=True)
-    _clear_artifact_files()
+    resolved = resolve_project_id(project_id)
+    get_state_file(resolved).unlink(missing_ok=True)
+    _clear_artifact_files(resolved)
     if clear_images:
-        clear_images_dir()
-    return load_state()
+        clear_images_dir(resolved)
+    return load_state(project_id=resolved)
 
 
-def init_state() -> LudensState:
+def init_state(project_id: Optional[str] = None) -> LudensState:
     """构建初始默认状态"""
-    artifact_paths = get_artifact_paths()
-    return LudensState(
+    resolved = resolve_project_id(project_id)
+    artifact_paths = get_artifact_paths(resolved)
+    state = LudensState(
+        project_id=resolved,
         phase="GDD_DISCUSS",
         iteration_count=0,
         max_iterations=6,
@@ -176,24 +206,26 @@ def init_state() -> LudensState:
             "devlog": ArtifactMeta(path=str(artifact_paths["devlog"]), owner="EngineeringAgent"),
         }
     )
+    return _sync_artifact_meta(state, resolved)
 
 
-def load_state(path: Optional[Union[str, Path]] = None) -> LudensState:
+def load_state(path: Optional[Union[str, Path]] = None, project_id: Optional[str] = None) -> LudensState:
     """
     加载持久化状态。
     若文件不存在：返回全新初始状态。
     若文件解析失败：备份坏档，并返回初始状态，防止死锁。
     """
-    path = Path(path) if path is not None else get_state_file()
+    resolved = resolve_project_id(project_id)
+    path = Path(path) if path is not None else get_state_file(resolved)
     if not path.exists():
         logger.info(f"State file {path} not found. Creating a new state.")
-        return init_state()
+        return init_state(project_id=resolved)
 
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
         logger.info(f"Successfully loaded state from {path}.")
-        return LudensState.from_dict(data)
+        return _sync_artifact_meta(LudensState.from_dict(data), resolved)
     except Exception as e:
         # 文件损坏或格式错误
         timestamp = int(time.time())
@@ -204,16 +236,20 @@ def load_state(path: Optional[Union[str, Path]] = None) -> LudensState:
         except Exception as mv_err:
             logger.error(f"Failed to load state and failed to backup bad file: {mv_err}. Returning new state.")
             
-        return init_state()
+        return init_state(project_id=resolved)
 
 
-def save_state(state: LudensState, path: Optional[Union[str, Path]] = None) -> None:
+def save_state(state: LudensState, path: Optional[Union[str, Path]] = None, project_id: Optional[str] = None) -> None:
     """
     原子写入状态文件。
     先写到同目录的 tmp 文件，再重命名覆盖，防止中途断电损坏文件。
     """
-    path = Path(path) if path is not None else get_state_file()
+    resolved = resolve_project_id(project_id if project_id is not None else state.project_id)
+    state = _sync_artifact_meta(state, resolved)
+    path = Path(path) if path is not None else get_state_file(resolved)
     path.parent.mkdir(parents=True, exist_ok=True)
+    if resolved:
+        touch_project(resolved)
     
     # 将 state 转换为 dict，处理可能的特殊类型
     data_dict = state.to_dict()
@@ -242,13 +278,13 @@ def _now_iso() -> str:
     from datetime import datetime
     return datetime.utcnow().isoformat() + "Z"
 
-def write_trace_log(action: str, node: str, phase: str, frozen: bool, event_or_commit: str, error: str = "") -> None:
+def write_trace_log(action: str, node: str, phase: str, frozen: bool, event_or_commit: str, error: str = "", project_id: Optional[str] = None) -> None:
     """
     trace.log: 每个节点进入/退出
     entering: ts | node | phase | frozen | last_event
     leaving: ts | node | commit=Y/N | error=...
     """
-    logs_dir = get_logs_dir()
+    logs_dir = get_logs_dir(resolve_project_id(project_id))
     logs_dir.mkdir(parents=True, exist_ok=True)
     trace_file = logs_dir / "trace.log"
     ts = _now_iso()
@@ -258,12 +294,12 @@ def write_trace_log(action: str, node: str, phase: str, frozen: bool, event_or_c
         elif action.upper() == "LEAVE":
             f.write(f"[{ts}] LEAVE | {node} | commit={event_or_commit} | error={error}\n")
 
-def write_router_log(iteration: int, from_phase: str, to_phase: str, choice: str, gate: str, frozen: bool, reason: str) -> None:
+def write_router_log(iteration: int, from_phase: str, to_phase: str, choice: str, gate: str, frozen: bool, reason: str, project_id: Optional[str] = None) -> None:
     """
     router.log: 每次 Router 决策
     ts | iter | from_phase -> to_phase | choice | gate | frozen | reason
     """
-    logs_dir = get_logs_dir()
+    logs_dir = get_logs_dir(resolve_project_id(project_id))
     logs_dir.mkdir(parents=True, exist_ok=True)
     router_file = logs_dir / "router.log"
     ts = _now_iso()

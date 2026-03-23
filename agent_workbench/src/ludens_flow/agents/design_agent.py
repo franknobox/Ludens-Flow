@@ -22,7 +22,7 @@ class DesignAgent(BaseAgent):
     def discuss(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
         # 回流修改时，把当前 GDD 一并带入讨论上下文。
         from ludens_flow.artifacts import read_artifact
-        existing_gdd = read_artifact("GDD")
+        existing_gdd = read_artifact("GDD", project_id=state.project_id)
         
         gdd_context = ""
         if existing_gdd.strip():
