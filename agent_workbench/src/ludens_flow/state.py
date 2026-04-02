@@ -16,13 +16,32 @@ from ludens_flow.paths import (
     get_logs_dir,
     get_memory_dir,
     get_patches_dir,
+    get_project_dir,
     get_state_file,
+    get_workspace_root_dir,
     get_workspace_dir,
     resolve_project_id,
     touch_project,
 )
 
 logger = logging.getLogger(__name__)
+
+LEGACY_ROOT_FILES = {
+    "state.json": "state.json",
+    "USER_PROFILE.md": "USER_PROFILE.md",
+    "GDD.md": "GDD.md",
+    "PROJECT_PLAN.md": "PROJECT_PLAN.md",
+    "IMPLEMENTATION_PLAN.md": "IMPLEMENTATION_PLAN.md",
+    "REVIEW_REPORT.md": "REVIEW_REPORT.md",
+}
+
+LEGACY_ROOT_DIRS = {
+    "logs": "logs",
+    "memory": "memory",
+    "images": "images",
+    "dev_notes": "dev_notes",
+    "patches": "patches",
+}
 
 # --- 数据结构 ---
 
@@ -115,6 +134,75 @@ def _sync_artifact_meta(state: LudensState, project_id: Optional[str] = None) ->
     return state
 
 
+def _preview_text(text: Optional[str], limit: int = 120) -> str:
+    compact = " ".join(str(text or "").split())
+    if len(compact) <= limit:
+        return compact
+    return compact[: limit - 3].rstrip() + "..."
+
+
+def _latest_assistant_preview(state: LudensState) -> str:
+    preview = _preview_text(state.last_assistant_message)
+    if preview:
+        return preview
+
+    for history in (state.transcript_history, state.chat_history):
+        for item in reversed(history):
+            if item.get("role") != "assistant":
+                continue
+            preview = _preview_text(item.get("content"))
+            if preview:
+                return preview
+
+    return ""
+
+
+def _has_content(path: Path) -> bool:
+    if not path.exists():
+        return False
+    if path.is_dir():
+        return any(path.iterdir())
+    return path.stat().st_size > 0
+
+
+def _move_legacy_entry(source: Path, target: Path) -> bool:
+    if not source.exists():
+        return False
+    if _has_content(target):
+        return False
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if target.exists():
+        if target.is_dir():
+            shutil.rmtree(target, ignore_errors=True)
+        else:
+            target.unlink(missing_ok=True)
+
+    shutil.move(str(source), str(target))
+    return True
+
+
+def migrate_legacy_workspace_to_project(project_id: Optional[str] = None) -> list[str]:
+    """Move legacy single-project workspace files into project-1 once."""
+    resolved = resolve_project_id(project_id)
+    if resolved != "project-1":
+        return []
+
+    workspace_root = get_workspace_root_dir()
+    project_dir = get_project_dir(resolved)
+    moved: list[str] = []
+
+    for legacy_name, target_name in LEGACY_ROOT_FILES.items():
+        if _move_legacy_entry(workspace_root / legacy_name, project_dir / target_name):
+            moved.append(legacy_name)
+
+    for legacy_name, target_name in LEGACY_ROOT_DIRS.items():
+        if _move_legacy_entry(workspace_root / legacy_name, project_dir / target_name):
+            moved.append(legacy_name)
+
+    return moved
+
+
 # --- 核心函数 ---
 
 def init_workspace(project_id: Optional[str] = None) -> None:
@@ -122,6 +210,7 @@ def init_workspace(project_id: Optional[str] = None) -> None:
     resolved = resolve_project_id(project_id)
     if resolved:
         create_project(resolved)
+        migrate_legacy_workspace_to_project(resolved)
         touch_project(resolved)
 
     workspace_dir = get_workspace_dir(resolved)
@@ -174,19 +263,19 @@ def _clear_artifact_files(project_id: Optional[str] = None) -> None:
                     entry.unlink(missing_ok=True)
 
 
-def reset_workspace_state(clear_images: bool = True, project_id: Optional[str] = None) -> LudensState:
-    """
-    Reset persisted runtime state for a fresh session.
-    - Remove state.json if present.
-    - Clear all artifact files to empty.
-    - Optionally clear workspace/images.
-    """
+def reset_current_project_state(clear_images: bool = True, project_id: Optional[str] = None) -> LudensState:
+    """Reset one project's persisted state, artifacts and optional image cache."""
     resolved = resolve_project_id(project_id)
     get_state_file(resolved).unlink(missing_ok=True)
     _clear_artifact_files(resolved)
     if clear_images:
         clear_images_dir(resolved)
     return load_state(project_id=resolved)
+
+
+def reset_workspace_state(clear_images: bool = True, project_id: Optional[str] = None) -> LudensState:
+    """Compatibility alias for older callers."""
+    return reset_current_project_state(clear_images=clear_images, project_id=project_id)
 
 
 def init_state(project_id: Optional[str] = None) -> LudensState:
@@ -216,6 +305,7 @@ def load_state(path: Optional[Union[str, Path]] = None, project_id: Optional[str
     若文件解析失败：备份坏档，并返回初始状态，防止死锁。
     """
     resolved = resolve_project_id(project_id)
+    migrate_legacy_workspace_to_project(resolved)
     path = Path(path) if path is not None else get_state_file(resolved)
     if not path.exists():
         logger.info(f"State file {path} not found. Creating a new state.")
@@ -249,7 +339,11 @@ def save_state(state: LudensState, path: Optional[Union[str, Path]] = None, proj
     path = Path(path) if path is not None else get_state_file(resolved)
     path.parent.mkdir(parents=True, exist_ok=True)
     if resolved:
-        touch_project(resolved)
+        touch_project(
+            resolved,
+            last_phase=state.phase,
+            last_message_preview=_latest_assistant_preview(state),
+        )
     
     # 将 state 转换为 dict，处理可能的特殊类型
     data_dict = state.to_dict()

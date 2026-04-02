@@ -1,81 +1,153 @@
-# Agent Workbench 使用指南 (Ludens Flow V2)
+# Agent Workbench 使用指南
 
-## 📋 概述
+## 概述
 
-Agent Workbench 是 Ludens-Flow 的核心多智能体工作流引擎。在这里，用户可以与多位专业的 AI Agent 沉浸式互动交谈，从想法萌芽到架构敲定，完整模拟游戏开发前期的核心立项全流程。
+Agent Workbench 是 Ludens-Flow 的多智能体工作流执行层。
+它负责驱动多个专业 Agent 围绕项目工件协同推进，从需求讨论、项目规划、工程定稿到内部评审，再进入开发辅导阶段。
 
-## 🚀 快速开始
+当前版本已经支持多项目工作台：
 
-### 1️⃣ 环境配置
+- 工作区根目录是 `workspace/`
+- 每个项目的数据单独落在 `workspace/projects/<project_id>/`
+- 首次启动时会自动创建第一个项目 `project-1`
+- 如果旧版本数据还在 `workspace/` 根目录，首次启动会自动迁移到 `workspace/projects/project-1/`
+- CLI 和 Web 都基于“当前项目”运行
 
-请确保你的电脑上安装了 Python（建议 3.8+）。
-在**项目根目录**下，准备/创建环境变量文件 `.env`，配置你所使用的 LLM API：
+## 快速开始
+
+### 1. 环境配置
+
+建议使用 Python 3.10 及以上版本。
+
+在项目根目录准备 `.env`，至少配置一套可用的 LLM 参数：
 
 ```env
 LLM_PROVIDER=openai
 LLM_MODEL=moonshot-v1-auto
 LLM_API_KEY=your_actual_api_key
-LLM_BASE_URL=https://api.moonshot.cn/v1  # 根据您具体服务商的网关填写
+LLM_BASE_URL=https://api.moonshot.cn/v1
 LLM_TEMPERATURE=0.2
 ```
 
-### 2️⃣ 安装轻量级依赖
+### 2. 安装依赖
 
-本工作流采用极为轻量的原生架构实现，绝无冗杂笨重的第三方依赖，仅需安装两个通信读写库：
+最小依赖建议直接安装：
 
 ```bash
-pip install openai python-dotenv
+pip install openai python-dotenv fastapi "uvicorn[standard]" Pillow
 ```
 
-### 3️⃣ 启动方式
+说明：
 
-**方式 A：交互式终端**
+- `fastapi` + `uvicorn` 用于 Web 工作台
+- `Pillow` 用于 CLI / Web 图片输入时的压缩与处理
 
-在**项目根目录**运行：
+## 启动方式
+
+### 方式 A：CLI 交互模式
+
+在项目根目录运行：
 
 ```bash
 python agent_workbench/run_agents.py
 ```
 
-**方式 B：Web 前端**
+常用命令：
 
-在**项目根目录**安装 Web 依赖并启动 API 服务：
+- `/projects`：列出当前工作区内的项目
+- `/project new <project_id>`：创建并切换到新项目
+  - `/project use <project_id>`：切换到已有项目
+- `/reset` 或 `/restart`：重置当前项目状态
+
+### 方式 B：Web 工作台
+
+在项目根目录运行：
 
 ```bash
-pip install fastapi "uvicorn[standard]"
-
-uvicorn agent_workbench.api:app --reload
+python -m uvicorn agent_workbench.api:app --reload
 ```
 
-浏览器访问 **http://127.0.0.1:8000/** 即可使用。
+默认访问地址：
 
-## 🔄 核心阶段与智能体矩阵
+```text
+http://127.0.0.1:8010/
+```
 
-整个流转图（Graph）涵盖了五大阶段，每个防区均由专职的 Agent 把守：
+如果你在 IDE 里启动，推荐直接使用仓库内脚本：
 
-1. **GDD_DISCUSS / GDD_COMMIT (Design Agent)**
-   - 系统游戏策划。它会引导与你探讨核心循环、MVP 范围等，最终撰写极具落地度的 `GDD.md`。
-2. **PM_DISCUSS / PM_COMMIT (PM Agent)**
-   - 资深项目经理。根据 GDD 抓取核心功能模块并进行开发路线图排期，输出包含开发周期及人力分配的 `PROJECT_PLAN.md`。
-3. **ENG_DISCUSS / ENG_COMMIT (Engineering Agent)**
-   - 技术合伙人与主程。同你敲定工程架构与代码规范预设（包含 A/B/C 三选一风格），并梳理面向具体引擎的实操级核心技术单 `IMPLEMENTATION_PLAN.md`。
-4. **REVIEW_GATE (Review Agent)**
-   - 无情的验收门神。对前三份文档进行交叉对比与打分（Design 与 Eng 分值需同时 ≥ 6，且不存在 Block 级隐患），一旦发现数据脱节或技术死胡同，将无情打回重做。最终生成点评表 `REVIEW_REPORT.md`。
-5. **DEV_COACHING (Engineering Coach)**
-   - **无限流转探讨模式**。一旦四大主文件均通过门神并“结冰”定稿，主程 Agent 将化身永远在线的技术私教。随时向它请教引擎实操解惑，也可索要能够复制喂给下等 Coding Copilot Agent (即 Cursor 等IDE) 的保姆级 Code Prompt 指令段。
+```powershell
+.\agent_workbench\scripts\start_web.ps1
+```
 
-## 📦 存档体系与本地工件
+如果使用 VS Code，也可以直接运行任务：
 
-工作流的所有状态、草稿提取与结果呈现均会保存于 `workspace/` 目录下（且全盘通过严谨的正则提取免除了额外的 json 脏数据）：
+- `Ludens: Start Web Workbench`
+
+## 工作流阶段
+
+当前图流转包含以下主要阶段：
+
+1. `GDD_DISCUSS / GDD_COMMIT`
+   - Design Agent 负责玩法讨论和 GDD 定稿
+2. `PM_DISCUSS / PM_COMMIT`
+   - PM Agent 负责排期、范围收敛和项目计划定稿
+3. `ENG_DISCUSS / ENG_COMMIT`
+   - Engineering Agent 负责工程预设讨论和实施计划定稿
+4. `REVIEW`
+   - Review Agent 负责对主工件做交叉审查并生成 `REVIEW_REPORT.md`
+5. `POST_REVIEW_DECISION`
+   - 等待用户选择回流或进入开发辅导
+6. `DEV_COACHING`
+   - 主工件冻结后进入开发辅导模式
+
+## 多项目工作区结构
+
+当前推荐的工作区结构如下：
 
 ```text
 workspace/
-├── state.json                  # 全局状态树记录了系统当前的流转指针、对话记录和 JSON 更新槽
-├── GDD.md                      # 游戏设计文档 (Design Agent 产出)
-├── PROJECT_PLAN.md             # 项目排期与实现路线图 (PM Agent 产出)
-├── IMPLEMENTATION_PLAN.md      # 架构建议与系统任务单 (Engineering Agent 产出)
-└── REVIEW_REPORT.md            # 综合维度评审报告单 (Review Agent 产出)
+├── .active_project
+└── projects/
+    ├── project-1/
+    │   ├── state.json
+    │   ├── USER_PROFILE.md
+    │   ├── GDD.md
+    │   ├── PROJECT_PLAN.md
+    │   ├── IMPLEMENTATION_PLAN.md
+    │   ├── REVIEW_REPORT.md
+    │   ├── logs/
+    │   ├── images/
+    │   ├── dev_notes/
+    │   └── patches/
+    └── <another_project>/
 ```
 
-> **💡 贴士：如何重新开始（清除记忆）？**  
-> 如果想重置整个多智能体系统的会话状态，开启下一个项目的头脑风暴，只需在终端交互时输入 `/reset` 或 `/restart` 指令，系统将自动清除状态并回到最初阶段。你也可以手动删除 `workspace/state.json` 文件后重启启动脚本来完美清零。
+说明：
+
+- `state.json`、工件、日志、用户画像都按项目隔离
+- Web 工作台显示和操作的也是当前项目目录
+- 项目切换不会混用别的项目状态
+
+## 重置与清理
+
+如果只是想重新开始当前项目：
+
+- CLI 中输入 `/reset`
+- 或在 Web 工作台点击 `Reset Current Project`
+
+如果想手动清理：
+
+- 删除对应项目目录下的 `state.json`
+- 或直接清空整个 `workspace/projects/<project_id>/`
+
+不再推荐使用旧的单工作区路径心智，比如直接操作 `workspace/state.json`。
+
+## 当前实现说明
+
+当前前端是一个由 FastAPI 提供的静态单页工作台，不是独立 Node 前端工程。
+
+这意味着：
+
+- 打开 Web 工作台时，需要有 `uvicorn` 进程在运行
+- 页面上的聊天、项目列表、文件查看都实时请求 `/api/...`
+- 如果服务停掉，页面也就无法继续工作

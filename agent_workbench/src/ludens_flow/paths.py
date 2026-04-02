@@ -5,7 +5,7 @@ import os
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 WORKSPACE_ENV_VAR = "LUDENS_WORKSPACE_DIR"
 PROJECT_ENV_VAR = "LUDENS_PROJECT_ID"
@@ -31,6 +31,14 @@ def _now_iso() -> str:
     return datetime.utcnow().isoformat() + "Z"
 
 
+def _coerce_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+    return bool(value)
+
+
 def _normalize_project_id(project_id: Optional[str]) -> Optional[str]:
     if project_id is None:
         return None
@@ -54,7 +62,7 @@ def _normalize_project_id(project_id: Optional[str]) -> Optional[str]:
     return normalized
 
 
-def _read_project_meta(project_id: str) -> Dict[str, str]:
+def _read_project_meta(project_id: str) -> Dict[str, Any]:
     meta_file = get_project_meta_file(project_id)
     if not meta_file.exists():
         return {}
@@ -65,11 +73,73 @@ def _read_project_meta(project_id: str) -> Dict[str, str]:
         return {}
 
 
-def _write_project_meta(project_id: str, meta: Dict[str, str]) -> Dict[str, str]:
+def _write_project_meta(project_id: str, meta: Dict[str, Any]) -> Dict[str, Any]:
     meta_file = get_project_meta_file(project_id)
     meta_file.parent.mkdir(parents=True, exist_ok=True)
     meta_file.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     return meta
+
+
+def _build_project_meta_record(project_id: str, meta: Dict[str, Any], project_dir: Optional[Path] = None) -> Dict[str, Any]:
+    display_name = (meta.get("display_name") or meta.get("title") or project_id).strip() or project_id
+    record = {
+        "id": project_id,
+        "display_name": display_name,
+        "title": display_name,
+        "created_at": meta.get("created_at", ""),
+        "updated_at": meta.get("updated_at", ""),
+        "last_active_at": meta.get("last_active_at", ""),
+        "last_phase": meta.get("last_phase", ""),
+        "archived": _coerce_bool(meta.get("archived", False)),
+        "last_message_preview": meta.get("last_message_preview", ""),
+    }
+    if project_dir is not None:
+        record["path"] = str(project_dir)
+    return record
+
+
+def _upsert_project_meta(
+    project_id: str,
+    *,
+    display_name: Optional[str] = None,
+    title: Optional[str] = None,
+    mark_active: bool = False,
+    last_phase: Optional[str] = None,
+    archived: Optional[bool] = None,
+    last_message_preview: Optional[str] = None,
+) -> Dict[str, Any]:
+    normalized = _normalize_project_id(project_id)
+    if not normalized:
+        raise ValueError("Project id is required.")
+
+    project_dir = get_projects_dir() / normalized
+    project_dir.mkdir(parents=True, exist_ok=True)
+
+    existing = _read_project_meta(normalized)
+    now = _now_iso()
+    chosen_name = (display_name or title or existing.get("display_name") or existing.get("title") or normalized).strip() or normalized
+
+    meta = {
+        "id": normalized,
+        "display_name": chosen_name,
+        "title": chosen_name,
+        "created_at": existing.get("created_at") or now,
+        "updated_at": now,
+        "last_active_at": now if mark_active else existing.get("last_active_at", ""),
+        "last_phase": existing.get("last_phase", ""),
+        "archived": _coerce_bool(existing.get("archived", False)),
+        "last_message_preview": existing.get("last_message_preview", ""),
+    }
+
+    if last_phase is not None:
+        meta["last_phase"] = last_phase
+    if archived is not None:
+        meta["archived"] = bool(archived)
+    if last_message_preview is not None:
+        meta["last_message_preview"] = last_message_preview
+
+    stored = _write_project_meta(normalized, meta)
+    return _build_project_meta_record(normalized, stored, project_dir)
 
 
 REPO_ROOT = _discover_repo_root()
@@ -174,25 +244,24 @@ def get_workspace_dir(project_id: Optional[str] = None) -> Path:
     return get_project_dir(project_id)
 
 
-def create_project(project_id: str, title: Optional[str] = None, set_active: bool = False) -> Dict[str, str]:
+def create_project(
+    project_id: str,
+    display_name: Optional[str] = None,
+    title: Optional[str] = None,
+    set_active: bool = False,
+    archived: Optional[bool] = None,
+) -> Dict[str, Any]:
     """创建项目目录和基础元数据；已存在时刷新元数据。"""
     normalized = _normalize_project_id(project_id)
     if not normalized:
         raise ValueError("Project id is required.")
 
-    project_dir = get_project_dir(normalized)
-    project_dir.mkdir(parents=True, exist_ok=True)
-
-    now = _now_iso()
-    existing = _read_project_meta(normalized)
-    meta = {
-        "id": normalized,
-        "title": title or existing.get("title") or normalized,
-        "created_at": existing.get("created_at") or now,
-        "updated_at": now,
-        "last_active_at": existing.get("last_active_at") or "",
-    }
-    _write_project_meta(normalized, meta)
+    meta = _upsert_project_meta(
+        normalized,
+        display_name=display_name,
+        title=title,
+        archived=archived,
+    )
 
     if set_active:
         set_active_project_id(normalized)
@@ -200,29 +269,38 @@ def create_project(project_id: str, title: Optional[str] = None, set_active: boo
     return meta
 
 
-def touch_project(project_id: str, title: Optional[str] = None, mark_active: bool = False) -> Dict[str, str]:
+def touch_project(
+    project_id: str,
+    display_name: Optional[str] = None,
+    title: Optional[str] = None,
+    mark_active: bool = False,
+    last_phase: Optional[str] = None,
+    archived: Optional[bool] = None,
+    last_message_preview: Optional[str] = None,
+) -> Dict[str, Any]:
     """刷新项目元数据，用于记录最近活跃时间。"""
     normalized = _normalize_project_id(project_id)
     if not normalized:
         raise ValueError("Project id is required.")
 
-    meta = create_project(normalized, title=title, set_active=False)
-    now = _now_iso()
-    meta["updated_at"] = now
-    if title:
-        meta["title"] = title
-    if mark_active:
-        meta["last_active_at"] = now
-    return _write_project_meta(normalized, meta)
+    return _upsert_project_meta(
+        normalized,
+        display_name=display_name,
+        title=title,
+        mark_active=mark_active,
+        last_phase=last_phase,
+        archived=archived,
+        last_message_preview=last_message_preview,
+    )
 
 
-def list_projects() -> List[Dict[str, str]]:
+def list_projects() -> List[Dict[str, Any]]:
     """扫描多项目目录并返回项目元数据列表。"""
     projects_dir = get_projects_dir()
     if not projects_dir.exists():
         return []
 
-    projects: List[Dict[str, str]] = []
+    projects: List[Dict[str, Any]] = []
     for entry in projects_dir.iterdir():
         if not entry.is_dir():
             continue
@@ -230,18 +308,12 @@ def list_projects() -> List[Dict[str, str]]:
         if not project_id:
             continue
         meta = _read_project_meta(project_id)
-        projects.append(
-            {
-                "id": project_id,
-                "title": meta.get("title", project_id),
-                "created_at": meta.get("created_at", ""),
-                "updated_at": meta.get("updated_at", ""),
-                "last_active_at": meta.get("last_active_at", ""),
-                "path": str(entry),
-            }
-        )
+        projects.append(_build_project_meta_record(project_id, meta, entry))
 
-    projects.sort(key=lambda item: (item.get("last_active_at", ""), item["id"]), reverse=True)
+    projects.sort(
+        key=lambda item: (item.get("last_active_at") or item.get("updated_at") or "", item["id"]),
+        reverse=True,
+    )
     return projects
 
 

@@ -47,6 +47,7 @@ class ChatRequest(BaseModel):
 
 class ProjectRequest(BaseModel):
     project_id: str
+    display_name: str | None = None
     title: str | None = None
 
 
@@ -73,6 +74,7 @@ def _state_to_json(state) -> dict:
         "artifact_frozen": getattr(state, "artifact_frozen", False),
         "chat_history": getattr(state, "chat_history", []),
         "transcript_history": getattr(state, "transcript_history", []),
+        "last_assistant_message": getattr(state, "last_assistant_message", None),
         "last_error": getattr(state, "last_error"),
         "review_gate": getattr(state, "review_gate"),
     }
@@ -128,11 +130,16 @@ def post_chat(req: ChatRequest):
         return {"reply": "", "phase": state.phase, "error": str(e), "needs_decision": False}
 
 
+@app.post("/api/projects/current/reset")
+def post_reset_current_project():
+    state = st.load_state()
+    state = st.reset_current_project_state(clear_images=True, project_id=getattr(state, "project_id", None))
+    return _state_to_json(state)
+
+
 @app.post("/api/reset")
 def post_reset():
-    state = st.load_state()
-    state = st.reset_workspace_state(clear_images=True, project_id=getattr(state, "project_id", None))
-    return _state_to_json(state)
+    return post_reset_current_project()
 
 
 @app.get("/api/projects")
@@ -145,7 +152,12 @@ def get_projects():
 
 @app.post("/api/projects")
 def post_project(req: ProjectRequest):
-    meta = create_project(req.project_id, title=req.title, set_active=True)
+    meta = create_project(
+        req.project_id,
+        display_name=req.display_name,
+        title=req.title,
+        set_active=True,
+    )
     st.init_workspace(project_id=meta["id"])
     state = st.load_state(project_id=meta["id"])
     return {

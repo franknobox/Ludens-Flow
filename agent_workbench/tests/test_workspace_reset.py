@@ -15,7 +15,7 @@ from ludens_flow.paths import get_images_dir
 
 
 class WorkspaceResetTests(unittest.TestCase):
-    def test_reset_workspace_state_clears_images_and_state(self):
+    def test_reset_current_project_state_clears_images_and_state(self):
         previous_workspace = os.environ.get("LUDENS_WORKSPACE_DIR")
         try:
             with tempfile.TemporaryDirectory() as td:
@@ -35,7 +35,7 @@ class WorkspaceResetTests(unittest.TestCase):
                 st.save_state(state)
                 self.assertTrue(st.get_state_file().exists())
 
-                reset_state = st.reset_workspace_state(clear_images=True)
+                reset_state = st.reset_current_project_state(clear_images=True)
 
                 self.assertEqual(reset_state.phase, "GDD_DISCUSS")
                 self.assertFalse(st.get_state_file().exists())

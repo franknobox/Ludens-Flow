@@ -168,9 +168,9 @@ def main():
                 continue
                 
             if raw_input.lower() in ("/reset", "/restart"):
-                logger.info("Resetting workspace state...")
+                logger.info("Resetting current project state...")
                 # 重新加载（会自动拿到全新的纯净状态）
-                state = st.reset_workspace_state(clear_images=True, project_id=state.project_id)
+                state = st.reset_current_project_state(clear_images=True, project_id=state.project_id)
                 print("\n✨ [System]: 记忆已清空，时空倒流回起点！")
                 continue
 
@@ -184,7 +184,7 @@ def main():
                 else:
                     for project in projects:
                         marker = "*" if project["id"] == current_project else "-"
-                        print(f"{marker} {project['id']}  {project['title']}")
+                        print(f"{marker} {project['id']}  {project['display_name']}")
                 continue
 
             if raw_input.lower().startswith("/project new "):

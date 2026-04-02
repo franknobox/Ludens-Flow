@@ -172,6 +172,81 @@ class MultiProjectWorkspaceTests(unittest.TestCase):
         else:
             os.environ["LUDENS_PROJECT_ID"] = previous_project
 
+    def test_project_metadata_tracks_phase_and_last_message(self):
+        previous_workspace = os.environ.get("LUDENS_WORKSPACE_DIR")
+        previous_project = os.environ.get("LUDENS_PROJECT_ID")
+        workspace_root = (_ROOT / "workspace_test_project_meta").resolve()
+        shutil.rmtree(workspace_root, ignore_errors=True)
+
+        try:
+            os.environ["LUDENS_WORKSPACE_DIR"] = str(workspace_root)
+            os.environ.pop("LUDENS_PROJECT_ID", None)
+
+            meta = create_project("alpha", display_name="Alpha Board", set_active=True)
+            self.assertEqual(meta["display_name"], "Alpha Board")
+
+            init_workspace(project_id="alpha")
+            state = load_state(project_id="alpha")
+            state.phase = "ENG_COMMIT"
+            state.last_assistant_message = "Need one more pass on movement tuning and hit feedback."
+            save_state(state, project_id="alpha")
+
+            listed = {item["id"]: item for item in list_projects()}
+            self.assertEqual(listed["alpha"]["display_name"], "Alpha Board")
+            self.assertEqual(listed["alpha"]["last_phase"], "ENG_COMMIT")
+            self.assertIn("movement tuning", listed["alpha"]["last_message_preview"])
+            self.assertFalse(listed["alpha"]["archived"])
+        finally:
+            shutil.rmtree(workspace_root, ignore_errors=True)
+            if previous_workspace is None:
+                os.environ.pop("LUDENS_WORKSPACE_DIR", None)
+            else:
+                os.environ["LUDENS_WORKSPACE_DIR"] = previous_workspace
+            if previous_project is None:
+                os.environ.pop("LUDENS_PROJECT_ID", None)
+            else:
+                os.environ["LUDENS_PROJECT_ID"] = previous_project
+
+    def test_init_workspace_migrates_legacy_root_files_into_project_one(self):
+        previous_workspace = os.environ.get("LUDENS_WORKSPACE_DIR")
+        previous_project = os.environ.get("LUDENS_PROJECT_ID")
+        workspace_root = (_ROOT / "workspace_test_legacy_migration").resolve()
+        shutil.rmtree(workspace_root, ignore_errors=True)
+
+        try:
+            os.environ["LUDENS_WORKSPACE_DIR"] = str(workspace_root)
+            os.environ.pop("LUDENS_PROJECT_ID", None)
+
+            workspace_root.mkdir(parents=True, exist_ok=True)
+            (workspace_root / "state.json").write_text('{"phase": "PM_DISCUSS"}', encoding="utf-8")
+            (workspace_root / "GDD.md").write_text("legacy gdd", encoding="utf-8")
+            (workspace_root / "USER_PROFILE.md").write_text("legacy profile", encoding="utf-8")
+            (workspace_root / "images").mkdir(parents=True, exist_ok=True)
+            (workspace_root / "images" / "legacy.png").write_bytes(b"legacy-image")
+
+            init_workspace()
+
+            project_one = get_project_dir("project-1")
+            self.assertFalse((workspace_root / "state.json").exists())
+            self.assertFalse((workspace_root / "GDD.md").exists())
+            self.assertFalse((workspace_root / "USER_PROFILE.md").exists())
+            self.assertFalse((workspace_root / "images" / "legacy.png").exists())
+
+            self.assertTrue((project_one / "state.json").exists())
+            self.assertEqual((project_one / "GDD.md").read_text(encoding="utf-8"), "legacy gdd")
+            self.assertEqual((project_one / "USER_PROFILE.md").read_text(encoding="utf-8"), "legacy profile")
+            self.assertTrue((project_one / "images" / "legacy.png").exists())
+        finally:
+            shutil.rmtree(workspace_root, ignore_errors=True)
+            if previous_workspace is None:
+                os.environ.pop("LUDENS_WORKSPACE_DIR", None)
+            else:
+                os.environ["LUDENS_WORKSPACE_DIR"] = previous_workspace
+            if previous_project is None:
+                os.environ.pop("LUDENS_PROJECT_ID", None)
+            else:
+                os.environ["LUDENS_PROJECT_ID"] = previous_project
+
 
 if __name__ == "__main__":
     unittest.main()
