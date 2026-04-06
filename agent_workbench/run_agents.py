@@ -6,8 +6,10 @@ import re
 import io
 from pathlib import Path
 
-# 添加 src 到路径，方便绝对导入
-sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
+# 补齐脚本目录与 src 目录，兼容直接执行与 `python -m agent_workbench.run_agents` 两种入口。
+SCRIPT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPT_DIR))
+sys.path.insert(0, str(SCRIPT_DIR / "src"))
 
 try:
     from dotenv import load_dotenv
@@ -116,6 +118,16 @@ def parse_user_input(text: str) -> Union[str, list]:
         
     return payload
 
+
+def _safe_save_state(state) -> None:
+    """尽力保存状态；如果文件被其他进程占用，则只告警，不让 CLI 退出流程再崩一次。"""
+    try:
+        st.save_state(state)
+    except PermissionError as e:
+        logger.warning(f"State file is locked by another process, skipping save: {e}")
+    except Exception as e:
+        logger.warning(f"Failed to save state: {e}")
+
 def main():
     logger.info("Initializing workspace...")
     st.init_workspace()
@@ -146,7 +158,7 @@ def main():
         if err:
             print(f"[⚠️ WARNING]: Recovered from error: {err}")
             state.last_error = None # 显示过即消
-            st.save_state(state)
+            _safe_save_state(state)
         
         # 对于特殊的等待节点，给出明确提示
         if phase == "POST_REVIEW_DECISION":
@@ -161,7 +173,7 @@ def main():
             
             if raw_input.lower() in ("exit", "quit", "q"):
                 logger.info("Saving state and exiting...")
-                st.save_state(state)
+                _safe_save_state(state)
                 break
                 
             if not raw_input:
@@ -220,16 +232,20 @@ def main():
             if getattr(state, "last_assistant_message", None):
                 print(f"\n[🤖 Agent Reply]:\n{state.last_assistant_message}\n")
                 state.last_assistant_message = None  # 显示完即消
-                st.save_state(state)
-            
+                _safe_save_state(state)
+             
+        except EOFError:
+            logger.info("No interactive stdin detected. Exiting CLI runner.")
+            _safe_save_state(state)
+            break
         except KeyboardInterrupt:
             print("\nInterrupted by user. Exiting...")
-            st.save_state(state)
+            _safe_save_state(state)
             break
         except Exception as e:
             # Runner 级别的防崩保护，即便 Graph 也炸了最后拖底
             logger.error(f"Fatal Runner error: {e}")
-            st.save_state(state)
+            _safe_save_state(state)
             print("System halted safely. Run again to resume.")
             break
 
