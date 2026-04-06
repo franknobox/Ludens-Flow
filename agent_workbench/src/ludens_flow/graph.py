@@ -105,45 +105,72 @@ def run_agent_step(agent, mode: str, state: LudensState, user_input: Any) -> Lud
     # 节点入口日志。
     write_trace_log("ENTER", node_name, current_phase, is_frozen, state.last_event or "NONE", project_id=state.project_id)
     
-    print(f"[DEBUG] run_agent_step - Calling agent: {node_name} Mode: {mode}")    
+    print(f"[DEBUG] run_agent_step - Calling agent: {node_name} Mode: {mode}")
+
     try:
-        # Graph 统一注入用户画像上下文。
-        orig_prompt = getattr(agent, "system_prompt", "") or ""
-        profile_instruction = (
-            "请从用户输入中提取人物信息，并按要求输出：\n提取信息包括但不限于：nickname（昵称/姓名），preferences（风格/喜好），project_goals（项目目标/需求/开发内容)\n输出格式："
-            "[PROFILE_UPDATE] key: value\n"
-            "例如：[PROFILE_UPDATE] nickname: Alice\n"
-        )
+        profile_text = ""
         try:
+            # 加载用户画像
             from ludens_flow.user_profile import load_profile
-            profile_text = load_profile(max_chars=2000, project_id=state.project_id)
-            if profile_text.strip():
-                agent.system_prompt = orig_prompt + profile_instruction + "\n\n---\n你在回答涉及用户身份、偏好、项目目标等问题时，必须优先参考下方的用户画像\n" + profile_text
-            else:
-                agent.system_prompt = orig_prompt + profile_instruction
-            
+            profile_text = (load_profile(max_chars=2000) or "").strip()
         except Exception as e:
             logger.warning(f"Failed to load user profile: {e}")
-            agent.system_prompt = orig_prompt + profile_instruction
+
+        # 加载prompts/文件夹
+        import os
+        prompt_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "prompts"))
+        filename_map = {
+            "DesignAgent": "design_agent.md",
+            "PMAgent": "pm_agent.md",
+            "EngineeringAgent": "engineering_agent.md",
+            "ReviewAgent": "review_agent.md",
+        }
+
+        template_system = None
+        try:
+            fname = filename_map.get(getattr(agent, "name", ""))
+            if fname:
+                ppath = os.path.join(prompt_dir, fname)
+                if os.path.exists(ppath):
+                    # 对.md文件进行分割，part[0]是system prompt，part[1]是profile_instruction
+                    with open(ppath, "r", encoding="utf-8") as pf:
+                        content = pf.read()
+                        parts = content.split("===PROFILE_INSTRUCTION===")
+                        if parts:
+                            if parts[0].strip():
+                                template_system = parts[0].strip()
+                            if len(parts) > 1 and parts[1].strip():
+                                profile_instruction = parts[1].strip()
+        except Exception as e:
+            logger.debug(f"Failed to load prompt template for {agent.name}: {e}")
+
+        
+        if template_system:
+            try:
+                agent.system_prompt = template_system
+            except Exception:
+                pass
+
+        if profile_text:
+            user_persona_block = profile_instruction + "\n\n" + profile_text
+        else:
+            user_persona_block = profile_instruction
 
         # 按 mode 分发到对应能力入口。
         result = None
-        try:
-            if mode == "DISCUSS":
-                result: AgentResult = agent.discuss(state, user_input)
-            elif mode == "COMMIT":
-                result: AgentResult = agent.commit(state, user_input)
-            elif mode == "PLAN_DISCUSS":
-                result: AgentResult = getattr(agent, "plan_discuss")(state, user_input)
-            elif mode == "PLAN_COMMIT":
-                result: AgentResult = getattr(agent, "plan_commit")(state, user_input)
-            elif mode == "COACH":
-                result: AgentResult = getattr(agent, "coach")(state, user_input)
-            else:
-                raise ValueError(f"Unknown agent mode: {mode}")
-        finally:
-            # 避免污染后续调用。
-            agent.system_prompt = orig_prompt
+        
+        if mode == "DISCUSS":
+            result: AgentResult = agent.discuss(state, user_input, user_persona=user_persona_block)
+        elif mode == "COMMIT":
+            result: AgentResult = agent.commit(state, user_input, user_persona=user_persona_block)
+        elif mode == "PLAN_DISCUSS":
+            result: AgentResult = getattr(agent, "plan_discuss")(state, user_input, None, user_persona=user_persona_block)
+        elif mode == "PLAN_COMMIT":
+            result: AgentResult = getattr(agent, "plan_commit")(state, user_input, None, user_persona=user_persona_block)
+        elif mode == "COACH":
+            result: AgentResult = getattr(agent, "coach")(state, user_input, None, user_persona=user_persona_block)
+        else:
+            raise ValueError(f"Unknown agent mode: {mode}")
  
         # 统一提取画像更新。
         try:

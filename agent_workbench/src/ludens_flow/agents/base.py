@@ -161,38 +161,47 @@ class BaseAgent(ABC):
         return result
     
     def parse_structured_response(self, assistant_text: str) -> tuple[Optional[dict], str]:
-        """
-        尝试从模型返回文本中提取 JSON 对象。
-        返回 (parsed_dict or None, remaining_text)
-        支持两种场景：纯 JSON 输出 或 文本中包含 JSON 块（会提取第一个 JSON 对象）。
-        """
-        import re, json
+        import json, re
         if not assistant_text or not assistant_text.strip():
             return None, ""
-
         text = assistant_text.strip()
-        # 快速判断：整个输出就是 JSON
-        try:
-            parsed = json.loads(text)
-            return parsed, ""
-        except Exception:
-            pass
 
-        # 尝试在文本中查找第一个花括号包裹的 JSON 对象
-        pattern = re.compile(r"(\{(?:.|\n)*?\})", re.DOTALL)
-        m = pattern.search(text)
+        # 1) 优先处理 ```json ``` 的代码块
+        m = re.search(r"```json\\s*(\\{.*?\\})\\s*```", text, re.DOTALL | re.IGNORECASE)
         if m:
-            json_text = m.group(1)
             try:
-                parsed = json.loads(json_text)
-                # 剩余文本为 JSON 前后的非结构化内容（用于回显）
-                remaining = (text[:m.start()] + text[m.end():]).strip()
-                return parsed, remaining
+                return json.loads(m.group(1)), (text[:m.start()] + text[m.end():]).strip()
             except Exception:
-                return None, text
+                pass
 
-        # 未找到 JSON
+        # 2) 处理自定义标记（例如 <<TAG>> ... <<END>>）
+        m = re.search(r"<<[^>]+>>\\s*(\\{.*?\\})\\s*<<END_[^>]+>>", text, re.DOTALL)
+        if m:
+            try:
+                return json.loads(m.group(1)), (text[:m.start()] + text[m.end():]).strip()
+            except Exception:
+                pass
+
+        # 3) 花括号平衡查找第一个完整 JSON 对象
+        start = text.find("{")
+        if start == -1:
+            return None, text
+        depth = 0
+        for i in range(start, len(text)):
+            if text[i] == "{":
+                depth += 1
+            elif text[i] == "}":
+                depth -= 1
+                if depth == 0:
+                    candidate = text[start:i+1]
+                    try:
+                        parsed = json.loads(candidate)
+                        remaining = (text[:start] + text[i+1:]).strip()
+                        return parsed, remaining
+                    except Exception:
+                        return None, text
         return None, text
+
 
     @abstractmethod
     def discuss(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None, user_persona: Optional[str] = None) -> AgentResult:

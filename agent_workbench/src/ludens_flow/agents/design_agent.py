@@ -32,19 +32,19 @@ class DesignAgent(BaseAgent):
             "3. 鼓励创意冒险，聚焦于能在有限时间内跑通的最小核心体验（类似 Game Jam 思维）。\n"
             "4. 如果有模糊地带，用友好的反问牵引思考；如果用户给的方向清晰，热烈肯定并发散脑洞。\n"
             "5. 保持轻松、活泼、富有创造力的对话节奏。\n"
-            "\n\n请严格仅输出一个合法的 JSON 对象，且不要包含任何多余的解释文字或注释。JSON schema（必须遵守）：\n"
+            "\n\n请严格仅输出一个合法的 JSON 对象，且不要包含任何多余的解释文字或注释。JSON 格式如下： \n"
             "{\n"
-            "  \"reply\": \"要直接显示给用户的自然语言回答（string）\",\n"
-            "  \"state_updates\": { /* 可选：要合并到 state 的字典 */ },\n"
-            "  \"profile_updates\": [\"[PROFILE_UPDATE] key: value\", ...],\n"
-            "  \"events\": [\"EVENT_NAME\", ...],\n"
-            "  \"commit\": { \"artifact_name\": \"GDD\", \"content\": \"要写入的完整文本\", \"reason\": \"写入原因\" } /* 可选 */\n"
+            " \"reply\": \"显示给用户的自然语言回答\",\n"
+            " \"state_updates\": {},\n"
+            " \"profile_updates\": [\"[PROFILE_UPDATE] key: value\", ...],\n"
+            " \"events\": [],\n"
             "}\n"
             "重要：如果某字段无值，请使用 null、{} 或 [] 表示；不要输出多余文本。"
         )
         
         raw = self._call(prompt, cfg, history=state.chat_history, user_persona=user_persona)
 
+        print("解析前：",raw)
         # 尝试解析结构化 JSON 响应。
         parsed, remaining = self.parse_structured_response(raw)
         if parsed:
@@ -54,6 +54,7 @@ class DesignAgent(BaseAgent):
             state_updates = parsed.get("state_updates", {}) or {}
             profile_updates = parsed.get("profile_updates", []) or []
             events = parsed.get("events", []) or []
+            print("解析后：", parsed)
             return AgentResult(
                 assistant_message=(assistant_text or "").strip(),
                 state_updates=state_updates,

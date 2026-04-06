@@ -36,15 +36,14 @@ class PMAgent(BaseAgent):
             "2. 结合 GDD 中的功能，主动帮用户识别哪些功能是核心体验不可缺少的，哪些可以在 Game Jam 或 MVP 阶段果断砍掉。\n"
             "3. 所有建议以 Unity PC Standalone（Editor 可以 Play Mode 验收）为默认交付目标，不主动引入跨平台或多人联网议题。\n"
             "4. 以自然语言流畅地回复用户，不带任何特殊格式标签。\n"
-            "\n\n请严格仅输出一个合法的 JSON 对象，且不要包含任何多余的解释文字或注释。JSON schema（必须遵守）：\n"
+            "\n\n请严格仅输出一个合法的 JSON 对象，且不要包含任何多余的解释文字或注释。JSON 格式如下： \n"
             "{\n"
-            "  \"reply\": \"要直接显示给用户的自然语言回答（string）\",\n"
-            "  \"state_updates\": { /* 可选：要合并到 state 的字典 */ },\n"
-            "  \"profile_updates\": [\"[PROFILE_UPDATE] key: value\", ...],\n"
-            "  \"events\": [\"EVENT_NAME\", ...],\n"
-            "  \"commit\": { \"artifact_name\": \"PROJECT_PLAN\", \"content\": \"可选：当需要写盘时提供的文本\", \"reason\": \"写入原因\" } /* 可选 */\n"
+            " \"reply\": \"显示给用户的自然语言回答\",\n"
+            " \"state_updates\": {},\n"
+            " \"profile_updates\": [\"[PROFILE_UPDATE] key: value\", ...],\n"
+            " \"events\": [],\n"
             "}\n"
-            "重要：如果某字段无值，请使用 null、{} 或 [] 表示；不要输出多余文本。\n"
+            "重要：如果某字段无值，请使用 null、{} 或 [] 表示；不要输出多余文本。"
         )
         raw = self._call(prompt, cfg, history=state.chat_history, user_persona=user_persona)
         parsed, remaining = self.parse_structured_response(raw)
