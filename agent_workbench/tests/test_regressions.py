@@ -3,6 +3,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 _ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_ROOT))
@@ -14,10 +15,12 @@ os.environ.setdefault(
     str((Path(tempfile.gettempdir()) / "ludens_flow_tests" / "test_regressions").resolve()),
 )
 
+from ludens_flow.agents.base import AgentResult
+from ludens_flow.agents.design_agent import DesignAgent
 from ludens_flow.agents.engineering_agent import EngineeringAgent
 from ludens_flow.agents.pm_agent import PMAgent
 from ludens_flow.artifacts import read_artifact, write_artifact
-from ludens_flow.graph import _merge_state_updates
+from ludens_flow.graph import _merge_state_updates, run_agent_step
 from ludens_flow.state import init_state, init_workspace
 
 
@@ -81,6 +84,31 @@ class RegressionTests(unittest.TestCase):
 
         recovered_coach = agent.coach(state, "下一步怎么落地？")
         self.assertEqual(recovered_coach.state_updates.get("style_preset"), "C")
+
+    def test_structured_response_parses_json_code_fence(self):
+        agent = EngineeringAgent()
+        parsed, remaining = agent.parse_structured_response(
+            'prefix\n```json\n{"reply":"ok","state_updates":{"a":1}}\n```\nsuffix'
+        )
+
+        self.assertEqual(parsed["reply"], "ok")
+        self.assertEqual(parsed["state_updates"]["a"], 1)
+        self.assertEqual(remaining, "prefix\n\nsuffix")
+
+    def test_run_agent_step_uses_project_scoped_profile_and_restores_prompt(self):
+        agent = DesignAgent()
+        original_prompt = "original prompt"
+        agent.system_prompt = original_prompt
+        agent.discuss = lambda *args, **kwargs: AgentResult(assistant_message="ok")
+
+        state = init_state(project_id="alpha")
+        state.phase = "GDD_DISCUSS"
+
+        with patch("ludens_flow.user_profile.load_profile", return_value="profile text") as mocked_load:
+            run_agent_step(agent, "DISCUSS", state, "hello")
+
+        mocked_load.assert_called_once_with(max_chars=2000, project_id="alpha")
+        self.assertEqual(agent.system_prompt, original_prompt)
 
 
 if __name__ == "__main__":

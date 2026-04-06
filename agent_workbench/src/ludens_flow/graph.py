@@ -108,11 +108,18 @@ def run_agent_step(agent, mode: str, state: LudensState, user_input: Any) -> Lud
     print(f"[DEBUG] run_agent_step - Calling agent: {node_name} Mode: {mode}")
 
     try:
+        orig_prompt = getattr(agent, "system_prompt", "") or ""
         profile_text = ""
+        profile_instruction = (
+            "请从用户输入中提取人物信息，并按要求输出：\n"
+            "提取信息包括但不限于：nickname（昵称/姓名），preferences（风格/喜好），project_goals（项目目标/需求/开发内容)\n"
+            "输出格式：[PROFILE_UPDATE] key: value\n"
+            "例如：[PROFILE_UPDATE] nickname: Alice"
+        )
         try:
             # 加载用户画像
             from ludens_flow.user_profile import load_profile
-            profile_text = (load_profile(max_chars=2000) or "").strip()
+            profile_text = (load_profile(max_chars=2000, project_id=state.project_id) or "").strip()
         except Exception as e:
             logger.warning(f"Failed to load user profile: {e}")
 
@@ -145,12 +152,6 @@ def run_agent_step(agent, mode: str, state: LudensState, user_input: Any) -> Lud
             logger.debug(f"Failed to load prompt template for {agent.name}: {e}")
 
         
-        if template_system:
-            try:
-                agent.system_prompt = template_system
-            except Exception:
-                pass
-
         if profile_text:
             user_persona_block = profile_instruction + "\n\n" + profile_text
         else:
@@ -158,19 +159,26 @@ def run_agent_step(agent, mode: str, state: LudensState, user_input: Any) -> Lud
 
         # 按 mode 分发到对应能力入口。
         result = None
-        
-        if mode == "DISCUSS":
-            result: AgentResult = agent.discuss(state, user_input, user_persona=user_persona_block)
-        elif mode == "COMMIT":
-            result: AgentResult = agent.commit(state, user_input, user_persona=user_persona_block)
-        elif mode == "PLAN_DISCUSS":
-            result: AgentResult = getattr(agent, "plan_discuss")(state, user_input, None, user_persona=user_persona_block)
-        elif mode == "PLAN_COMMIT":
-            result: AgentResult = getattr(agent, "plan_commit")(state, user_input, None, user_persona=user_persona_block)
-        elif mode == "COACH":
-            result: AgentResult = getattr(agent, "coach")(state, user_input, None, user_persona=user_persona_block)
-        else:
-            raise ValueError(f"Unknown agent mode: {mode}")
+        try:
+            if template_system:
+                agent.system_prompt = template_system
+            else:
+                agent.system_prompt = orig_prompt
+
+            if mode == "DISCUSS":
+                result: AgentResult = agent.discuss(state, user_input, user_persona=user_persona_block)
+            elif mode == "COMMIT":
+                result: AgentResult = agent.commit(state, user_input, user_persona=user_persona_block)
+            elif mode == "PLAN_DISCUSS":
+                result: AgentResult = getattr(agent, "plan_discuss")(state, user_input, None, user_persona=user_persona_block)
+            elif mode == "PLAN_COMMIT":
+                result: AgentResult = getattr(agent, "plan_commit")(state, user_input, None, user_persona=user_persona_block)
+            elif mode == "COACH":
+                result: AgentResult = getattr(agent, "coach")(state, user_input, None, user_persona=user_persona_block)
+            else:
+                raise ValueError(f"Unknown agent mode: {mode}")
+        finally:
+            agent.system_prompt = orig_prompt
  
         # 统一提取画像更新。
         try:

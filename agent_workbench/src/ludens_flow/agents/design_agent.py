@@ -44,7 +44,6 @@ class DesignAgent(BaseAgent):
         
         raw = self._call(prompt, cfg, history=state.chat_history, user_persona=user_persona)
 
-        print("解析前：",raw)
         # 尝试解析结构化 JSON 响应。
         parsed, remaining = self.parse_structured_response(raw)
         if parsed:
@@ -54,7 +53,6 @@ class DesignAgent(BaseAgent):
             state_updates = parsed.get("state_updates", {}) or {}
             profile_updates = parsed.get("profile_updates", []) or []
             events = parsed.get("events", []) or []
-            print("解析后：", parsed)
             return AgentResult(
                 assistant_message=(assistant_text or "").strip(),
                 state_updates=state_updates,

@@ -138,6 +138,8 @@ class EngineeringAgent(BaseAgent):
             menu = "\n\n**请选择接下来的操作：**\n[1] 继续讨论\n[2] 定稿并生成\n[3] 回退到上一步 (PM_DISCUSS)"
             assistant_text = (assistant_text or "") + menu
             state_updates = parsed.get("state_updates", {}) or {}
+            if detected_style and detected_style != state.style_preset:
+                state_updates["style_preset"] = detected_style
             profile_updates = parsed.get("profile_updates", []) or []
             events = parsed.get("events", []) or []
             return AgentResult(
@@ -148,6 +150,8 @@ class EngineeringAgent(BaseAgent):
                 )
 
         reply = (raw or "")
+        if detected_style and detected_style != state.style_preset:
+            updates["style_preset"] = detected_style
         reply += "\n\n**请选择接下来的操作：**\n[1] 继续讨论\n[2] 定稿并生成\n[3] 回退到上一步 (PM_DISCUSS)"
         return AgentResult(
                 assistant_message=reply.strip(),

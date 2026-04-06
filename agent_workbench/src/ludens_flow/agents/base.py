@@ -167,7 +167,7 @@ class BaseAgent(ABC):
         text = assistant_text.strip()
 
         # 1) 优先处理 ```json ``` 的代码块
-        m = re.search(r"```json\\s*(\\{.*?\\})\\s*```", text, re.DOTALL | re.IGNORECASE)
+        m = re.search(r"```json\s*(\{.*?\})\s*```", text, re.DOTALL | re.IGNORECASE)
         if m:
             try:
                 return json.loads(m.group(1)), (text[:m.start()] + text[m.end():]).strip()
@@ -175,7 +175,7 @@ class BaseAgent(ABC):
                 pass
 
         # 2) 处理自定义标记（例如 <<TAG>> ... <<END>>）
-        m = re.search(r"<<[^>]+>>\\s*(\\{.*?\\})\\s*<<END_[^>]+>>", text, re.DOTALL)
+        m = re.search(r"<<[^>]+>>\s*(\{.*?\})\s*<<END_[^>]+>>", text, re.DOTALL)
         if m:
             try:
                 return json.loads(m.group(1)), (text[:m.start()] + text[m.end():]).strip()
@@ -184,22 +184,22 @@ class BaseAgent(ABC):
 
         # 3) 花括号平衡查找第一个完整 JSON 对象
         start = text.find("{")
-        if start == -1:
-            return None, text
-        depth = 0
-        for i in range(start, len(text)):
-            if text[i] == "{":
-                depth += 1
-            elif text[i] == "}":
-                depth -= 1
-                if depth == 0:
-                    candidate = text[start:i+1]
-                    try:
-                        parsed = json.loads(candidate)
-                        remaining = (text[:start] + text[i+1:]).strip()
-                        return parsed, remaining
-                    except Exception:
-                        return None, text
+        while start != -1:
+            depth = 0
+            for i in range(start, len(text)):
+                if text[i] == "{":
+                    depth += 1
+                elif text[i] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        candidate = text[start:i+1]
+                        try:
+                            parsed = json.loads(candidate)
+                            remaining = (text[:start] + text[i+1:]).strip()
+                            return parsed, remaining
+                        except Exception:
+                            break
+            start = text.find("{", start + 1)
         return None, text
 
 
