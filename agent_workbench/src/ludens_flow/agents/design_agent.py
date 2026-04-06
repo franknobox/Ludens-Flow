@@ -12,14 +12,8 @@ logger = logging.getLogger(__name__)
 class DesignAgent(BaseAgent):
     """负责 GDD 阶段的讨论和定稿。"""
     name = "DesignAgent"
-    system_prompt = (
-        "你的名字是 Dam (丹姆)，你是一名拥有丰富经验的游戏策划(Design Agent)，专注于 Unity 独立游戏与 Game Jam 项目。\n"
-        "你深度理解 Unity 引擎的实现逻辑，能从工程可行性角度辅助玩法设计决策。\n"
-        "你热爱创意和技术探索，鼓励大胆的玩法实验，不追求商业完整性，只追求最核心的游戏体验。\n"
-        "请用生动、自然、富有热情的自然语言与用户对话，绝不要在聊天回复里输出 JSON 数据结构。"
-    )
 
-    def discuss(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
+    def discuss(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None, user_persona: Optional[str] = None) -> AgentResult:
         # 回流修改时，把当前 GDD 一并带入讨论上下文。
         from ludens_flow.artifacts import read_artifact
         existing_gdd = read_artifact("GDD", project_id=state.project_id)
@@ -38,18 +32,44 @@ class DesignAgent(BaseAgent):
             "3. 鼓励创意冒险，聚焦于能在有限时间内跑通的最小核心体验（类似 Game Jam 思维）。\n"
             "4. 如果有模糊地带，用友好的反问牵引思考；如果用户给的方向清晰，热烈肯定并发散脑洞。\n"
             "5. 保持轻松、活泼、富有创造力的对话节奏。\n"
+            "\n\n请严格仅输出一个合法的 JSON 对象，且不要包含任何多余的解释文字或注释。JSON schema（必须遵守）：\n"
+            "{\n"
+            "  \"reply\": \"要直接显示给用户的自然语言回答（string）\",\n"
+            "  \"state_updates\": { /* 可选：要合并到 state 的字典 */ },\n"
+            "  \"profile_updates\": [\"[PROFILE_UPDATE] key: value\", ...],\n"
+            "  \"events\": [\"EVENT_NAME\", ...],\n"
+            "  \"commit\": { \"artifact_name\": \"GDD\", \"content\": \"要写入的完整文本\", \"reason\": \"写入原因\" } /* 可选 */\n"
+            "}\n"
+            "重要：如果某字段无值，请使用 null、{} 或 [] 表示；不要输出多余文本。"
         )
         
-        reply = self._call(prompt, cfg, history=state.chat_history)
-        
+        raw = self._call(prompt, cfg, history=state.chat_history, user_persona=user_persona)
+
+        # 尝试解析结构化 JSON 响应。
+        parsed, remaining = self.parse_structured_response(raw)
+        if parsed:
+            assistant_text = parsed.get("reply", remaining or "")
+            menu = "\n\n**请选择接下来的操作：**\n[1] 继续讨论\n[2] 定稿并生成\n[3] 回退到上一步 (已是初始阶段)"
+            assistant_text = (assistant_text or "") + menu
+            state_updates = parsed.get("state_updates", {}) or {}
+            profile_updates = parsed.get("profile_updates", []) or []
+            events = parsed.get("events", []) or []
+            return AgentResult(
+                assistant_message=(assistant_text or "").strip(),
+                state_updates=state_updates,
+                events=events,
+                profile_updates=profile_updates
+            )
+
+        # 无JSON
+        reply = (raw or "")
         reply += "\n\n**请选择接下来的操作：**\n[1] 继续讨论\n[2] 定稿并生成\n[3] 回退到上一步 (已是初始阶段)"
-        
         return AgentResult(
             assistant_message=reply.strip(),
             state_updates={}
         )
 
-    def commit(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
+    def commit(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None, user_persona: Optional[str] = None) -> AgentResult:
         # commit 直接输出可落盘的最终版 GDD。
         prompt = (
             "请基于我们之前的完整讨论记录，将其中已经明确的信息整合为一份规范化 GDD (Game Design Document) Markdown 文档。\n"
@@ -65,7 +85,7 @@ class DesignAgent(BaseAgent):
             "   - 【💡 创意变体】：用简洁的 1-2 句话提供 2 种玩法衍生变体方向，激发后续迭代灵感。\n"
             "重要：你的整篇输出将会被原封不动保存。除 Markdown 正文外，**不要**输出多余的解释首尾语。"
         )
-        final_gdd = self._call(prompt, cfg, history=state.chat_history)
+        final_gdd = self._call(prompt, cfg, history=state.chat_history, user_persona=user_persona)
         logger.info("[DesignAgent] Commit generated.")
         
         decisions = ["GDD committed"]

@@ -31,7 +31,7 @@ class BaseAgent(ABC):
     name: str = "BaseAgent"
     system_prompt: str = ""
 
-    def _call(self, user_prompt: Union[str, list], cfg: Optional[LLMConfig] = None, history: Optional[List[Dict[str, Any]]] = None, tools: Optional[list] = None) -> str:
+    def _call(self, user_prompt: Union[str, list], cfg: Optional[LLMConfig] = None, history: Optional[List[Dict[str, Any]]] = None, tools: Optional[list] = None, user_persona: Optional[str] = None) -> str:
         """统一 LLM 调用入口，处理配置和多轮 tool calling。"""
         from llm.provider import load_config
         if cfg is None:
@@ -49,6 +49,11 @@ class BaseAgent(ABC):
         max_tool_iterations = 5
         iterations = 0
         
+        # LLM 在回答时能把用户画像作为独立的上下文参考
+        if user_persona:
+            history.append({"role": "user", "content": user_persona})
+
+
         # 首轮模型调用。
         response = generate(system=self.system_prompt, user=user_prompt, cfg=cfg, history=history, tools=tools)
         
@@ -154,13 +159,47 @@ class BaseAgent(ABC):
                 seen.add(key)
                 result.append(key)
         return result
+    
+    def parse_structured_response(self, assistant_text: str) -> tuple[Optional[dict], str]:
+        """
+        尝试从模型返回文本中提取 JSON 对象。
+        返回 (parsed_dict or None, remaining_text)
+        支持两种场景：纯 JSON 输出 或 文本中包含 JSON 块（会提取第一个 JSON 对象）。
+        """
+        import re, json
+        if not assistant_text or not assistant_text.strip():
+            return None, ""
+
+        text = assistant_text.strip()
+        # 快速判断：整个输出就是 JSON
+        try:
+            parsed = json.loads(text)
+            return parsed, ""
+        except Exception:
+            pass
+
+        # 尝试在文本中查找第一个花括号包裹的 JSON 对象
+        pattern = re.compile(r"(\{(?:.|\n)*?\})", re.DOTALL)
+        m = pattern.search(text)
+        if m:
+            json_text = m.group(1)
+            try:
+                parsed = json.loads(json_text)
+                # 剩余文本为 JSON 前后的非结构化内容（用于回显）
+                remaining = (text[:m.start()] + text[m.end():]).strip()
+                return parsed, remaining
+            except Exception:
+                return None, text
+
+        # 未找到 JSON
+        return None, text
 
     @abstractmethod
-    def discuss(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
+    def discuss(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None, user_persona: Optional[str] = None) -> AgentResult:
         """讨论阶段入口。"""
         ...
 
     @abstractmethod
-    def commit(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
+    def commit(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None, user_persona: Optional[str] = None) -> AgentResult:
         """定稿阶段入口。"""
         ...

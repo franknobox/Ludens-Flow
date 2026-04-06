@@ -13,18 +13,12 @@ logger = logging.getLogger(__name__)
 
 class ReviewAgent(BaseAgent):
     name = "ReviewAgent"
-    system_prompt = (
-        "你的名字是 Revs（雷夫斯），你是资深综合评审(Review Agent)，有丰富的 Unity 独立游戏开发与 Game Jam 经验。\n"
-        "你以「这个方案靠一两个人在有限时间内真的能做出来吗」的务实角度评审整套立项产物。\n"
-        "你同时具备策划视角与 Unity 技术视角，特别关注 scope 蔓延（Feature Creep）与技术过度设计问题。\n"
-        "你必须严谨、挑剔，并总是输出包含准确分数的 REVIEW 报告，并在结尾附加机器鉴权大门 (ReviewGate)。"
-    )
 
-    def discuss(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
+    def discuss(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None, user_persona: Optional[str] = None) -> AgentResult:
         """REVIEW 主要走 commit，此处可用作人工干预测试的过场"""
         return AgentResult(assistant_message="Review Agent is in DISCUSS mode. Usually we jump direct to COMMIT.")
 
-    def commit(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
+    def commit(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None, user_persona: Optional[str] = None) -> AgentResult:
         gdd = read_artifact("GDD", project_id=state.project_id)
         pm = read_artifact("PROJECT_PLAN", project_id=state.project_id)
         impl = read_artifact("IMPLEMENTATION_PLAN", project_id=state.project_id)
@@ -51,7 +45,7 @@ class ReviewAgent(BaseAgent):
             "判断标准：存在致命的逻辑/技术死胡同时使用 BLOCK；存在影响开发的重要瑕疵使用 REQUEST_CHANGES；整体健康使用 PASS。"
         )
         
-        final_report = self._call(prompt, cfg, history=state.chat_history)
+        final_report = self._call(prompt, cfg, history=state.chat_history,user_persona=user_persona)
         gate_dict, final_report_md = self._parse_json_gate(final_report)
         status = gate_dict.get('status', 'REQUEST_CHANGES')
         

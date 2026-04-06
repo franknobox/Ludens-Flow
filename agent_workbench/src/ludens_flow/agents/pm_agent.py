@@ -16,14 +16,8 @@ import re
 class PMAgent(BaseAgent):
     """负责项目计划阶段的讨论、范围收敛和定稿。"""
     name = "PMAgent"
-    system_prompt = (
-        "你的名字是 Pax (帕克斯)，你是一位擅长独立游戏项目的 PM Agent。\n"
-        "你深度理解小团队或个人开发者的节奏，了解 Unity 项目的工程目录结构与 Editor 工作流。\n"
-        "你的核心哲学是：控制 scope，快速验证，砍掉一切不必要的功能，让核心体验尽快跑起来。\n"
-        "你必须用干练、亲切且务实的自然语言回复，不要输出任何 JSON 数据结构。"
-    )
 
-    def discuss(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
+    def discuss(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None, user_persona: Optional[str] = None) -> AgentResult:
         # 回流修改时，把现有 PROJECT_PLAN 一起带入讨论。
         gdd_content = read_artifact("GDD", project_id=state.project_id)
         existing_pm = read_artifact("PROJECT_PLAN", project_id=state.project_id)
@@ -42,19 +36,41 @@ class PMAgent(BaseAgent):
             "2. 结合 GDD 中的功能，主动帮用户识别哪些功能是核心体验不可缺少的，哪些可以在 Game Jam 或 MVP 阶段果断砍掉。\n"
             "3. 所有建议以 Unity PC Standalone（Editor 可以 Play Mode 验收）为默认交付目标，不主动引入跨平台或多人联网议题。\n"
             "4. 以自然语言流畅地回复用户，不带任何特殊格式标签。\n"
+            "\n\n请严格仅输出一个合法的 JSON 对象，且不要包含任何多余的解释文字或注释。JSON schema（必须遵守）：\n"
+            "{\n"
+            "  \"reply\": \"要直接显示给用户的自然语言回答（string）\",\n"
+            "  \"state_updates\": { /* 可选：要合并到 state 的字典 */ },\n"
+            "  \"profile_updates\": [\"[PROFILE_UPDATE] key: value\", ...],\n"
+            "  \"events\": [\"EVENT_NAME\", ...],\n"
+            "  \"commit\": { \"artifact_name\": \"PROJECT_PLAN\", \"content\": \"可选：当需要写盘时提供的文本\", \"reason\": \"写入原因\" } /* 可选 */\n"
+            "}\n"
+            "重要：如果某字段无值，请使用 null、{} 或 [] 表示；不要输出多余文本。\n"
         )
-        reply = self._call(prompt, cfg, history=state.chat_history)
-        
-        updates = {}
+        raw = self._call(prompt, cfg, history=state.chat_history, user_persona=user_persona)
+        parsed, remaining = self.parse_structured_response(raw)
+        if parsed:
+            assistant_text = parsed.get("reply", remaining or "")
+            menu = "\n\n**请选择接下来的操作：**\n[1] 继续讨论\n[2] 定稿并生成\n[3] 回退到上一步 (GDD_DISCUSS)"
+            assistant_text = (assistant_text or "") + menu
+            state_updates = parsed.get("state_updates", {}) or {}
+            profile_updates = parsed.get("profile_updates", []) or []
+            events = parsed.get("events", []) or []
+            return AgentResult(
+                assistant_message=(assistant_text or "").strip(),
+                state_updates=state_updates,
+                events=events,
+                profile_updates=profile_updates
+            )
 
+        reply = (raw or "")
+        updates = {}
         reply += "\n\n**请选择接下来的操作：**\n[1] 继续讨论\n[2] 定稿并生成\n[3] 回退到上一步 (GDD_DISCUSS)"
-        
         return AgentResult(
             assistant_message=reply.strip(),
             state_updates=updates
         )
 
-    def commit(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
+    def commit(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None, user_persona: Optional[str] = None) -> AgentResult:
         # commit 输出最终 PROJECT_PLAN，并解析附带的变更请求。
         gdd_content = read_artifact("GDD", project_id=state.project_id)
         
@@ -76,7 +92,7 @@ class PMAgent(BaseAgent):
             "<<END_CHANGE_REQUEST_JSON>>\n"
             "如果没有缺项，可以不输出此 JSON。你的 Markdown 正文不应被代码块包裹，请直接以 Markdown 标题起手。"
         )
-        final_pm_output = self._call(prompt, cfg, history=state.chat_history)
+        final_pm_output = self._call(prompt, cfg, history=state.chat_history, user_persona=user_persona)
         
         updates = {}
         final_pm = final_pm_output
