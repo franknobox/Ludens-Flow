@@ -108,18 +108,12 @@ def run_agent_step(agent, mode: str, state: LudensState, user_input: Any) -> Lud
     print(f"[DEBUG] run_agent_step - Calling agent: {node_name} Mode: {mode}")
 
     try:
-        orig_prompt = getattr(agent, "system_prompt", "") or ""
         profile_text = ""
-        profile_instruction = (
-            "请从用户输入中提取人物信息，并按要求输出：\n"
-            "提取信息包括但不限于：nickname（昵称/姓名），preferences（风格/喜好），project_goals（项目目标/需求/开发内容)\n"
-            "输出格式：[PROFILE_UPDATE] key: value\n"
-            "例如：[PROFILE_UPDATE] nickname: Alice"
-        )
+        # 加载用户画像
         try:
-            # 加载用户画像
             from ludens_flow.user_profile import load_profile
-            profile_text = (load_profile(max_chars=2000, project_id=state.project_id) or "").strip()
+            profile_text = (load_profile(max_chars=2000) or "").strip()
+            profile_instruction = ""
         except Exception as e:
             logger.warning(f"Failed to load user profile: {e}")
 
@@ -151,34 +145,37 @@ def run_agent_step(agent, mode: str, state: LudensState, user_input: Any) -> Lud
         except Exception as e:
             logger.debug(f"Failed to load prompt template for {agent.name}: {e}")
 
+        if template_system:
+            try:
+                agent.system_prompt = template_system
+            except Exception:
+                pass
         
+        profile_context_guard = (
+            "以下为历史用户画像，仅作背景参考，不属于本轮用户输入。\n"
+            "只有本轮用户输入明确提供新的用户信息时，才允许输出 [PROFILE_UPDATE]。\n"
+            "禁止将历史画像内容重复写入 profile_updates，也不要把历史信息当作本轮新增信息。\n"
+        )
+
         if profile_text:
-            user_persona_block = profile_instruction + "\n\n" + profile_text
+            user_persona_block = profile_instruction + "\n\n" + profile_context_guard + "\n" + profile_text
         else:
             user_persona_block = profile_instruction
 
         # 按 mode 分发到对应能力入口。
         result = None
-        try:
-            if template_system:
-                agent.system_prompt = template_system
-            else:
-                agent.system_prompt = orig_prompt
-
-            if mode == "DISCUSS":
-                result: AgentResult = agent.discuss(state, user_input, user_persona=user_persona_block)
-            elif mode == "COMMIT":
-                result: AgentResult = agent.commit(state, user_input, user_persona=user_persona_block)
-            elif mode == "PLAN_DISCUSS":
-                result: AgentResult = getattr(agent, "plan_discuss")(state, user_input, None, user_persona=user_persona_block)
-            elif mode == "PLAN_COMMIT":
-                result: AgentResult = getattr(agent, "plan_commit")(state, user_input, None, user_persona=user_persona_block)
-            elif mode == "COACH":
-                result: AgentResult = getattr(agent, "coach")(state, user_input, None, user_persona=user_persona_block)
-            else:
-                raise ValueError(f"Unknown agent mode: {mode}")
-        finally:
-            agent.system_prompt = orig_prompt
+        if mode == "DISCUSS":
+            result: AgentResult = agent.discuss(state, user_input, user_persona=user_persona_block)
+        elif mode == "COMMIT":
+            result: AgentResult = agent.commit(state, user_input, user_persona=user_persona_block)
+        elif mode == "PLAN_DISCUSS":
+            result: AgentResult = getattr(agent, "plan_discuss")(state, user_input, None, user_persona=user_persona_block)
+        elif mode == "PLAN_COMMIT":
+            result: AgentResult = getattr(agent, "plan_commit")(state, user_input, None, user_persona=user_persona_block)
+        elif mode == "COACH":
+            result: AgentResult = getattr(agent, "coach")(state, user_input, None, user_persona=user_persona_block)
+        else:
+            raise ValueError(f"Unknown agent mode: {mode}")
  
         # 统一提取画像更新。
         try:
@@ -186,16 +183,20 @@ def run_agent_step(agent, mode: str, state: LudensState, user_input: Any) -> Lud
             if not parsed_profile_updates and hasattr(agent, "extract_profile_updates"):
                 try:
                     parsed_profile_updates = agent.extract_profile_updates(result.assistant_message or "")
+                    if profile_instruction:
+                        parsed_profile_updates = [p for p in parsed_profile_updates if p and p not in profile_instruction]
+
                 except Exception as e:
                     logger.debug(f"Failed to extract profile updates from agent output: {e}")
                     parsed_profile_updates = []
-
+             
             if parsed_profile_updates:
-                # 回填后续写入流程使用的数据结构。
+                parsed_profile_updates = _filter_existing_profile_updates(parsed_profile_updates, profile_text)
+                # 将解析出的建议回填到 result.profile_updates，后续统一由 graph 处理写入
                 result.profile_updates = parsed_profile_updates
-            
         except Exception as e:
             logger.warning(f"Error while parsing profile updates: {e}")
+
 
         # 统一合并状态更新。
         if result.state_updates:
