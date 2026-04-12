@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -28,7 +28,7 @@ def _discover_repo_root() -> Path:
 
 
 def _now_iso() -> str:
-    return datetime.utcnow().isoformat() + "Z"
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _coerce_bool(value: Any) -> bool:
@@ -76,12 +76,18 @@ def _read_project_meta(project_id: str) -> Dict[str, Any]:
 def _write_project_meta(project_id: str, meta: Dict[str, Any]) -> Dict[str, Any]:
     meta_file = get_project_meta_file(project_id)
     meta_file.parent.mkdir(parents=True, exist_ok=True)
-    meta_file.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    meta_file.write_text(
+        json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     return meta
 
 
-def _build_project_meta_record(project_id: str, meta: Dict[str, Any], project_dir: Optional[Path] = None) -> Dict[str, Any]:
-    display_name = (meta.get("display_name") or meta.get("title") or project_id).strip() or project_id
+def _build_project_meta_record(
+    project_id: str, meta: Dict[str, Any], project_dir: Optional[Path] = None
+) -> Dict[str, Any]:
+    display_name = (
+        meta.get("display_name") or meta.get("title") or project_id
+    ).strip() or project_id
     record = {
         "id": project_id,
         "display_name": display_name,
@@ -117,7 +123,13 @@ def _upsert_project_meta(
 
     existing = _read_project_meta(normalized)
     now = _now_iso()
-    chosen_name = (display_name or title or existing.get("display_name") or existing.get("title") or normalized).strip() or normalized
+    chosen_name = (
+        display_name
+        or title
+        or existing.get("display_name")
+        or existing.get("title")
+        or normalized
+    ).strip() or normalized
 
     meta = {
         "id": normalized,
@@ -311,7 +323,10 @@ def list_projects() -> List[Dict[str, Any]]:
         projects.append(_build_project_meta_record(project_id, meta, entry))
 
     projects.sort(
-        key=lambda item: (item.get("last_active_at") or item.get("updated_at") or "", item["id"]),
+        key=lambda item: (
+            item.get("last_active_at") or item.get("updated_at") or "",
+            item["id"],
+        ),
         reverse=True,
     )
     return projects

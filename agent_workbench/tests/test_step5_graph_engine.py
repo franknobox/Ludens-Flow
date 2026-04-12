@@ -12,7 +12,13 @@ sys.path.insert(0, str(_ROOT / "src"))
 os.chdir(_ROOT)
 os.environ.setdefault(
     "LUDENS_WORKSPACE_DIR",
-    str((Path(tempfile.gettempdir()) / "ludens_flow_tests" / "test_step5_graph_engine").resolve()),
+    str(
+        (
+            Path(tempfile.gettempdir())
+            / "ludens_flow_tests"
+            / "test_step5_graph_engine"
+        ).resolve()
+    ),
 )
 
 import ludens_flow.state as st
@@ -28,51 +34,73 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
 
 
-def mock_design_discuss(self, state, user_input, cfg=None):
-    return AgentResult(assistant_message="GDD Discuss Mock", state_updates={"drafts": {"gdd": {"core_loop": "kill-loot"}}})
+def mock_design_discuss(self, state, user_input, cfg=None, user_persona=None):
+    return AgentResult(
+        assistant_message="GDD Discuss Mock",
+        state_updates={"drafts": {"gdd": {"core_loop": "kill-loot"}}},
+    )
 
 
-def mock_design_commit(self, state, user_input, cfg=None):
+def mock_design_commit(self, state, user_input, cfg=None, user_persona=None):
     return AgentResult(
         assistant_message="",
-        commit=CommitSpec(artifact_name="GDD", content="GDD Commit Mock!\n", reason="Test"),
+        commit=CommitSpec(
+            artifact_name="GDD", content="GDD Commit Mock!\n", reason="Test"
+        ),
         state_updates={},
     )
 
 
-def mock_pm_discuss(self, state, user_input, cfg=None):
-    return AgentResult(assistant_message="PM Discuss Mock", state_updates={"drafts": {"pm": {"team_size": 3}}})
+def mock_pm_discuss(self, state, user_input, cfg=None, user_persona=None):
+    return AgentResult(
+        assistant_message="PM Discuss Mock",
+        state_updates={"drafts": {"pm": {"team_size": 3}}},
+    )
 
 
-def mock_pm_commit(self, state, user_input, cfg=None):
+def mock_pm_commit(self, state, user_input, cfg=None, user_persona=None):
     return AgentResult(
         assistant_message="",
-        commit=CommitSpec(artifact_name="PROJECT_PLAN", content="PM Commit Mock!\n", reason="Test"),
+        commit=CommitSpec(
+            artifact_name="PROJECT_PLAN", content="PM Commit Mock!\n", reason="Test"
+        ),
         state_updates={},
     )
 
 
-def mock_eng_discuss(self, state, user_input, cfg=None):
-    return AgentResult(assistant_message="Eng Discuss Mock", state_updates={"style_preset": "OOP"})
+def mock_eng_discuss(self, state, user_input, cfg=None, user_persona=None):
+    return AgentResult(
+        assistant_message="Eng Discuss Mock", state_updates={"style_preset": "OOP"}
+    )
 
 
-def mock_eng_commit(self, state, user_input, cfg=None):
+def mock_eng_commit(self, state, user_input, cfg=None, user_persona=None):
     return AgentResult(
         assistant_message="",
-        commit=CommitSpec(artifact_name="IMPLEMENTATION_PLAN", content="Eng Commit Mock!\n", reason="Test"),
+        commit=CommitSpec(
+            artifact_name="IMPLEMENTATION_PLAN",
+            content="Eng Commit Mock!\n",
+            reason="Test",
+        ),
         state_updates={},
     )
 
 
-def mock_eng_coach(self, state, user_input, cfg=None):
-    return AgentResult(assistant_message="Coach Mode Mocked Instruction", state_updates={})
+def mock_eng_coach(self, state, user_input, cfg=None, user_persona=None):
+    return AgentResult(
+        assistant_message="Coach Mode Mocked Instruction", state_updates={}
+    )
 
 
-def mock_review_commit(self, state, user_input, cfg=None):
+def mock_review_commit(self, state, user_input, cfg=None, user_persona=None):
     return AgentResult(
         assistant_message="",
-        commit=CommitSpec(artifact_name="REVIEW_REPORT", content="Review Commit Mock\n", reason="Test"),
-        state_updates={"review_gate": {"status": "PASS", "targets": [], "score": 95, "issues": []}},
+        commit=CommitSpec(
+            artifact_name="REVIEW_REPORT", content="Review Commit Mock\n", reason="Test"
+        ),
+        state_updates={
+            "review_gate": {"status": "PASS", "targets": [], "score": 95, "issues": []}
+        },
     )
 
 
@@ -161,11 +189,15 @@ class Step5GraphEngineTests(unittest.TestCase):
         state.artifact_frozen = True
 
         agent_mock = EngineeringAgent()
-        state = run_agent_step(agent_mock, "PLAN_COMMIT", state, "恶意覆盖主项目 commit")
+        state = run_agent_step(
+            agent_mock, "PLAN_COMMIT", state, "恶意覆盖主项目 commit"
+        )
 
         self.assertIsNotNone(state.last_error)
         self.assertIn("Cannot commit canonical artifact", state.last_error)
-        logger.info("\n✅ [测试 2 通过] Write_artifact 中的结冰防护（ artifact_frozen=True ）生效并反馈给 Router！")
+        logger.info(
+            "\n✅ [测试 2 通过] Write_artifact 中的结冰防护（ artifact_frozen=True ）生效并反馈给 Router！"
+        )
 
 
 if __name__ == "__main__":

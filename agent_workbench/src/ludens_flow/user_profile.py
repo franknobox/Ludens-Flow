@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
@@ -12,7 +12,10 @@ logger = logging.getLogger(__name__)
 # 用户画像文件的读写入口。
 # 这里负责定位 USER_PROFILE.md、创建模板和合并追加条目。
 
-def _find_workspace_dir(start_path: Optional[Path] = None, project_id: Optional[str] = None) -> Path:
+
+def _find_workspace_dir(
+    start_path: Optional[Path] = None, project_id: Optional[str] = None
+) -> Path:
     """返回当前生效的工作区目录。"""
     _ = start_path
     return get_workspace_dir(resolve_project_id(project_id))
@@ -58,7 +61,9 @@ def load_profile(max_chars: int = 2000, project_id: Optional[str] = None) -> str
         return _TEMPLATE[:max_chars]
 
 
-def update_profile(entries: List[str], author: str = "agent", project_id: Optional[str] = None) -> bool:
+def update_profile(
+    entries: List[str], author: str = "agent", project_id: Optional[str] = None
+) -> bool:
     """把新条目追加到 USER_PROFILE.md，跳过空值和重复内容。"""
     if not entries:
         return False
@@ -81,7 +86,11 @@ def update_profile(entries: List[str], author: str = "agent", project_id: Option
             continue
         if value in text:
             continue
-        timestamp = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+        timestamp = (
+            datetime.now(timezone.utc)
+            .isoformat(timespec="seconds")
+            .replace("+00:00", "Z")
+        )
         appended_lines.append(f"- [{timestamp}] ({author}) {value}")
         changed = True
 

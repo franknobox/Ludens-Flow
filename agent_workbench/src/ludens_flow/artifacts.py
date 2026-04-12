@@ -3,49 +3,47 @@ import json
 import logging
 import os
 import tempfile
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Optional, Union
 
-from ludens_flow.paths import get_artifact_paths, get_dev_notes_dir, get_logs_dir, get_patches_dir, resolve_project_id
+from ludens_flow.paths import (
+    get_artifact_paths,
+    get_dev_notes_dir,
+    get_logs_dir,
+    get_patches_dir,
+    resolve_project_id,
+)
 from ludens_flow.state import LudensState, ArtifactMeta
 
 logger = logging.getLogger(__name__)
 
+
 def _artifacts_log_file(project_id: Optional[str] = None) -> Path:
     return get_logs_dir(resolve_project_id(project_id)) / "artifacts.log"
 
+
 # --- 1. 统一工件注册表 (Registry) ---
 # 定义每个核心工件的枚举名称、物理路径和唯一拥有的 Agent（单写入权）
-def _artifact_registry(project_id: Optional[str] = None) -> Dict[str, Dict[str, Union[str, Path]]]:
+def _artifact_registry(
+    project_id: Optional[str] = None,
+) -> Dict[str, Dict[str, Union[str, Path]]]:
     artifact_paths = get_artifact_paths(resolve_project_id(project_id))
     return {
-        "GDD": {
-            "path": artifact_paths["gdd"],
-            "owner": "DesignAgent"
-        },
-        "PROJECT_PLAN": {
-            "path": artifact_paths["pm"],
-            "owner": "PMAgent"
-        },
+        "GDD": {"path": artifact_paths["gdd"], "owner": "DesignAgent"},
+        "PROJECT_PLAN": {"path": artifact_paths["pm"], "owner": "PMAgent"},
         "IMPLEMENTATION_PLAN": {
             "path": artifact_paths["eng"],
-            "owner": "EngineeringAgent"
+            "owner": "EngineeringAgent",
         },
-        "REVIEW_REPORT": {
-            "path": artifact_paths["review"],
-            "owner": "ReviewAgent"
-        },
-        "DEVLOG": {
-            "path": artifact_paths["devlog"],
-            "owner": "EngineeringAgent"
-        }
+        "REVIEW_REPORT": {"path": artifact_paths["review"], "owner": "ReviewAgent"},
+        "DEVLOG": {"path": artifact_paths["devlog"], "owner": "EngineeringAgent"},
     }
 
 
 def _now_iso() -> str:
     """返回当前时间的 ISO 格式字符串"""
-    return datetime.utcnow().isoformat() + "Z"
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def compute_hash(content: str) -> str:
@@ -68,20 +66,27 @@ def read_artifact(name: str, project_id: Optional[str] = None) -> str:
     registry = _artifact_registry(project_id)
     if name not in registry:
         raise ValueError(f"Unknown artifact name: {name}")
-    
+
     path = registry[name]["path"]
-    
+
     if not path.exists():
         logger.warning(f"Artifact file {path} missing on read. Recreating empty file.")
         path.parent.mkdir(parents=True, exist_ok=True)
         path.touch()
         return ""
-        
+
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
 
 
-def write_artifact(name: str, content: str, reason: str, actor: str, state: LudensState, project_id: Optional[str] = None) -> LudensState:
+def write_artifact(
+    name: str,
+    content: str,
+    reason: str,
+    actor: str,
+    state: LudensState,
+    project_id: Optional[str] = None,
+) -> LudensState:
     """
     执行带版本控制和原子覆盖写入的工件保存。
     1. 冻结校验：若 state.artifact_frozen 为 True，无情拒绝
@@ -90,23 +95,25 @@ def write_artifact(name: str, content: str, reason: str, actor: str, state: Lude
     4. 更新传入的 state.artifacts 元数据 (version++, hash, timestamp)
     5. 记录追踪日志
     """
-    resolved = resolve_project_id(project_id if project_id is not None else getattr(state, "project_id", None))
+    resolved = resolve_project_id(
+        project_id if project_id is not None else getattr(state, "project_id", None)
+    )
     registry = _artifact_registry(resolved)
     if name not in registry:
         raise ValueError(f"Unknown artifact name: {name}")
-    
+
     # --- 0. 结冰校验 (Freeze Guard) ---
     if getattr(state, "artifact_frozen", False) and name != "DEVLOG":
-         raise PermissionError(
-             f"System is currently in DEV_COACHING (Artifact Frozen state). "
-             f"Canonical artifact '{name}' is locked and cannot be modified. "
-             f"Please use write_dev_note or write_patch instead."
-         )
-         
+        raise PermissionError(
+            f"System is currently in DEV_COACHING (Artifact Frozen state). "
+            f"Canonical artifact '{name}' is locked and cannot be modified. "
+            f"Please use write_dev_note or write_patch instead."
+        )
+
     registry_info = registry[name]
     expected_owner = registry_info["owner"]
     path: Path = registry_info["path"]
-    
+
     # --- 1. 单写入权校验 ---
     if actor != expected_owner:
         raise PermissionError(
@@ -136,7 +143,9 @@ def write_artifact(name: str, content: str, reason: str, actor: str, state: Lude
 
     # --- 2. 原子写文件 ---
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_path = tempfile.mkstemp(dir=str(path.parent), prefix=path.name + ".", suffix=".tmp", text=True)
+    fd, tmp_path = tempfile.mkstemp(
+        dir=str(path.parent), prefix=path.name + ".", suffix=".tmp", text=True
+    )
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(content)
@@ -153,23 +162,27 @@ def write_artifact(name: str, content: str, reason: str, actor: str, state: Lude
 
     # --- 3. 更新 state 内的元数据 ---
     new_hash = compute_hash(content)
-    
+
     meta.version += 1
     meta.hash = new_hash
     meta.updated_at = _now_iso()
     meta.update_reason = reason
-    
+
     # 写入 artifacts.log
     # 格式: ts | artifact | version | hash8 | actor | reason
     artifacts_log_file = _artifacts_log_file(resolved)
     artifacts_log_file.parent.mkdir(parents=True, exist_ok=True)
     with open(artifacts_log_file, "a", encoding="utf-8") as f:
-        f.write(f"[{meta.updated_at}] | artifact={name} | v{meta.version} | hash={new_hash[:8]} | actor={actor} | reason={reason}\n")
-    
+        f.write(
+            f"[{meta.updated_at}] | artifact={name} | v{meta.version} | hash={new_hash[:8]} | actor={actor} | reason={reason}\n"
+        )
+
     logger.info(f"Artifact {name} updated to v{meta.version} by {actor}.")
     return state
 
+
 # --- 安全写入通道 (Dev Coaching 期间使用) ---
+
 
 def write_dev_note(title: str, content: str, project_id: Optional[str] = None) -> Path:
     """
@@ -178,15 +191,15 @@ def write_dev_note(title: str, content: str, project_id: Optional[str] = None) -
     """
     dev_notes_dir = get_dev_notes_dir(resolve_project_id(project_id))
     dev_notes_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # 简单的清理处理，确保可用作文件名
     safe_title = "".join(c if c.isalnum() else "_" for c in title)
     filename = f"{safe_title}.md"
     path = dev_notes_dir / filename
-    
-    with open(path, "a", encoding="utf-8") as f: # 这里采追加模式，防盖掉历史
+
+    with open(path, "a", encoding="utf-8") as f:  # 这里采追加模式，防盖掉历史
         f.write("\n\n" + f"# {_now_iso()}\n" + content + "\n")
-        
+
     logger.info(f"Dev note saved to {path}.")
     return path
 
@@ -200,9 +213,9 @@ def write_patch(patch_id: str, content: str, project_id: Optional[str] = None) -
     patches_dir.mkdir(parents=True, exist_ok=True)
     filename = f"PATCH_{patch_id}.md"
     path = patches_dir / filename
-    
+
     with open(path, "w", encoding="utf-8") as f:
         f.write(content + "\n")
-        
+
     logger.info(f"Patch saved to {path}.")
     return path

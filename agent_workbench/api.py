@@ -2,8 +2,10 @@
 Ludens-Flow 前端 API：提供 state、chat、reset，供飞书风格 Web 前端调用。
 运行方式（在项目根目录）：uvicorn agent_workbench.api:app --reload
 """
+
 import logging
 import sys
+import threading
 from pathlib import Path
 
 _here = Path(__file__).resolve().parent
@@ -11,6 +13,7 @@ sys.path.insert(0, str(_here))
 sys.path.insert(0, str(_here / "src"))
 try:
     from dotenv import load_dotenv
+
     load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 except ImportError:
     pass
@@ -18,7 +21,12 @@ except ImportError:
 import ludens_flow.state as st
 from ludens_flow.graph import graph_step
 from ludens_flow.artifacts import read_artifact
-from ludens_flow.paths import create_project, list_projects, resolve_project_id, set_active_project_id
+from ludens_flow.paths import (
+    create_project,
+    list_projects,
+    resolve_project_id,
+    set_active_project_id,
+)
 
 # 复用 run_agents 的输入解析（含图片路径）
 from run_agents import parse_user_input
@@ -33,7 +41,12 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 app = FastAPI(title="Ludens-Flow API")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
+)
+
+_PROJECT_LOCKS: dict[str, threading.Lock] = {}
+_PROJECT_LOCKS_GUARD = threading.Lock()
 
 FRONTEND_DIR = Path(__file__).resolve().parent / "frontend"
 if FRONTEND_DIR.exists():
@@ -80,6 +93,15 @@ def _state_to_json(state) -> dict:
     }
 
 
+def _get_project_lock(project_id: str) -> threading.Lock:
+    with _PROJECT_LOCKS_GUARD:
+        lock = _PROJECT_LOCKS.get(project_id)
+        if lock is None:
+            lock = threading.Lock()
+            _PROJECT_LOCKS[project_id] = lock
+        return lock
+
+
 @app.on_event("startup")
 def startup():
     st.init_workspace()
@@ -103,37 +125,56 @@ def _build_user_input(message: str, images: list[str] | None):
         return payload if payload else (message.strip() or "")
     return parse_user_input(message)
 
+
 @app.post("/api/chat")
 def post_chat(req: ChatRequest):
-    state = st.load_state()
-    user_input = _build_user_input(req.message.strip(), req.images)
-    if not (isinstance(user_input, str) and user_input) and not (isinstance(user_input, list) and user_input):
-        return {"reply": "", "phase": state.phase, "error": "输入不能为空", "needs_decision": False}
-    try:
-        state = graph_step(state, user_input)
-        st.save_state(state)
-        reply = getattr(state, "last_assistant_message", "") or ""
-        state.last_assistant_message = None
-        st.save_state(state)
-        needs = state.phase == "POST_REVIEW_DECISION"
-        return {
-            "reply": reply,
-            "phase": state.phase,
-            "error": getattr(state, "last_error"),
-            "needs_decision": needs,
-            "review_gate": state.review_gate,
-        }
-    except Exception as e:
-        logger.exception("chat error")
-        state.last_error = str(e)
-        st.save_state(state)
-        return {"reply": "", "phase": state.phase, "error": str(e), "needs_decision": False}
+    project_id = resolve_project_id()
+    lock = _get_project_lock(project_id)
+
+    with lock:
+        state = st.load_state(project_id=project_id)
+        user_input = _build_user_input(req.message.strip(), req.images)
+        if not (isinstance(user_input, str) and user_input) and not (
+            isinstance(user_input, list) and user_input
+        ):
+            return {
+                "reply": "",
+                "phase": state.phase,
+                "error": "输入不能为空",
+                "needs_decision": False,
+            }
+
+        try:
+            state = graph_step(state, user_input)
+            reply = getattr(state, "last_assistant_message", "") or ""
+            state.last_assistant_message = None
+            st.save_state(state, project_id=project_id)
+            needs = state.phase == "POST_REVIEW_DECISION"
+            return {
+                "reply": reply,
+                "phase": state.phase,
+                "error": getattr(state, "last_error"),
+                "needs_decision": needs,
+                "review_gate": state.review_gate,
+            }
+        except Exception as e:
+            logger.exception("chat error")
+            state.last_error = str(e)
+            st.save_state(state, project_id=project_id)
+            return {
+                "reply": "",
+                "phase": state.phase,
+                "error": str(e),
+                "needs_decision": False,
+            }
 
 
 @app.post("/api/projects/current/reset")
 def post_reset_current_project():
     state = st.load_state()
-    state = st.reset_current_project_state(clear_images=True, project_id=getattr(state, "project_id", None))
+    state = st.reset_current_project_state(
+        clear_images=True, project_id=getattr(state, "project_id", None)
+    )
     return _state_to_json(state)
 
 
@@ -198,7 +239,9 @@ def get_workspace_file_content(file_id: str):
     for f in WORKSPACE_FILES:
         if f["id"] == file_id:
             try:
-                content = read_artifact(f["artifact"], project_id=getattr(state, "project_id", None))
+                content = read_artifact(
+                    f["artifact"], project_id=getattr(state, "project_id", None)
+                )
                 return {"id": file_id, "name": f["name"], "content": content}
             except Exception as e:
                 logger.warning(f"Read artifact {file_id}: {e}")

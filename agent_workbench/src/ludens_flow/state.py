@@ -4,9 +4,10 @@ import os
 import shutil
 import tempfile
 import time
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, Iterator, List, Optional, Union
 
 from ludens_flow.paths import (
     create_project,
@@ -45,12 +46,13 @@ LEGACY_ROOT_DIRS = {
 
 # --- 数据结构 ---
 
+
 @dataclass
 class ArtifactMeta:
     path: str
-    owner: str            # 负责写入的 Agent 名称（保障单写入权）
+    owner: str  # 负责写入的 Agent 名称（保障单写入权）
     version: int = 0
-    hash: str = ""        # 文件内容 hash
+    hash: str = ""  # 文件内容 hash
     updated_at: str = ""
     update_reason: str = ""
 
@@ -58,7 +60,9 @@ class ArtifactMeta:
 @dataclass
 class LudensState:
     """系统全局运行状态"""
+
     project_id: Optional[str] = None
+    revision: int = 0
 
     # 流程控制
     phase: str = "GDD_DISCUSS"
@@ -68,22 +72,24 @@ class LudensState:
 
     # 上下文参数
     style_preset: Optional[str] = None
-    
+
     # 状态数据
-    drafts: Dict[str, Dict[str, Any]] = field(default_factory=lambda: {"gdd": {}, "pm": {}, "eng": {}})
+    drafts: Dict[str, Dict[str, Any]] = field(
+        default_factory=lambda: {"gdd": {}, "pm": {}, "eng": {}}
+    )
     change_requests: List[Dict[str, Any]] = field(default_factory=list)
     decisions: List[str] = field(default_factory=list)
-    
+
     # 复杂网关：status, targets, issues
-    review_gate: Optional[Dict[str, Any]] = None  
+    review_gate: Optional[Dict[str, Any]] = None
     last_event: Optional[str] = None  # 用于 Router 处理自动跳转
     last_assistant_message: Optional[str] = None  # 用于向外部 CLI 抛出模型的自然语言
     last_error: Optional[str] = None
-    
+
     # 对话记忆：记录跨模型的流转对话上下文，格式为 {"role": "user/assistant", "content": "..."}
     chat_history: List[Dict[str, str]] = field(default_factory=list)
     transcript_history: List[Dict[str, str]] = field(default_factory=list)
-    
+
     # 文件元数据
     artifacts: Dict[str, ArtifactMeta] = field(default_factory=dict)
 
@@ -98,11 +104,11 @@ class LudensState:
         artifacts = {}
         for k, v in artifacts_raw.items():
             artifacts[k] = ArtifactMeta(**v)
-        
+
         # 过滤掉无法识别的过时字段，兼容未来版本平滑升级
         valid_keys = cls.__dataclass_fields__.keys()
         filtered_data = {k: v for k, v in data.items() if k in valid_keys}
-        
+
         state = cls(**filtered_data)
         state.artifacts = artifacts
         return state
@@ -118,8 +124,12 @@ def _artifact_owner_map() -> Dict[str, str]:
     }
 
 
-def _sync_artifact_meta(state: LudensState, project_id: Optional[str] = None) -> LudensState:
-    resolved = resolve_project_id(project_id if project_id is not None else state.project_id)
+def _sync_artifact_meta(
+    state: LudensState, project_id: Optional[str] = None
+) -> LudensState:
+    resolved = resolve_project_id(
+        project_id if project_id is not None else state.project_id
+    )
     artifact_paths = get_artifact_paths(resolved)
     owners = _artifact_owner_map()
 
@@ -203,7 +213,247 @@ def migrate_legacy_workspace_to_project(project_id: Optional[str] = None) -> lis
     return moved
 
 
+class StateConflictError(RuntimeError):
+    """Raised when state persistence detects stale in-memory revisions."""
+
+
+class StateLockTimeoutError(TimeoutError):
+    """Raised when waiting for project state file lock timed out."""
+
+
+class StateStore:
+    """Project-scoped state persistence with file lock, atomic writes and revisions."""
+
+    def __init__(
+        self,
+        *,
+        lock_timeout_seconds: float = 10.0,
+        lock_poll_interval_seconds: float = 0.05,
+        stale_lock_seconds: float = 120.0,
+    ) -> None:
+        self.lock_timeout_seconds = lock_timeout_seconds
+        self.lock_poll_interval_seconds = lock_poll_interval_seconds
+        self.stale_lock_seconds = stale_lock_seconds
+
+    def _resolve_state_path(
+        self, path: Optional[Union[str, Path]] = None, project_id: Optional[str] = None
+    ) -> tuple[str, Path]:
+        resolved = resolve_project_id(project_id)
+        migrate_legacy_workspace_to_project(resolved)
+        state_path = Path(path) if path is not None else get_state_file(resolved)
+        return resolved, state_path
+
+    def _lock_path(self, state_path: Path) -> Path:
+        return state_path.with_name(state_path.name + ".lock")
+
+    def _is_stale_lock(self, lock_path: Path) -> bool:
+        try:
+            age = time.time() - lock_path.stat().st_mtime
+        except FileNotFoundError:
+            return False
+        return age > self.stale_lock_seconds
+
+    @contextmanager
+    def _acquire_file_lock(self, state_path: Path) -> Iterator[None]:
+        lock_path = self._lock_path(state_path)
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+
+        started_at = time.time()
+        acquired = False
+
+        while not acquired:
+            try:
+                fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                try:
+                    payload = json.dumps(
+                        {
+                            "pid": os.getpid(),
+                            "acquired_at": started_at,
+                        }
+                    )
+                    os.write(fd, payload.encode("utf-8"))
+                finally:
+                    os.close(fd)
+                acquired = True
+            except FileExistsError:
+                if self._is_stale_lock(lock_path):
+                    try:
+                        lock_path.unlink(missing_ok=True)
+                    except OSError:
+                        pass
+
+                if time.time() - started_at >= self.lock_timeout_seconds:
+                    raise StateLockTimeoutError(
+                        f"Timed out acquiring state lock: {lock_path}"
+                    )
+                time.sleep(self.lock_poll_interval_seconds)
+
+        try:
+            yield
+        finally:
+            try:
+                lock_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    def _load_state_unlocked(self, state_path: Path, project_id: str) -> LudensState:
+        if not state_path.exists():
+            logger.info(f"State file {state_path} not found. Creating a new state.")
+            return init_state(project_id=project_id)
+
+        try:
+            with open(state_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            logger.info(f"Successfully loaded state from {state_path}.")
+            return _sync_artifact_meta(LudensState.from_dict(data), project_id)
+        except Exception as e:
+            timestamp = int(time.time())
+            backup_path = state_path.with_name(f"state.broken.{timestamp}.json")
+            try:
+                shutil.move(str(state_path), str(backup_path))
+                logger.error(
+                    f"Failed to load state: {e}. Bad file moved to {backup_path}. Returning new state."
+                )
+            except Exception as mv_err:
+                logger.error(
+                    f"Failed to load state and failed to backup bad file: {mv_err}. Returning new state."
+                )
+
+            return init_state(project_id=project_id)
+
+    def _read_revision_unlocked(self, state_path: Path) -> int:
+        if not state_path.exists():
+            return 0
+
+        try:
+            with open(state_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            return 0
+
+        raw_revision = data.get("revision", 0)
+        try:
+            revision = int(raw_revision)
+        except (TypeError, ValueError):
+            revision = 0
+        return max(revision, 0)
+
+    def _save_state_unlocked(
+        self,
+        state: LudensState,
+        state_path: Path,
+        project_id: str,
+        expected_revision: Optional[int] = None,
+    ) -> int:
+        state = _sync_artifact_meta(state, project_id)
+
+        base_revision = getattr(state, "revision", 0)
+        try:
+            base_revision = int(base_revision)
+        except (TypeError, ValueError):
+            base_revision = 0
+        base_revision = max(base_revision, 0)
+
+        if expected_revision is None:
+            expected_revision = base_revision
+
+        current_revision = self._read_revision_unlocked(state_path)
+        if current_revision != expected_revision:
+            raise StateConflictError(
+                f"State revision conflict for project '{project_id}': "
+                f"expected {expected_revision}, current {current_revision}."
+            )
+
+        new_revision = expected_revision + 1
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+
+        data_dict = state.to_dict()
+        data_dict["revision"] = new_revision
+
+        fd, tmp_path = tempfile.mkstemp(
+            dir=str(state_path.parent),
+            prefix=state_path.name + ".",
+            suffix=".tmp",
+            text=True,
+        )
+
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(data_dict, f, ensure_ascii=False, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+
+            os.replace(tmp_path, str(state_path))
+
+            if project_id:
+                touch_project(
+                    project_id,
+                    last_phase=state.phase,
+                    last_message_preview=_latest_assistant_preview(state),
+                )
+
+            state.revision = new_revision
+            logger.debug(
+                f"State successfully saved to {state_path} @ rev {new_revision}."
+            )
+            return new_revision
+        except Exception as e:
+            logger.error(f"Failed to save state to {state_path}: {e}")
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+            raise
+
+    def load(
+        self, path: Optional[Union[str, Path]] = None, project_id: Optional[str] = None
+    ) -> LudensState:
+        resolved, state_path = self._resolve_state_path(
+            path=path, project_id=project_id
+        )
+        with self._acquire_file_lock(state_path):
+            return self._load_state_unlocked(state_path, resolved)
+
+    def save(
+        self,
+        state: LudensState,
+        path: Optional[Union[str, Path]] = None,
+        project_id: Optional[str] = None,
+        expected_revision: Optional[int] = None,
+    ) -> int:
+        target_project = project_id if project_id is not None else state.project_id
+        resolved, state_path = self._resolve_state_path(
+            path=path, project_id=target_project
+        )
+        with self._acquire_file_lock(state_path):
+            return self._save_state_unlocked(
+                state,
+                state_path,
+                resolved,
+                expected_revision=expected_revision,
+            )
+
+    def reset(
+        self, clear_images: bool = True, project_id: Optional[str] = None
+    ) -> LudensState:
+        resolved, state_path = self._resolve_state_path(project_id=project_id)
+        with self._acquire_file_lock(state_path):
+            state_path.unlink(missing_ok=True)
+            _clear_artifact_files(resolved)
+            if clear_images:
+                clear_images_dir(resolved)
+            return self._load_state_unlocked(state_path, resolved)
+
+
+_STATE_STORE = StateStore()
+
+
+def get_state_store() -> StateStore:
+    return _STATE_STORE
+
+
 # --- 核心函数 ---
+
 
 def init_workspace(project_id: Optional[str] = None) -> None:
     """初始化运行工作区，确保必备目录与空文件存在"""
@@ -221,9 +471,16 @@ def init_workspace(project_id: Optional[str] = None) -> None:
     patches_dir = get_patches_dir(resolved)
     artifact_paths = get_artifact_paths(resolved)
 
-    for d in [workspace_dir, logs_dir, memory_dir, images_dir, dev_notes_dir, patches_dir]:
+    for d in [
+        workspace_dir,
+        logs_dir,
+        memory_dir,
+        images_dir,
+        dev_notes_dir,
+        patches_dir,
+    ]:
         d.mkdir(parents=True, exist_ok=True)
-        
+
     for path in artifact_paths.values():
         if not path.exists():
             path.touch()
@@ -263,17 +520,16 @@ def _clear_artifact_files(project_id: Optional[str] = None) -> None:
                     entry.unlink(missing_ok=True)
 
 
-def reset_current_project_state(clear_images: bool = True, project_id: Optional[str] = None) -> LudensState:
+def reset_current_project_state(
+    clear_images: bool = True, project_id: Optional[str] = None
+) -> LudensState:
     """Reset one project's persisted state, artifacts and optional image cache."""
-    resolved = resolve_project_id(project_id)
-    get_state_file(resolved).unlink(missing_ok=True)
-    _clear_artifact_files(resolved)
-    if clear_images:
-        clear_images_dir(resolved)
-    return load_state(project_id=resolved)
+    return get_state_store().reset(clear_images=clear_images, project_id=project_id)
 
 
-def reset_workspace_state(clear_images: bool = True, project_id: Optional[str] = None) -> LudensState:
+def reset_workspace_state(
+    clear_images: bool = True, project_id: Optional[str] = None
+) -> LudensState:
     """Compatibility alias for older callers."""
     return reset_current_project_state(clear_images=clear_images, project_id=project_id)
 
@@ -290,89 +546,56 @@ def init_state(project_id: Optional[str] = None) -> LudensState:
         artifacts={
             "gdd": ArtifactMeta(path=str(artifact_paths["gdd"]), owner="DesignAgent"),
             "pm": ArtifactMeta(path=str(artifact_paths["pm"]), owner="PMAgent"),
-            "eng": ArtifactMeta(path=str(artifact_paths["eng"]), owner="EngineeringAgent"),
-            "review": ArtifactMeta(path=str(artifact_paths["review"]), owner="ReviewAgent"),
-            "devlog": ArtifactMeta(path=str(artifact_paths["devlog"]), owner="EngineeringAgent"),
-        }
+            "eng": ArtifactMeta(
+                path=str(artifact_paths["eng"]), owner="EngineeringAgent"
+            ),
+            "review": ArtifactMeta(
+                path=str(artifact_paths["review"]), owner="ReviewAgent"
+            ),
+            "devlog": ArtifactMeta(
+                path=str(artifact_paths["devlog"]), owner="EngineeringAgent"
+            ),
+        },
     )
     return _sync_artifact_meta(state, resolved)
 
 
-def load_state(path: Optional[Union[str, Path]] = None, project_id: Optional[str] = None) -> LudensState:
-    """
-    加载持久化状态。
-    若文件不存在：返回全新初始状态。
-    若文件解析失败：备份坏档，并返回初始状态，防止死锁。
-    """
-    resolved = resolve_project_id(project_id)
-    migrate_legacy_workspace_to_project(resolved)
-    path = Path(path) if path is not None else get_state_file(resolved)
-    if not path.exists():
-        logger.info(f"State file {path} not found. Creating a new state.")
-        return init_state(project_id=resolved)
-
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        logger.info(f"Successfully loaded state from {path}.")
-        return _sync_artifact_meta(LudensState.from_dict(data), resolved)
-    except Exception as e:
-        # 文件损坏或格式错误
-        timestamp = int(time.time())
-        backup_path = path.with_name(f"state.broken.{timestamp}.json")
-        try:
-            shutil.move(str(path), str(backup_path))
-            logger.error(f"Failed to load state: {e}. Bad file moved to {backup_path}. Returning new state.")
-        except Exception as mv_err:
-            logger.error(f"Failed to load state and failed to backup bad file: {mv_err}. Returning new state.")
-            
-        return init_state(project_id=resolved)
+def load_state(
+    path: Optional[Union[str, Path]] = None, project_id: Optional[str] = None
+) -> LudensState:
+    return get_state_store().load(path=path, project_id=project_id)
 
 
-def save_state(state: LudensState, path: Optional[Union[str, Path]] = None, project_id: Optional[str] = None) -> None:
-    """
-    原子写入状态文件。
-    先写到同目录的 tmp 文件，再重命名覆盖，防止中途断电损坏文件。
-    """
-    resolved = resolve_project_id(project_id if project_id is not None else state.project_id)
-    state = _sync_artifact_meta(state, resolved)
-    path = Path(path) if path is not None else get_state_file(resolved)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if resolved:
-        touch_project(
-            resolved,
-            last_phase=state.phase,
-            last_message_preview=_latest_assistant_preview(state),
-        )
-    
-    # 将 state 转换为 dict，处理可能的特殊类型
-    data_dict = state.to_dict()
-    
-    # 建立临时文件描述符
-    fd, tmp_path = tempfile.mkstemp(dir=str(path.parent), prefix=path.name + ".", suffix=".tmp", text=True)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(data_dict, f, ensure_ascii=False, indent=2)
-            f.flush()
-            os.fsync(f.fileno()) # 确保内容刷新到磁盘
-        
-        # Windows 和 Unix 行为一致的覆盖方案
-        os.replace(tmp_path, str(path))
-        logger.debug(f"State successfully saved to {path}.")
-    except Exception as e:
-        logger.error(f"Failed to save state to {path}: {e}")
-        try:
-            os.remove(tmp_path)
-        except OSError:
-            pass
-        raise
+def save_state(
+    state: LudensState,
+    path: Optional[Union[str, Path]] = None,
+    project_id: Optional[str] = None,
+    expected_revision: Optional[int] = None,
+) -> None:
+    get_state_store().save(
+        state,
+        path=path,
+        project_id=project_id,
+        expected_revision=expected_revision,
+    )
+
 
 # --- 日志三件套写入工具 ---
 def _now_iso() -> str:
-    from datetime import datetime
-    return datetime.utcnow().isoformat() + "Z"
+    from datetime import datetime, timezone
 
-def write_trace_log(action: str, node: str, phase: str, frozen: bool, event_or_commit: str, error: str = "", project_id: Optional[str] = None) -> None:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def write_trace_log(
+    action: str,
+    node: str,
+    phase: str,
+    frozen: bool,
+    event_or_commit: str,
+    error: str = "",
+    project_id: Optional[str] = None,
+) -> None:
     """
     trace.log: 每个节点进入/退出
     entering: ts | node | phase | frozen | last_event
@@ -384,11 +607,25 @@ def write_trace_log(action: str, node: str, phase: str, frozen: bool, event_or_c
     ts = _now_iso()
     with open(trace_file, "a", encoding="utf-8") as f:
         if action.upper() == "ENTER":
-            f.write(f"[{ts}] ENTER | {node} | phase={phase} | frozen={frozen} | last_event={event_or_commit}\n")
+            f.write(
+                f"[{ts}] ENTER | {node} | phase={phase} | frozen={frozen} | last_event={event_or_commit}\n"
+            )
         elif action.upper() == "LEAVE":
-            f.write(f"[{ts}] LEAVE | {node} | commit={event_or_commit} | error={error}\n")
+            f.write(
+                f"[{ts}] LEAVE | {node} | commit={event_or_commit} | error={error}\n"
+            )
 
-def write_router_log(iteration: int, from_phase: str, to_phase: str, choice: str, gate: str, frozen: bool, reason: str, project_id: Optional[str] = None) -> None:
+
+def write_router_log(
+    iteration: int,
+    from_phase: str,
+    to_phase: str,
+    choice: str,
+    gate: str,
+    frozen: bool,
+    reason: str,
+    project_id: Optional[str] = None,
+) -> None:
     """
     router.log: 每次 Router 决策
     ts | iter | from_phase -> to_phase | choice | gate | frozen | reason
@@ -398,4 +635,6 @@ def write_router_log(iteration: int, from_phase: str, to_phase: str, choice: str
     router_file = logs_dir / "router.log"
     ts = _now_iso()
     with open(router_file, "a", encoding="utf-8") as f:
-        f.write(f"[{ts}] | iter={iteration} | {from_phase} -> {to_phase} | choice={choice} | gate={gate} | frozen={frozen} | reason={reason}\n")
+        f.write(
+            f"[{ts}] | iter={iteration} | {from_phase} -> {to_phase} | choice={choice} | gate={gate} | frozen={frozen} | reason={reason}\n"
+        )
