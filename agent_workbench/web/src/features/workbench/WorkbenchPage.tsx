@@ -302,6 +302,13 @@ export function WorkbenchPage() {
     if (!area) {
       return;
     }
+
+    const distanceToBottom = area.scrollHeight - area.scrollTop - area.clientHeight;
+    const shouldStickToBottom = distanceToBottom < 120 || Boolean(transientChat?.thinking);
+    if (!shouldStickToBottom) {
+      return;
+    }
+
     const id = window.requestAnimationFrame(() => {
       area.scrollTop = area.scrollHeight;
     });

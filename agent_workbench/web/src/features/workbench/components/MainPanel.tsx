@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { memo, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, KeyboardEvent, RefObject } from "react";
 
 import { agentName } from "../utils";
@@ -92,6 +92,101 @@ function renderFileView(
   );
 }
 
+interface AgentMessagesProps {
+  agentKey: AgentKey;
+  currentAgent: AgentKey;
+  readOnly: boolean;
+  requestInFlight: boolean;
+  historyByAgent: HistoryByAgent;
+  transientChat: TransientChat | null;
+  actions: WorkflowAction[];
+  onAction: (actionId: string) => void;
+}
+
+const AgentMessages = memo(function AgentMessages(props: AgentMessagesProps) {
+  const {
+    agentKey,
+    currentAgent,
+    readOnly,
+    requestInFlight,
+    historyByAgent,
+    transientChat,
+    actions,
+    onAction,
+  } = props;
+
+  const messageRows = useMemo(() => {
+    const rows: RenderMessage[] = [...(historyByAgent[agentKey] || [])];
+    if (transientChat && transientChat.agentKey === agentKey) {
+      rows.push({
+        role: "user",
+        content: transientChat.userText,
+        phase: transientChat.phase,
+      });
+      if (transientChat.thinking) {
+        rows.push({
+          role: "assistant",
+          content: "",
+          phase: transientChat.phase,
+          thinking: true,
+        });
+      }
+    }
+    return rows;
+  }, [agentKey, historyByAgent, transientChat]);
+
+  const MAX_RENDER_MESSAGES = 160;
+  const hiddenCount =
+    messageRows.length > MAX_RENDER_MESSAGES
+      ? messageRows.length - MAX_RENDER_MESSAGES
+      : 0;
+  const visibleRows =
+    hiddenCount > 0 ? messageRows.slice(-MAX_RENDER_MESSAGES) : messageRows;
+
+  const shouldRenderActions =
+    agentKey === currentAgent &&
+    !readOnly &&
+    !requestInFlight &&
+    actions.length > 0;
+
+  return (
+    <div className="messages">
+      {visibleRows.length ? (
+        <>
+          {hiddenCount > 0 ? (
+            <div className="history-hint">
+              已折叠较早消息 {hiddenCount} 条（仅渲染最近 {MAX_RENDER_MESSAGES} 条）。
+            </div>
+          ) : null}
+          {visibleRows.map((item, index) => renderMessageRow(agentKey, item, index))}
+        </>
+      ) : (
+        <div className="empty">
+          No conversation yet for {agentName(agentKey)} in this project.
+        </div>
+      )}
+
+      {shouldRenderActions ? (
+        <div className="message-actions">
+          <p className="title">流程选项</p>
+          <div className="row">
+            {actions.map((action) => (
+              <button
+                key={action.id}
+                type="button"
+                disabled={requestInFlight}
+                onClick={() => onAction(action.id)}
+              >
+                {action.label || action.id}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+});
+
 export function MainPanel(props: MainPanelProps) {
   const {
     currentView,
@@ -162,33 +257,6 @@ export function MainPanel(props: MainPanelProps) {
     }
   };
 
-  let messageRows: RenderMessage[] = [];
-  if (currentView.type === "agent") {
-    messageRows = [...(historyByAgent[currentView.id] || [])];
-    if (transientChat && transientChat.agentKey === currentView.id) {
-      messageRows.push({
-        role: "user",
-        content: transientChat.userText,
-        phase: transientChat.phase,
-      });
-      if (transientChat.thinking) {
-        messageRows.push({
-          role: "assistant",
-          content: "",
-          phase: transientChat.phase,
-          thinking: true,
-        });
-      }
-    }
-  }
-
-  const shouldRenderActions =
-    currentView.type === "agent" &&
-    currentView.id === currentAgent &&
-    !readOnly &&
-    !requestInFlight &&
-    actions.length > 0;
-
   return (
     <main className="main">
       <header className="main-header">
@@ -209,33 +277,16 @@ export function MainPanel(props: MainPanelProps) {
 
       <section className="content" ref={contentAreaRef}>
         {currentView.type === "agent" ? (
-          <div className="messages">
-            {messageRows.length ? (
-              messageRows.map((item, index) => renderMessageRow(currentView.id, item, index))
-            ) : (
-              <div className="empty">
-                No conversation yet for {agentName(currentView.id)} in this project.
-              </div>
-            )}
-
-            {shouldRenderActions ? (
-              <div className="message-actions">
-                <p className="title">流程选项</p>
-                <div className="row">
-                  {actions.map((action) => (
-                    <button
-                      key={action.id}
-                      type="button"
-                      disabled={requestInFlight}
-                      onClick={() => onAction(action.id)}
-                    >
-                      {action.label || action.id}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-          </div>
+          <AgentMessages
+            agentKey={currentView.id}
+            currentAgent={currentAgent}
+            readOnly={readOnly}
+            requestInFlight={requestInFlight}
+            historyByAgent={historyByAgent}
+            transientChat={transientChat}
+            actions={actions}
+            onAction={onAction}
+          />
         ) : (
           renderFileView(currentView, fileItems, fileCache)
         )}
