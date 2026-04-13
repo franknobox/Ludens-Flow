@@ -4,7 +4,7 @@
 
 这份文档面向 V3 阶段的整体设计框架与方向展望。
 
-它不替代当前的 [ROADMAP.md](/e:/GitDesktop/Ludens-Flow/docs/ROADMAP.md)，而是作为更上层的一版版本设计说明：
+它不替代当前的 [ROADMAP.md],而是作为更上层的一版版本设计说明：
 - `ROADMAP.md` 更偏当前阶段的持续推进项
 - 本文档更偏 V3 的系统形态、能力框架和版本愿景
 

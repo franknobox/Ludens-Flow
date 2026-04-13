@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ChangeEvent, KeyboardEvent } from "react";
 
 import { PHASE_LABEL } from "./constants";
 import { workbenchApi } from "./api";
@@ -15,7 +14,6 @@ import {
   transientMessageText,
 } from "./utils";
 import type {
-  AgentKey,
   ChatResponse,
   StateResponse,
   TransientChat,
@@ -66,27 +64,15 @@ function mergeChatResponse(
   };
 }
 
-function toDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
 export function WorkbenchPage() {
   const [model, setModel] = useState<WorkbenchStateModel>(INITIAL_MODEL);
   const [currentView, setCurrentView] = useState<ViewState>({ type: "agent", id: "design" });
   const [sidebarMode, setSidebarMode] = useState<"projects" | "project">("projects");
-  const [pendingImages, setPendingImages] = useState<string[]>([]);
   const [fileCache, setFileCache] = useState<Record<string, string>>({});
   const [requestInFlight, setRequestInFlight] = useState(false);
   const [transientChat, setTransientChat] = useState<TransientChat | null>(null);
-  const [inputText, setInputText] = useState("");
   const [errorText, setErrorText] = useState("");
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const contentAreaRef = useRef<HTMLElement>(null);
 
   const historyByAgent = useMemo(() => buildHistoryByAgent(model), [model]);
@@ -112,19 +98,22 @@ export function WorkbenchPage() {
     return "Current project is writable. State, artifacts, profile and logs stay inside this project.";
   }, [activeProject, model.artifact_frozen]);
 
-  const loadFilesContent = async (fileIds: string[]) => {
-    const nextCache: Record<string, string> = {};
-    await Promise.all(
-      fileIds.map(async (fileId) => {
-        try {
-          const data = await workbenchApi.getWorkspaceFileContent(fileId);
-          nextCache[fileId] = data.content || "";
-        } catch (error) {
-          nextCache[fileId] = `Load failed: ${toErrorMessage(error)}`;
-        }
-      }),
-    );
-    setFileCache(nextCache);
+  const syncStateOnly = async (): Promise<StateResponse> => {
+    const state = await workbenchApi.getState();
+    setModel((prev) => ({
+      ...toModelState(state),
+      projects: prev.projects,
+      files: prev.files,
+    }));
+    return state;
+  };
+
+  const syncProjectsOnly = async () => {
+    const data = await workbenchApi.getProjects();
+    setModel((prev) => ({
+      ...prev,
+      projects: data.projects || [],
+    }));
   };
 
   const hardRefresh = async () => {
@@ -139,18 +128,21 @@ export function WorkbenchPage() {
       projects: projects.projects || [],
       files: files.files || [],
     }));
-
-    await loadFilesContent((files.files || []).map((item) => item.id));
+    setFileCache((prev) => {
+      const validIds = new Set((files.files || []).map((item) => item.id));
+      const next: Record<string, string> = {};
+      Object.keys(prev).forEach((key) => {
+        if (validIds.has(key)) {
+          next[key] = prev[key];
+        }
+      });
+      return next;
+    });
 
     setCurrentView({
       type: "agent",
       id: state.current_agent || phaseToAgent(state.phase),
     });
-  };
-
-  const refreshAndClearTransient = async () => {
-    setTransientChat(null);
-    await hardRefresh();
   };
 
   const openProject = async (projectId: string) => {
@@ -171,6 +163,11 @@ export function WorkbenchPage() {
 
   const openFile = async (fileId: string) => {
     setCurrentView({ type: "file", id: fileId });
+
+    if (Object.prototype.hasOwnProperty.call(fileCache, fileId)) {
+      return;
+    }
+
     try {
       const data = await workbenchApi.getWorkspaceFileContent(fileId);
       setFileCache((prev) => ({ ...prev, [fileId]: data.content || "" }));
@@ -200,28 +197,19 @@ export function WorkbenchPage() {
     }
   };
 
-  const sendMessage = async () => {
-    if (currentView.type !== "agent" || readOnly || requestInFlight) {
-      return;
-    }
-
-    const text = inputText.trim();
-    if (!text && !pendingImages.length) {
+  const sendMessage = async (text: string, images: string[]) => {
+    if (!text && !images.length) {
       return;
     }
 
     setErrorText("");
     setRequestInFlight(true);
     setTransientChat({
-      agentKey: currentView.id,
+      agentKey: model.current_agent,
       phase: model.phase,
-      userText: transientMessageText(text, pendingImages.length),
+      userText: transientMessageText(text, images.length),
       thinking: true,
     });
-
-    const images = pendingImages.slice();
-    setPendingImages([]);
-    setInputText("");
 
     try {
       const response = await workbenchApi.postChat({
@@ -232,7 +220,14 @@ export function WorkbenchPage() {
         setErrorText(response.error);
       }
       setModel((prev) => mergeChatResponse(prev, response));
-      await refreshAndClearTransient();
+      setTransientChat(null);
+      setFileCache({});
+      const nextState = await syncStateOnly();
+      setCurrentView({
+        type: "agent",
+        id: nextState.current_agent || phaseToAgent(nextState.phase),
+      });
+      void syncProjectsOnly();
     } catch (error) {
       setTransientChat((prev) => (prev ? { ...prev, thinking: false } : prev));
       setErrorText("Request failed: " + toErrorMessage(error));
@@ -261,7 +256,14 @@ export function WorkbenchPage() {
         setErrorText(response.error);
       }
       setModel((prev) => mergeChatResponse(prev, response));
-      await refreshAndClearTransient();
+      setTransientChat(null);
+      setFileCache({});
+      const nextState = await syncStateOnly();
+      setCurrentView({
+        type: "agent",
+        id: nextState.current_agent || phaseToAgent(nextState.phase),
+      });
+      void syncProjectsOnly();
     } catch (error) {
       setTransientChat((prev) => (prev ? { ...prev, thinking: false } : prev));
       setErrorText("Action failed: " + toErrorMessage(error));
@@ -279,35 +281,10 @@ export function WorkbenchPage() {
     }
 
     await workbenchApi.resetCurrentProject();
-    setPendingImages([]);
     setTransientChat(null);
+    setFileCache({});
     setErrorText("");
     await hardRefresh();
-  };
-
-  const onInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      void sendMessage();
-    }
-  };
-
-  const onImageChange = async (event: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || []);
-    event.target.value = "";
-
-    const urls: string[] = [];
-    for (const file of files) {
-      if (!file.type.startsWith("image/")) continue;
-      try {
-        urls.push(await toDataUrl(file));
-      } catch {
-        // no-op
-      }
-    }
-    if (urls.length) {
-      setPendingImages((prev) => [...prev, ...urls]);
-    }
   };
 
   useEffect(() => {
@@ -380,20 +357,13 @@ export function WorkbenchPage() {
         requestInFlight={requestInFlight}
         fileItems={model.files}
         fileCache={fileCache}
-        inputText={inputText}
         errorText={errorText}
-        pendingImages={pendingImages}
         contentAreaRef={contentAreaRef}
-        fileInputRef={fileInputRef}
-        onInputTextChange={setInputText}
-        onSend={() => {
-          void sendMessage();
-        }}
-        onInputKeyDown={onInputKeyDown}
-        onAttachClick={() => fileInputRef.current?.click()}
-        onImageChange={onImageChange}
-        onRemoveImage={(index) => {
-          setPendingImages((prev) => prev.filter((_, i) => i !== index));
+        onSend={async (message, images) => {
+          if (currentView.type !== "agent" || readOnly || requestInFlight) {
+            return;
+          }
+          await sendMessage(message, images);
         }}
         onAction={(actionId) => {
           void sendAction(actionId);

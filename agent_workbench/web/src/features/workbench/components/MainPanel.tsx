@@ -1,3 +1,4 @@
+import { useRef, useState } from "react";
 import type { ChangeEvent, KeyboardEvent, RefObject } from "react";
 
 import { agentName } from "../utils";
@@ -26,18 +27,19 @@ interface MainPanelProps {
   requestInFlight: boolean;
   fileItems: WorkspaceFileItem[];
   fileCache: Record<string, string>;
-  inputText: string;
   errorText: string;
-  pendingImages: string[];
   contentAreaRef: RefObject<HTMLElement>;
-  fileInputRef: RefObject<HTMLInputElement>;
-  onInputTextChange: (value: string) => void;
-  onSend: () => void;
-  onInputKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
-  onAttachClick: () => void;
-  onImageChange: (event: ChangeEvent<HTMLInputElement>) => void;
-  onRemoveImage: (index: number) => void;
+  onSend: (message: string, images: string[]) => Promise<void>;
   onAction: (actionId: string) => void;
+}
+
+function toDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 function renderMessageRow(agentKey: AgentKey, item: RenderMessage, index: number) {
@@ -106,19 +108,59 @@ export function MainPanel(props: MainPanelProps) {
     requestInFlight,
     fileItems,
     fileCache,
-    inputText,
     errorText,
-    pendingImages,
     contentAreaRef,
-    fileInputRef,
-    onInputTextChange,
     onSend,
-    onInputKeyDown,
-    onAttachClick,
-    onImageChange,
-    onRemoveImage,
     onAction,
   } = props;
+
+  const [inputText, setInputText] = useState("");
+  const [pendingImages, setPendingImages] = useState<string[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleSend = async () => {
+    if (readOnly || requestInFlight) {
+      return;
+    }
+
+    const text = inputText.trim();
+    if (!text && !pendingImages.length) {
+      return;
+    }
+
+    const images = pendingImages.slice();
+    setPendingImages([]);
+    setInputText("");
+    await onSend(text, images);
+  };
+
+  const handleInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      void handleSend();
+    }
+  };
+
+  const handleImageChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = "";
+
+    const urls: string[] = [];
+    for (const file of files) {
+      if (!file.type.startsWith("image/")) {
+        continue;
+      }
+      try {
+        urls.push(await toDataUrl(file));
+      } catch {
+        // no-op
+      }
+    }
+
+    if (urls.length) {
+      setPendingImages((prev) => [...prev, ...urls]);
+    }
+  };
 
   let messageRows: RenderMessage[] = [];
   if (currentView.type === "agent") {
@@ -206,25 +248,39 @@ export function MainPanel(props: MainPanelProps) {
               rows={1}
               value={inputText}
               disabled={readOnly || requestInFlight}
-              onChange={(event) => onInputTextChange(event.target.value)}
-              onKeyDown={onInputKeyDown}
-                placeholder={
-                  readOnly
-                    ? `Read-only history. Current active agent is ${agentName(currentAgent)}.`
-                    : `Talk to ${agentName(currentView.id)} inside ${projectName}...`
-                }
-              />
+              onChange={(event) => setInputText(event.target.value)}
+              onKeyDown={handleInputKeyDown}
+              placeholder={
+                readOnly
+                  ? `Read-only history. Current active agent is ${agentName(currentAgent)}.`
+                  : `Talk to ${agentName(currentView.id)} inside ${projectName}...`
+              }
+            />
             <input
               ref={fileInputRef}
               type="file"
               accept="image/png,image/jpeg,image/webp,image/jpg"
               multiple
-              onChange={onImageChange}
+              onChange={(event) => {
+                void handleImageChange(event);
+              }}
             />
-            <button className="btn-line" type="button" disabled={readOnly || requestInFlight} onClick={onAttachClick}>
+            <button
+              className="btn-line"
+              type="button"
+              disabled={readOnly || requestInFlight}
+              onClick={() => fileInputRef.current?.click()}
+            >
               Image
             </button>
-            <button className="btn" type="button" disabled={readOnly || requestInFlight} onClick={onSend}>
+            <button
+              className="btn"
+              type="button"
+              disabled={readOnly || requestInFlight}
+              onClick={() => {
+                void handleSend();
+              }}
+            >
               Send
             </button>
           </div>
@@ -235,7 +291,11 @@ export function MainPanel(props: MainPanelProps) {
               {pendingImages.map((dataUrl, index) => (
                 <div className="thumb" key={`${dataUrl.slice(0, 24)}-${index}`}>
                   <img src={dataUrl} alt="" />
-                  <button className="remove" type="button" onClick={() => onRemoveImage(index)}>
+                  <button
+                    className="remove"
+                    type="button"
+                    onClick={() => setPendingImages((prev) => prev.filter((_, i) => i !== index))}
+                  >
                     x
                   </button>
                 </div>
