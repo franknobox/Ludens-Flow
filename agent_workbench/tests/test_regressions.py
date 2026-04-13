@@ -12,7 +12,11 @@ sys.path.insert(0, str(_ROOT / "src"))
 os.chdir(_ROOT)
 os.environ.setdefault(
     "LUDENS_WORKSPACE_DIR",
-    str((Path(tempfile.gettempdir()) / "ludens_flow_tests" / "test_regressions").resolve()),
+    str(
+        (
+            Path(tempfile.gettempdir()) / "ludens_flow_tests" / "test_regressions"
+        ).resolve()
+    ),
 )
 
 from ludens_flow.agents.base import AgentResult
@@ -21,7 +25,7 @@ from ludens_flow.agents.engineering_agent import EngineeringAgent
 from ludens_flow.agents.pm_agent import PMAgent
 from ludens_flow.artifacts import read_artifact, write_artifact
 from ludens_flow.graph import _merge_state_updates, run_agent_step
-from ludens_flow.state import init_state, init_workspace
+from ludens_flow.state import init_state, init_workspace, load_state
 
 
 class RegressionTests(unittest.TestCase):
@@ -33,7 +37,13 @@ class RegressionTests(unittest.TestCase):
         state.phase = "DEV_COACHING"
         state.artifact_frozen = True
 
-        write_artifact("DEVLOG", "coach notes", reason="test", actor="EngineeringAgent", state=state)
+        write_artifact(
+            "DEVLOG",
+            "coach notes",
+            reason="test",
+            actor="EngineeringAgent",
+            state=state,
+        )
 
         self.assertIn("devlog", state.artifacts)
         self.assertEqual(state.artifacts["devlog"].version, 1)
@@ -70,7 +80,9 @@ class RegressionTests(unittest.TestCase):
 
         state.style_preset = "B"
         commit_result = agent.plan_commit(state, "定稿")
-        self.assertEqual(commit_result.state_updates.get("decisions"), ["ENG committed"])
+        self.assertEqual(
+            commit_result.state_updates.get("decisions"), ["ENG committed"]
+        )
         self.assertNotIn("style_preset", commit_result.state_updates)
 
         state.style_preset = None
@@ -101,10 +113,12 @@ class RegressionTests(unittest.TestCase):
         agent.system_prompt = original_prompt
         agent.discuss = lambda *args, **kwargs: AgentResult(assistant_message="ok")
 
-        state = init_state(project_id="alpha")
+        state = load_state(project_id="alpha")
         state.phase = "GDD_DISCUSS"
 
-        with patch("ludens_flow.user_profile.load_profile", return_value="profile text") as mocked_load:
+        with patch(
+            "ludens_flow.user_profile.load_profile", return_value="profile text"
+        ) as mocked_load:
             run_agent_step(agent, "DISCUSS", state, "hello")
 
         mocked_load.assert_called_once_with(max_chars=2000, project_id="alpha")

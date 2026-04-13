@@ -13,6 +13,7 @@ sys.path.insert(0, str(SCRIPT_DIR / "src"))
 
 try:
     from dotenv import load_dotenv
+
     # run_agents.py is in agent_workbench/, so parent is the root dir where .env lives
     load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 except ImportError:
@@ -20,7 +21,15 @@ except ImportError:
 
 import ludens_flow.state as st
 from ludens_flow.graph import graph_step
-from ludens_flow.paths import create_project, list_projects, resolve_project_id, set_active_project_id
+from ludens_flow.paths import (
+    clear_project_unity_root,
+    create_project,
+    get_project_unity_root,
+    list_projects,
+    resolve_project_id,
+    set_active_project_id,
+    set_project_unity_root,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -35,7 +44,7 @@ def _extract_image_path_candidates(text: str) -> list[tuple[str, str]]:
         rf'(?P<matched>"(?P<path>[^"\r\n]+\.(?:{ext_pattern}))")',
         rf"(?P<matched>'(?P<path>[^'\r\n]+\.(?:{ext_pattern}))')",
         rf"(?P<matched>(?<!\S)(?P<path>(?:[A-Za-z]:[\\/]|\.{{1,2}}[\\/]|[\\/])[^\r\n<>|?*]+?\.(?:{ext_pattern}))(?=$|\s))",
-        rf'(?P<matched>(?<!\S)(?P<path>[A-Za-z0-9_.\-\\/]+\.(?:{ext_pattern}))(?=$|\s))',
+        rf"(?P<matched>(?<!\S)(?P<path>[A-Za-z0-9_.\-\\/]+\.(?:{ext_pattern}))(?=$|\s))",
     ]
 
     seen: set[tuple[str, str]] = set()
@@ -53,10 +62,11 @@ def _extract_image_path_candidates(text: str) -> list[tuple[str, str]]:
             candidates.append((matched_text, path_text))
     return candidates
 
+
 def parse_user_input(text: str) -> Union[str, list]:
     """
     Parse the user input for local file paths representing images.
-    If an image is found, convert the file to a base64 data URI and 
+    If an image is found, convert the file to a base64 data URI and
     return a multimodal payload list. Otherwise returning the string.
     """
     payload = []
@@ -69,53 +79,50 @@ def parse_user_input(text: str) -> Union[str, list]:
                 # 尝试使用 PIL 自动压缩过大的图片，防止 Token 超出大模型限制 (e.g 128k)
                 try:
                     from PIL import Image
+
                     with Image.open(path) as img:
                         # Convert to RGB to avoid issues with saving alpha channels as JPEG
                         if img.mode in ("RGBA", "P"):
                             img = img.convert("RGB")
-                            
+
                         # Resize if too large (e.g., max width/height 512 to strictly ensure < 128k base64 characters)
                         max_size = (512, 512)
                         img.thumbnail(max_size, Image.Resampling.LANCZOS)
-                        
+
                         # Compress and save to bytes
                         buffered = io.BytesIO()
                         img.save(buffered, format="JPEG", quality=75)
-                        base64_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
+                        base64_str = base64.b64encode(buffered.getvalue()).decode(
+                            "utf-8"
+                        )
                         mime_type = "image/jpeg"
-                        
+
                 except ImportError:
                     # 如果没有装 Pillow，回退到原始读取 (可能会超 token)
-                    logger.warning("Pillow (PIL) not installed. Large images might exceed LLM token limits. 'pip install Pillow' is recommended.")
+                    logger.warning(
+                        "Pillow (PIL) not installed. Large images might exceed LLM token limits. 'pip install Pillow' is recommended."
+                    )
                     with open(path, "rb") as image_file:
-                        base64_str = base64.b64encode(image_file.read()).decode('utf-8')
+                        base64_str = base64.b64encode(image_file.read()).decode("utf-8")
                     mime_type, _ = mimetypes.guess_type(path)
                     if not mime_type:
                         mime_type = "image/png"
-                    
+
                 data_uri = f"data:{mime_type};base64,{base64_str}"
-                
-                payload.append({
-                    "type": "image_url",
-                    "image_url": {
-                        "url": data_uri
-                    }
-                })
+
+                payload.append({"type": "image_url", "image_url": {"url": data_uri}})
                 # Remove the path from the text so it doesn't clutter the LLM context unnecessarily
                 text_content = text_content.replace(matched_text, "").strip()
             except Exception as e:
                 logger.warning(f"Could not read image file {path}: {e}")
-                
+
     if not payload:
         return text.strip()
-        
+
     # Prepend the text to the payload
     if text_content:
-        payload.insert(0, {
-            "type": "text",
-            "text": text_content
-        })
-        
+        payload.insert(0, {"type": "text", "text": text_content})
+
     return payload
 
 
@@ -128,17 +135,18 @@ def _safe_save_state(state) -> None:
     except Exception as e:
         logger.warning(f"Failed to save state: {e}")
 
+
 def main():
     logger.info("Initializing workspace...")
     st.init_workspace()
-    
+
     logger.info("Loading state...")
     state = st.load_state()
 
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print(" Ludens Flow V2 Graph Runner ")
-    print("="*50 + "\n")
-    
+    print("=" * 50 + "\n")
+
     while True:
         # 显示当前身位和重要错误
         phase = state.phase
@@ -148,41 +156,43 @@ def main():
         print(f"\n[Current Project]: {project_label}")
 
         if phase == "DEV_COACHING":
-            print("\n" + "★"*50)
+            print("\n" + "★" * 50)
             print(" 🎓 [DEV COACHING MODE ACTIVE] - ASK ME ANYTHING! ")
-            print("★"*50)
+            print("★" * 50)
             print("> You are now conversing with the Engineering Agent Coach.")
             print("> (Main artifacts are currently FROZEN. Type your questions below)")
         else:
             print(f"\n[Current Phase]: {phase}")
         if err:
             print(f"[⚠️ WARNING]: Recovered from error: {err}")
-            state.last_error = None # 显示过即消
+            state.last_error = None  # 显示过即消
             _safe_save_state(state)
-        
+
         # 对于特殊的等待节点，给出明确提示
         if phase == "POST_REVIEW_DECISION":
-             print("\n> [ACTION REQUIRED] Review completed. Please route next steps:")
-             print("  A: Redirect back to DISCUSS phase to fix targets.")
-             print("  B: Only fix BLOCK/MAJOR issues (skip minor ones).")
-             print("  C: Force Approve and proceed to DEV_COACHING.")
-             
+            print("\n> [ACTION REQUIRED] Review completed. Please route next steps:")
+            print("  A: Redirect back to DISCUSS phase to fix targets.")
+            print("  B: Only fix BLOCK/MAJOR issues (skip minor ones).")
+            print("  C: Force Approve and proceed to DEV_COACHING.")
+
         try:
             # 仅做纯净的 IO 与发送
             raw_input = input("\n[Ludens Flow]> ").strip()
-            
+
             if raw_input.lower() in ("exit", "quit", "q"):
                 logger.info("Saving state and exiting...")
                 _safe_save_state(state)
                 break
-                
+
             if not raw_input:
                 continue
-                
+
             if raw_input.lower() in ("/reset", "/restart"):
                 logger.info("Resetting current project state...")
                 # 重新加载（会自动拿到全新的纯净状态）
-                state = st.reset_current_project_state(clear_images=True, project_id=state.project_id)
+                state = st.reset_current_project_state(
+                    clear_images=True, project_id=state.project_id
+                )
                 print("\n✨ [System]: 记忆已清空，时空倒流回起点！")
                 continue
 
@@ -200,7 +210,7 @@ def main():
                 continue
 
             if raw_input.lower().startswith("/project new "):
-                project_id = raw_input[len("/project new "):].strip()
+                project_id = raw_input[len("/project new ") :].strip()
                 if not project_id:
                     print("Usage: /project new <project_id>")
                     continue
@@ -211,7 +221,7 @@ def main():
                 continue
 
             if raw_input.lower().startswith("/project use "):
-                project_id = raw_input[len("/project use "):].strip()
+                project_id = raw_input[len("/project use ") :].strip()
                 if not project_id:
                     print("Usage: /project use <project_id>")
                     continue
@@ -221,19 +231,48 @@ def main():
                 print(f"\n✨ [System]: 已切换到项目 {active_project}")
                 continue
 
+            if raw_input.lower().startswith("/unity bind "):
+                unity_root = raw_input[len("/unity bind ") :].strip().strip('"')
+                if not unity_root:
+                    print("Usage: /unity bind <unity_project_path>")
+                    continue
+                try:
+                    meta = set_project_unity_root(
+                        unity_root, project_id=state.project_id
+                    )
+                    print(
+                        f"\n✨ [System]: Unity 工程已绑定 -> {meta.get('unity_root', '')}"
+                    )
+                except Exception as e:
+                    print(f"\n[⚠️ WARNING]: Unity 绑定失败: {e}")
+                continue
+
+            if raw_input.lower() == "/unity unbind":
+                meta = clear_project_unity_root(project_id=state.project_id)
+                print(f"\n✨ [System]: 已解除 Unity 绑定 ({meta['id']})")
+                continue
+
+            if raw_input.lower() == "/unity status":
+                unity_root = get_project_unity_root(project_id=state.project_id)
+                if unity_root:
+                    print(f"\n[Unity Binding]: {unity_root}")
+                else:
+                    print("\n[Unity Binding]: (not bound)")
+                continue
+
             # Parse input for potential images
             user_input = parse_user_input(raw_input)
-            
+
             print("\n>> Graph Engine Working...\n")
             # 不包揽任何分发或修改权限，一律喂给 Graph
             state = graph_step(state, user_input)
-            
+
             # 若有模型自然语言返回，则立刻打印回显
             if getattr(state, "last_assistant_message", None):
                 print(f"\n[🤖 Agent Reply]:\n{state.last_assistant_message}\n")
                 state.last_assistant_message = None  # 显示完即消
                 _safe_save_state(state)
-             
+
         except EOFError:
             logger.info("No interactive stdin detected. Exiting CLI runner.")
             _safe_save_state(state)
@@ -248,6 +287,7 @@ def main():
             _safe_save_state(state)
             print("System halted safely. Run again to resume.")
             break
+
 
 if __name__ == "__main__":
     main()

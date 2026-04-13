@@ -13,6 +13,7 @@ ACTIVE_PROJECT_FILE = ".active_project"
 PROJECTS_DIR_NAME = "projects"
 PROJECT_META_FILE_NAME = "meta.json"
 DEFAULT_PROJECT_PREFIX = "project"
+_UNSET = object()
 
 # 统一管理仓库根目录、工作区根目录和项目级路径。
 # 运行时总是落在某个项目目录下；首次启动时自动创建第一个项目。
@@ -98,6 +99,7 @@ def _build_project_meta_record(
         "last_phase": meta.get("last_phase", ""),
         "archived": _coerce_bool(meta.get("archived", False)),
         "last_message_preview": meta.get("last_message_preview", ""),
+        "unity_root": meta.get("unity_root", ""),
     }
     if project_dir is not None:
         record["path"] = str(project_dir)
@@ -113,6 +115,7 @@ def _upsert_project_meta(
     last_phase: Optional[str] = None,
     archived: Optional[bool] = None,
     last_message_preview: Optional[str] = None,
+    unity_root: Any = _UNSET,
 ) -> Dict[str, Any]:
     normalized = _normalize_project_id(project_id)
     if not normalized:
@@ -141,6 +144,7 @@ def _upsert_project_meta(
         "last_phase": existing.get("last_phase", ""),
         "archived": _coerce_bool(existing.get("archived", False)),
         "last_message_preview": existing.get("last_message_preview", ""),
+        "unity_root": existing.get("unity_root", ""),
     }
 
     if last_phase is not None:
@@ -149,6 +153,8 @@ def _upsert_project_meta(
         meta["archived"] = bool(archived)
     if last_message_preview is not None:
         meta["last_message_preview"] = last_message_preview
+    if unity_root is not _UNSET:
+        meta["unity_root"] = str(unity_root or "")
 
     stored = _write_project_meta(normalized, meta)
     return _build_project_meta_record(normalized, stored, project_dir)
@@ -262,6 +268,7 @@ def create_project(
     title: Optional[str] = None,
     set_active: bool = False,
     archived: Optional[bool] = None,
+    unity_root: Any = _UNSET,
 ) -> Dict[str, Any]:
     """创建项目目录和基础元数据；已存在时刷新元数据。"""
     normalized = _normalize_project_id(project_id)
@@ -273,6 +280,7 @@ def create_project(
         display_name=display_name,
         title=title,
         archived=archived,
+        unity_root=unity_root,
     )
 
     if set_active:
@@ -289,6 +297,7 @@ def touch_project(
     last_phase: Optional[str] = None,
     archived: Optional[bool] = None,
     last_message_preview: Optional[str] = None,
+    unity_root: Any = _UNSET,
 ) -> Dict[str, Any]:
     """刷新项目元数据，用于记录最近活跃时间。"""
     normalized = _normalize_project_id(project_id)
@@ -303,7 +312,57 @@ def touch_project(
         last_phase=last_phase,
         archived=archived,
         last_message_preview=last_message_preview,
+        unity_root=unity_root,
     )
+
+
+def _normalize_unity_root(unity_root: str) -> str:
+    raw = str(unity_root or "").strip()
+    if not raw:
+        raise ValueError("Unity project path is required.")
+
+    candidate = Path(raw).expanduser()
+    candidate = (
+        candidate.resolve()
+        if candidate.is_absolute()
+        else (Path.cwd() / candidate).resolve()
+    )
+
+    if not candidate.exists() or not candidate.is_dir():
+        raise ValueError(
+            f"Unity project path does not exist or is not a directory: {candidate}"
+        )
+
+    assets_dir = candidate / "Assets"
+    project_settings_dir = candidate / "ProjectSettings"
+    if not assets_dir.exists() or not project_settings_dir.exists():
+        raise ValueError(
+            "Unity project path must contain both 'Assets' and 'ProjectSettings' directories."
+        )
+
+    return str(candidate)
+
+
+def set_project_unity_root(
+    unity_root: str, project_id: Optional[str] = None
+) -> Dict[str, Any]:
+    resolved = resolve_project_id(project_id)
+    normalized_path = _normalize_unity_root(unity_root)
+    return touch_project(resolved, unity_root=normalized_path)
+
+
+def clear_project_unity_root(project_id: Optional[str] = None) -> Dict[str, Any]:
+    resolved = resolve_project_id(project_id)
+    return touch_project(resolved, unity_root="")
+
+
+def get_project_unity_root(project_id: Optional[str] = None) -> Optional[str]:
+    resolved = resolve_project_id(project_id)
+    if not resolved:
+        return None
+    meta = _read_project_meta(resolved)
+    root = str(meta.get("unity_root", "")).strip()
+    return root or None
 
 
 def list_projects() -> List[Dict[str, Any]]:

@@ -5,7 +5,6 @@ from typing import Optional
 from ludens_flow.agents.base import BaseAgent, AgentResult, CommitSpec
 from ludens_flow.artifacts import read_artifact
 from ludens_flow.state import LudensState
-from ludens_flow.tools.search import SEARCH_TOOL_SCHEMA
 from llm.provider import LLMConfig
 
 logger = logging.getLogger(__name__)
@@ -13,12 +12,27 @@ logger = logging.getLogger(__name__)
 
 class EngineeringAgent(BaseAgent):
     """负责工程预设讨论、实施计划定稿和冻结后的开发辅导。"""
+
     name = "EngineeringAgent"
 
-    def discuss(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None, user_persona: Optional[str] = None) -> AgentResult:
-        raise NotImplementedError("EngineeringAgent uses plan_discuss and coach instead of discuss")
+    def discuss(
+        self,
+        state: LudensState,
+        user_input: str,
+        cfg: Optional[LLMConfig] = None,
+        user_persona: Optional[str] = None,
+    ) -> AgentResult:
+        raise NotImplementedError(
+            "EngineeringAgent uses plan_discuss and coach instead of discuss"
+        )
 
-    def commit(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None, user_persona: Optional[str] = None) -> AgentResult:
+    def commit(
+        self,
+        state: LudensState,
+        user_input: str,
+        cfg: Optional[LLMConfig] = None,
+        user_persona: Optional[str] = None,
+    ) -> AgentResult:
         raise NotImplementedError("EngineeringAgent uses plan_commit instead of commit")
 
     def _extract_style_preset(self, text: str) -> Optional[str]:
@@ -77,7 +91,9 @@ class EngineeringAgent(BaseAgent):
 
         return None
 
-    def _resolve_style_preset(self, state: LudensState, user_input: str = "") -> Optional[str]:
+    def _resolve_style_preset(
+        self, state: LudensState, user_input: str = ""
+    ) -> Optional[str]:
         """优先读本轮输入，其次读持久化状态，最后回看最近用户对话。"""
         detected = self._extract_style_preset(user_input)
         if detected:
@@ -95,7 +111,13 @@ class EngineeringAgent(BaseAgent):
 
         return None
 
-    def plan_discuss(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None, user_persona: Optional[str] = None) -> AgentResult:
+    def plan_discuss(
+        self,
+        state: LudensState,
+        user_input: str,
+        cfg: Optional[LLMConfig] = None,
+        user_persona: Optional[str] = None,
+    ) -> AgentResult:
         # 工程讨论依赖前置的 GDD / PROJECT_PLAN，必要时也带上当前 IMPLEMENTATION_PLAN。
         gdd = read_artifact("GDD", project_id=state.project_id)
         pm = read_artifact("PROJECT_PLAN", project_id=state.project_id)
@@ -121,17 +143,23 @@ class EngineeringAgent(BaseAgent):
             "4. 语气专业、清晰、友好，用自然语言回答。\n"
             "\n\n请严格仅输出一个合法的 JSON 对象，且不要包含任何多余的解释文字或注释。JSON 格式如下： \n"
             "{\n"
-            " \"reply\": \"显示给用户的自然语言回答\",\n"
-            " \"state_updates\": {},\n"
-            " \"profile_updates\": [\"[PROFILE_UPDATE] key: value\", ...],\n"
-            " \"events\": [],\n"
+            ' "reply": "显示给用户的自然语言回答",\n'
+            ' "state_updates": {},\n'
+            ' "profile_updates": ["[PROFILE_UPDATE] key: value", ...],\n'
+            ' "events": [],\n'
             "}\n"
             "重要：如果某字段无值，请使用 null、{} 或 [] 表示；不要输出多余文本。"
         )
 
         updates = {}
-        
-        raw = self._call(prompt, cfg, history=state.chat_history, tools=[SEARCH_TOOL_SCHEMA], user_persona=user_persona)
+
+        raw = self._call(
+            prompt,
+            cfg,
+            history=state.chat_history,
+            user_persona=user_persona,
+            project_id=state.project_id,
+        )
         parsed, remaining = self.parse_structured_response(raw)
         if parsed:
             assistant_text = parsed.get("reply", remaining or "")
@@ -143,27 +171,34 @@ class EngineeringAgent(BaseAgent):
             profile_updates = parsed.get("profile_updates", []) or []
             events = parsed.get("events", []) or []
             return AgentResult(
-                    assistant_message=(assistant_text or "").strip(),
-                    state_updates=state_updates,
-                    events=events,
-                    profile_updates=profile_updates
-                )
+                assistant_message=(assistant_text or "").strip(),
+                state_updates=state_updates,
+                events=events,
+                profile_updates=profile_updates,
+            )
 
-        reply = (raw or "")
+        reply = raw or ""
         if detected_style and detected_style != state.style_preset:
             updates["style_preset"] = detected_style
         reply += "\n\n**请选择接下来的操作：**\n[1] 继续讨论\n[2] 定稿并生成\n[3] 回退到上一步 (PM_DISCUSS)"
-        return AgentResult(
-                assistant_message=reply.strip(),
-                state_updates=updates
-            )
+        return AgentResult(assistant_message=reply.strip(), state_updates=updates)
 
-    def plan_commit(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None, user_persona: Optional[str] = None) -> AgentResult:
+    def plan_commit(
+        self,
+        state: LudensState,
+        user_input: str,
+        cfg: Optional[LLMConfig] = None,
+        user_persona: Optional[str] = None,
+    ) -> AgentResult:
         # 定稿态把已确认 preset 固化到 IMPLEMENTATION_PLAN。
         gdd = read_artifact("GDD", project_id=state.project_id)
         pm = read_artifact("PROJECT_PLAN", project_id=state.project_id)
         resolved_style = self._resolve_style_preset(state, user_input)
-        style = resolved_style or getattr(state, "style_preset", None) or "由本次对话记录决定"
+        style = (
+            resolved_style
+            or getattr(state, "style_preset", None)
+            or "由本次对话记录决定"
+        )
 
         prompt = (
             f"依照用户最终确认的工程预设：{style}\n\n"
@@ -176,7 +211,13 @@ class EngineeringAgent(BaseAgent):
             "3. 关键风险与替代方案：列出 2-3 个实现风险及 Plan B。\n"
             "请直接输出 Markdown 正文，不要加额外前后缀。\n"
         )
-        final_eng = self._call(prompt, cfg, history=state.chat_history, tools=[SEARCH_TOOL_SCHEMA], user_persona=user_persona)
+        final_eng = self._call(
+            prompt,
+            cfg,
+            history=state.chat_history,
+            user_persona=user_persona,
+            project_id=state.project_id,
+        )
 
         logger.info("[EngineeringAgent] Commit generated.")
         updates = {"decisions": ["ENG committed"]}
@@ -194,7 +235,9 @@ class EngineeringAgent(BaseAgent):
             events=["ENG_COMMITTED"],
         )
 
-    def coach(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None) -> AgentResult:
+    def coach(
+        self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None
+    ) -> AgentResult:
         # DEV_COACHING 只做辅导，不改主工件。
         impl_plan = read_artifact("IMPLEMENTATION_PLAN", project_id=state.project_id)
         resolved_style = self._resolve_style_preset(state, user_input)
@@ -213,7 +256,12 @@ class EngineeringAgent(BaseAgent):
             "5. 最后询问用户是否需要更详细的 Unity 操作步骤或发给 Coding Agent 的完整代码指令。\n"
         )
 
-        reply = self._call(prompt, cfg, history=state.chat_history, tools=[SEARCH_TOOL_SCHEMA])
+        reply = self._call(
+            prompt,
+            cfg,
+            history=state.chat_history,
+            project_id=state.project_id,
+        )
         logger.info("[EngineeringAgent] Coach instruction issued.")
 
         updates = {}

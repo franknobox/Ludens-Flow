@@ -15,17 +15,24 @@ import re
 
 class PMAgent(BaseAgent):
     """负责项目计划阶段的讨论、范围收敛和定稿。"""
+
     name = "PMAgent"
 
-    def discuss(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None, user_persona: Optional[str] = None) -> AgentResult:
+    def discuss(
+        self,
+        state: LudensState,
+        user_input: str,
+        cfg: Optional[LLMConfig] = None,
+        user_persona: Optional[str] = None,
+    ) -> AgentResult:
         # 回流修改时，把现有 PROJECT_PLAN 一起带入讨论。
         gdd_content = read_artifact("GDD", project_id=state.project_id)
         existing_pm = read_artifact("PROJECT_PLAN", project_id=state.project_id)
-        
+
         pm_context = ""
         if existing_pm.strip():
             pm_context = f"**当前已有的 PROJECT_PLAN 文档内容**（如果是回流修改阶段，请在此基础上修订）：\n{existing_pm}\n\n"
-        
+
         # discuss 负责排期、范围和 MVP 收敛，不直接落盘正式计划。
         prompt = (
             f"已有 GDD：\n{gdd_content}\n\n"
@@ -38,14 +45,20 @@ class PMAgent(BaseAgent):
             "4. 以自然语言流畅地回复用户，不带任何特殊格式标签。\n"
             "\n\n请严格仅输出一个合法的 JSON 对象，且不要包含任何多余的解释文字或注释。JSON 格式如下： \n"
             "{\n"
-            " \"reply\": \"显示给用户的自然语言回答\",\n"
-            " \"state_updates\": {},\n"
-            " \"profile_updates\": [\"[PROFILE_UPDATE] key: value\", ...],\n"
-            " \"events\": [],\n"
+            ' "reply": "显示给用户的自然语言回答",\n'
+            ' "state_updates": {},\n'
+            ' "profile_updates": ["[PROFILE_UPDATE] key: value", ...],\n'
+            ' "events": [],\n'
             "}\n"
             "重要：如果某字段无值，请使用 null、{} 或 [] 表示；不要输出多余文本。"
         )
-        raw = self._call(prompt, cfg, history=state.chat_history, user_persona=user_persona)
+        raw = self._call(
+            prompt,
+            cfg,
+            history=state.chat_history,
+            user_persona=user_persona,
+            project_id=state.project_id,
+        )
         parsed, remaining = self.parse_structured_response(raw)
         if parsed:
             assistant_text = parsed.get("reply", remaining or "")
@@ -58,21 +71,24 @@ class PMAgent(BaseAgent):
                 assistant_message=(assistant_text or "").strip(),
                 state_updates=state_updates,
                 events=events,
-                profile_updates=profile_updates
+                profile_updates=profile_updates,
             )
 
-        reply = (raw or "")
+        reply = raw or ""
         updates = {}
         reply += "\n\n**请选择接下来的操作：**\n[1] 继续讨论\n[2] 定稿并生成\n[3] 回退到上一步 (GDD_DISCUSS)"
-        return AgentResult(
-            assistant_message=reply.strip(),
-            state_updates=updates
-        )
+        return AgentResult(assistant_message=reply.strip(), state_updates=updates)
 
-    def commit(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None, user_persona: Optional[str] = None) -> AgentResult:
+    def commit(
+        self,
+        state: LudensState,
+        user_input: str,
+        cfg: Optional[LLMConfig] = None,
+        user_persona: Optional[str] = None,
+    ) -> AgentResult:
         # commit 输出最终 PROJECT_PLAN，并解析附带的变更请求。
         gdd_content = read_artifact("GDD", project_id=state.project_id)
-        
+
         prompt = (
             f"已有 GDD：\n{gdd_content}\n\n"
             "请基于我们之前的完整讨论记录，输出一份适合独立游戏或 Game Jam 项目的 PROJECT_PLAN.md，要求：\n"
@@ -84,43 +100,56 @@ class PMAgent(BaseAgent):
             "格式：\n"
             "<<CHANGE_REQUEST_JSON>>\n"
             "{\n"
-            "  \"change_requests\": [\n"
-            "    {\"target\": \"GDD\", \"rationale\": \"缺少对核心循环结束条件的描述\", \"suggested_changes\": \"要求补充通关机制或无尽模式声明\", \"severity\": \"High\"}\n"
+            '  "change_requests": [\n'
+            '    {"target": "GDD", "rationale": "缺少对核心循环结束条件的描述", "suggested_changes": "要求补充通关机制或无尽模式声明", "severity": "High"}\n'
             "  ]\n"
             "}\n"
             "<<END_CHANGE_REQUEST_JSON>>\n"
             "如果没有缺项，可以不输出此 JSON。你的 Markdown 正文不应被代码块包裹，请直接以 Markdown 标题起手。"
         )
-        final_pm_output = self._call(prompt, cfg, history=state.chat_history, user_persona=user_persona)
-        
+        final_pm_output = self._call(
+            prompt,
+            cfg,
+            history=state.chat_history,
+            user_persona=user_persona,
+            project_id=state.project_id,
+        )
+
         updates = {}
         final_pm = final_pm_output
-        
-        cr_pattern = r"<<CHANGE_REQUEST_JSON>>\s*(\{.*?\})\s*<<END_CHANGE_REQUEST_JSON>>"
+
+        cr_pattern = (
+            r"<<CHANGE_REQUEST_JSON>>\s*(\{.*?\})\s*<<END_CHANGE_REQUEST_JSON>>"
+        )
         cr_match = re.search(cr_pattern, final_pm_output, re.DOTALL)
-        
+
         if cr_match:
             try:
                 cr_data = json.loads(cr_match.group(1))
                 if "change_requests" in cr_data:
                     # 这里只回传本轮新请求，具体合并由 Graph 统一处理。
                     updates["change_requests"] = cr_data["change_requests"]
-                    logger.info(f"[PMAgent] Detected and appended {len(cr_data['change_requests'])} ChangeRequest(s).")
-                final_pm = final_pm_output[:cr_match.start()].strip() + final_pm_output[cr_match.end():].strip()
+                    logger.info(
+                        f"[PMAgent] Detected and appended {len(cr_data['change_requests'])} ChangeRequest(s)."
+                    )
+                final_pm = (
+                    final_pm_output[: cr_match.start()].strip()
+                    + final_pm_output[cr_match.end() :].strip()
+                )
             except Exception as e:
                 logger.warning(f"Failed to parse PM ChangeRequest JSON: {e}")
 
         updates["decisions"] = ["PM committed"]
 
         logger.info("[PMAgent] Commit generated.")
-        
+
         return AgentResult(
             assistant_message="项目管理规划书 (PROJECT_PLAN) 已定稿。\n\n**系统即将自动流转至技术(ENG)阶段。**\n\n*输入任意内容进入下一阶段*",
             state_updates=updates,
             commit=CommitSpec(
                 artifact_name="PROJECT_PLAN",
                 content=final_pm,
-                reason="PM Commit Sequence Initiated"
+                reason="PM Commit Sequence Initiated",
             ),
-            events=["PM_COMMITTED"]
+            events=["PM_COMMITTED"],
         )

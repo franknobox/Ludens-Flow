@@ -60,7 +60,11 @@ class ReviewAgent(BaseAgent):
         )
 
         final_report = self._call(
-            prompt, cfg, history=state.chat_history, user_persona=user_persona
+            prompt,
+            cfg,
+            history=state.chat_history,
+            user_persona=user_persona,
+            project_id=state.project_id,
         )
         gate_dict, final_report_md = self._parse_json_gate(final_report)
         status = gate_dict.get("status", "REQUEST_CHANGES")

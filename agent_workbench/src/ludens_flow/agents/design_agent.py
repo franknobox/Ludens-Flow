@@ -11,17 +11,25 @@ logger = logging.getLogger(__name__)
 
 class DesignAgent(BaseAgent):
     """负责 GDD 阶段的讨论和定稿。"""
+
     name = "DesignAgent"
 
-    def discuss(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None, user_persona: Optional[str] = None) -> AgentResult:
+    def discuss(
+        self,
+        state: LudensState,
+        user_input: str,
+        cfg: Optional[LLMConfig] = None,
+        user_persona: Optional[str] = None,
+    ) -> AgentResult:
         # 回流修改时，把当前 GDD 一并带入讨论上下文。
         from ludens_flow.artifacts import read_artifact
+
         existing_gdd = read_artifact("GDD", project_id=state.project_id)
-        
+
         gdd_context = ""
         if existing_gdd.strip():
             gdd_context = f"**当前已有的 GDD 文档内容**（如果是回流修改阶段，请在此基础上修订而非从零开始）：\n{existing_gdd}\n\n"
-        
+
         # discuss 只收敛需求和玩法方向，不直接生成最终工件。
         prompt = (
             f"{gdd_context}"
@@ -34,15 +42,21 @@ class DesignAgent(BaseAgent):
             "5. 保持轻松、活泼、富有创造力的对话节奏。\n"
             "\n\n请严格仅输出一个合法的 JSON 对象，且不要包含任何多余的解释文字或注释。JSON 格式如下： \n"
             "{\n"
-            " \"reply\": \"显示给用户的自然语言回答\",\n"
-            " \"state_updates\": {},\n"
-            " \"profile_updates\": [\"[PROFILE_UPDATE] key: value\", ...],\n"
-            " \"events\": [],\n"
+            ' "reply": "显示给用户的自然语言回答",\n'
+            ' "state_updates": {},\n'
+            ' "profile_updates": ["[PROFILE_UPDATE] key: value", ...],\n'
+            ' "events": [],\n'
             "}\n"
             "重要：如果某字段无值，请使用 null、{} 或 [] 表示；不要输出多余文本。"
         )
-        
-        raw = self._call(prompt, cfg, history=state.chat_history, user_persona=user_persona)
+
+        raw = self._call(
+            prompt,
+            cfg,
+            history=state.chat_history,
+            user_persona=user_persona,
+            project_id=state.project_id,
+        )
 
         # 尝试解析结构化 JSON 响应。
         parsed, remaining = self.parse_structured_response(raw)
@@ -57,18 +71,21 @@ class DesignAgent(BaseAgent):
                 assistant_message=(assistant_text or "").strip(),
                 state_updates=state_updates,
                 events=events,
-                profile_updates=profile_updates
+                profile_updates=profile_updates,
             )
 
         # 无JSON
-        reply = (raw or "")
+        reply = raw or ""
         reply += "\n\n**请选择接下来的操作：**\n[1] 继续讨论\n[2] 定稿并生成\n[3] 回退到上一步 (已是初始阶段)"
-        return AgentResult(
-            assistant_message=reply.strip(),
-            state_updates={}
-        )
+        return AgentResult(assistant_message=reply.strip(), state_updates={})
 
-    def commit(self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None, user_persona: Optional[str] = None) -> AgentResult:
+    def commit(
+        self,
+        state: LudensState,
+        user_input: str,
+        cfg: Optional[LLMConfig] = None,
+        user_persona: Optional[str] = None,
+    ) -> AgentResult:
         # commit 直接输出可落盘的最终版 GDD。
         prompt = (
             "请基于我们之前的完整讨论记录，将其中已经明确的信息整合为一份规范化 GDD (Game Design Document) Markdown 文档。\n"
@@ -84,18 +101,24 @@ class DesignAgent(BaseAgent):
             "   - 【💡 创意变体】：用简洁的 1-2 句话提供 2 种玩法衍生变体方向，激发后续迭代灵感。\n"
             "重要：你的整篇输出将会被原封不动保存。除 Markdown 正文外，**不要**输出多余的解释首尾语。"
         )
-        final_gdd = self._call(prompt, cfg, history=state.chat_history, user_persona=user_persona)
+        final_gdd = self._call(
+            prompt,
+            cfg,
+            history=state.chat_history,
+            user_persona=user_persona,
+            project_id=state.project_id,
+        )
         logger.info("[DesignAgent] Commit generated.")
-        
+
         decisions = ["GDD committed"]
-        
+
         return AgentResult(
             assistant_message="GDD 已定稿出炉，正交付总控归档。\n\n**系统即将自动流转至项目管理(PM)阶段。**\n\n*输入任意内容进入下一阶段*",
             state_updates={"decisions": decisions},
             commit=CommitSpec(
                 artifact_name="GDD",
                 content=final_gdd,
-                reason="User confirmed commit via router"
+                reason="User confirmed commit via router",
             ),
-            events=["GDD_COMMITTED"]
+            events=["GDD_COMMITTED"],
         )

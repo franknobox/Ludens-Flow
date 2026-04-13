@@ -1,5 +1,5 @@
 """
-Ludens-Flow 前端 API：提供 state、chat、reset，供飞书风格 Web 前端调用。
+Ludens-Flow 前端 API：提供 state、chat、reset，供 Web 前端调用。
 运行方式（在项目根目录）：uvicorn agent_workbench.api:app --reload
 """
 
@@ -22,9 +22,12 @@ import ludens_flow.state as st
 from ludens_flow.graph import graph_step
 from ludens_flow.artifacts import read_artifact
 from ludens_flow.paths import (
+    clear_project_unity_root,
     create_project,
+    get_project_unity_root,
     list_projects,
     resolve_project_id,
+    set_project_unity_root,
     set_active_project_id,
 )
 
@@ -62,6 +65,10 @@ class ProjectRequest(BaseModel):
     project_id: str
     display_name: str | None = None
     title: str | None = None
+
+
+class UnityBindRequest(BaseModel):
+    unity_root: str
 
 
 def _phase_to_agent_key(phase: str | None) -> str:
@@ -130,10 +137,42 @@ def _build_user_input(message: str, images: list[str] | None):
 def post_chat(req: ChatRequest):
     project_id = resolve_project_id()
     lock = _get_project_lock(project_id)
+    user_message = req.message.strip()
 
     with lock:
         state = st.load_state(project_id=project_id)
-        user_input = _build_user_input(req.message.strip(), req.images)
+
+        if user_message.lower().startswith("/unity bind "):
+            unity_root = user_message[len("/unity bind ") :].strip().strip('"')
+            try:
+                meta = set_project_unity_root(unity_root, project_id=project_id)
+                return {
+                    "reply": f"Unity project bound: {meta.get('unity_root', '')}",
+                    "phase": state.phase,
+                    "error": None,
+                    "needs_decision": False,
+                    "review_gate": state.review_gate,
+                }
+            except Exception as e:
+                return {
+                    "reply": "",
+                    "phase": state.phase,
+                    "error": str(e),
+                    "needs_decision": False,
+                    "review_gate": state.review_gate,
+                }
+
+        if user_message.lower() == "/unity unbind":
+            meta = clear_project_unity_root(project_id=project_id)
+            return {
+                "reply": f"Unity project unbound for {meta['id']}.",
+                "phase": state.phase,
+                "error": None,
+                "needs_decision": False,
+                "review_gate": state.review_gate,
+            }
+
+        user_input = _build_user_input(user_message, req.images)
         if not (isinstance(user_input, str) and user_input) and not (
             isinstance(user_input, list) and user_input
         ):
@@ -176,6 +215,41 @@ def post_reset_current_project():
         clear_images=True, project_id=getattr(state, "project_id", None)
     )
     return _state_to_json(state)
+
+
+@app.get("/api/projects/current/unity")
+def get_current_project_unity_binding():
+    project_id = resolve_project_id()
+    unity_root = get_project_unity_root(project_id)
+    exists = bool(unity_root and Path(unity_root).exists())
+    return {
+        "project_id": project_id,
+        "unity_root": unity_root,
+        "bound": bool(unity_root),
+        "exists": exists,
+    }
+
+
+@app.post("/api/projects/current/unity/bind")
+def post_current_project_unity_bind(req: UnityBindRequest):
+    project_id = resolve_project_id()
+    meta = set_project_unity_root(req.unity_root, project_id=project_id)
+    return {
+        "project_id": project_id,
+        "unity_root": meta.get("unity_root", ""),
+        "bound": bool(meta.get("unity_root", "")),
+    }
+
+
+@app.post("/api/projects/current/unity/unbind")
+def post_current_project_unity_unbind():
+    project_id = resolve_project_id()
+    meta = clear_project_unity_root(project_id=project_id)
+    return {
+        "project_id": project_id,
+        "unity_root": meta.get("unity_root", ""),
+        "bound": False,
+    }
 
 
 @app.post("/api/reset")
