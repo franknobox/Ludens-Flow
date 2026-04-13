@@ -194,3 +194,4 @@ workspace/**
 !workspace/README.md
 
 agent_workbench/workspace/
+agent_workbench/web/node_modules/

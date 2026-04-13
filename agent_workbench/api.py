@@ -52,9 +52,11 @@ app.add_middleware(
 _PROJECT_LOCKS: dict[str, threading.Lock] = {}
 _PROJECT_LOCKS_GUARD = threading.Lock()
 
-FRONTEND_DIR = Path(__file__).resolve().parent / "frontend"
-if FRONTEND_DIR.exists():
-    app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
+WEB_DIST_DIR = Path(__file__).resolve().parent / "web" / "dist"
+STATIC_DIR = WEB_DIST_DIR
+
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
 class ChatRequest(BaseModel):
@@ -391,7 +393,9 @@ def get_workspace_file_content(file_id: str):
 
 @app.get("/")
 def index():
-    index_file = FRONTEND_DIR / "index.html"
+    index_file = WEB_DIST_DIR / "index.html"
     if index_file.exists():
         return FileResponse(index_file)
-    return {"message": "Ludens-Flow API. Mount frontend at /static and add index at /"}
+    return {
+        "message": "Ludens-Flow API. Build web frontend and mount static assets at /static."
+    }

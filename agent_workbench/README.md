@@ -61,27 +61,26 @@ python agent_workbench/run_agents.py
 
 ### 方式 B：Web 工作台
 
-在项目根目录运行：
+前置条件（首次机器环境）：
 
-```bash
-python -m uvicorn agent_workbench.api:app --reload
-```
+- 已安装 Python 3.10+（用于 FastAPI / Uvicorn）
+- 已安装 Node.js 18+（用于首次构建前端）
 
-默认访问地址：
-
-```text
-http://127.0.0.1:8010/
-```
-
-如果你在 IDE 里启动，推荐直接使用仓库内脚本：
+同源产品模式：
 
 ```powershell
 .\agent_workbench\scripts\start_web.ps1
 ```
 
-如果使用 VS Code，也可以直接运行任务：
+访问：`http://127.0.0.1:8010/`
 
-- `Ludens: Start Web Workbench`
+热更新开发模式：
+
+```powershell
+.\agent_workbench\scripts\start_web.ps1 -FrontendMode dev
+```
+
+访问：`http://127.0.0.1:4173/`（前端）和 `http://127.0.0.1:8010/`（API）
 
 ## 工作流阶段
 
@@ -144,10 +143,7 @@ workspace/
 
 ## 当前实现说明
 
-当前前端是一个由 FastAPI 提供的静态单页工作台，不是独立 Node 前端工程。
+当前前端已迁移为 `Vite + React + TypeScript`（目录：`agent_workbench/web/`），并保持与原先工作台基本一致的外观与交互。
 
-这意味着：
-
-- 打开 Web 工作台时，需要有 `uvicorn` 进程在运行
-- 页面上的聊天、项目列表、文件查看都实时请求 `/api/...`
-- 如果服务停掉，页面也就无法继续工作
+- 生产/演示模式：使用 `npm run build` 后由 FastAPI 同源托管静态资源。
+- 开发联调模式：使用 Vite Dev Server（默认 `4173`）+ FastAPI API（默认 `8010`）。
