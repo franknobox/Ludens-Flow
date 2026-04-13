@@ -62,8 +62,6 @@ class PMAgent(BaseAgent):
         parsed, remaining = self.parse_structured_response(raw)
         if parsed:
             assistant_text = parsed.get("reply", remaining or "")
-            menu = "\n\n**请选择接下来的操作：**\n[1] 继续讨论\n[2] 定稿并生成\n[3] 回退到上一步 (GDD_DISCUSS)"
-            assistant_text = (assistant_text or "") + menu
             state_updates = parsed.get("state_updates", {}) or {}
             profile_updates = parsed.get("profile_updates", []) or []
             events = parsed.get("events", []) or []
@@ -76,7 +74,6 @@ class PMAgent(BaseAgent):
 
         reply = raw or ""
         updates = {}
-        reply += "\n\n**请选择接下来的操作：**\n[1] 继续讨论\n[2] 定稿并生成\n[3] 回退到上一步 (GDD_DISCUSS)"
         return AgentResult(assistant_message=reply.strip(), state_updates=updates)
 
     def commit(

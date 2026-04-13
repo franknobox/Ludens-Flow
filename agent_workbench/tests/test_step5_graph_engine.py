@@ -153,19 +153,29 @@ class Step5GraphEngineTests(unittest.TestCase):
 
         logger.info("[1] Graph: GDD 节点推演")
         state = graph_step(state, "我要做一个类似杀戮尖塔的游戏")
-        state = graph_step(state, "2 定稿生成")
+        state = graph_step(
+            state, "[ACTION] 定稿并生成 GDD", explicit_action="gdd_commit"
+        )
         state = graph_step(state, "")
         self.assertEqual(state.phase, Phase.PM_DISCUSS.value)
 
         logger.info("[2] Graph: PM 节点推演")
         state = graph_step(state, "3个人，开发2周")
-        state = graph_step(state, "2 定稿生成")
+        state = graph_step(
+            state,
+            "[ACTION] 定稿并生成 PROJECT_PLAN",
+            explicit_action="pm_commit",
+        )
         state = graph_step(state, "")
         self.assertEqual(state.phase, Phase.ENG_DISCUSS.value)
 
         logger.info("[3] Graph: ENG 节点推演")
         state = graph_step(state, "用 Unity 和 MVC")
-        state = graph_step(state, "2 定稿并生成")
+        state = graph_step(
+            state,
+            "[ACTION] 定稿并生成 IMPLEMENTATION_PLAN",
+            explicit_action="eng_commit",
+        )
         state = graph_step(state, "")
         self.assertEqual(state.phase, Phase.REVIEW.value)
 
@@ -175,7 +185,11 @@ class Step5GraphEngineTests(unittest.TestCase):
         self.assertEqual(state.phase, Phase.DEV_COACHING.value)
 
         logger.info("[5] Graph: POST_REVIEW_DECISION => 用户选 C 进入 DEV_COACHING")
-        state = graph_step(state, "c")
+        state = graph_step(
+            state,
+            "[ACTION] C: 强制进入 DEV_COACHING",
+            explicit_action="review_option_c",
+        )
         self.assertEqual(state.phase, Phase.DEV_COACHING.value)
         self.assertIn("status", state.review_gate)
         self.assertTrue(getattr(state, "artifact_frozen", False))

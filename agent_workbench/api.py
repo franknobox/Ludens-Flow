@@ -21,6 +21,7 @@ except ImportError:
 import ludens_flow.state as st
 from ludens_flow.graph import graph_step
 from ludens_flow.artifacts import read_artifact
+from ludens_flow.router import action_user_input, get_available_actions
 from ludens_flow.paths import (
     clear_project_unity_root,
     create_project,
@@ -71,6 +72,10 @@ class UnityBindRequest(BaseModel):
     unity_root: str
 
 
+class ActionRequest(BaseModel):
+    action: str
+
+
 def _phase_to_agent_key(phase: str | None) -> str:
     if not phase:
         return "system"
@@ -86,6 +91,7 @@ def _phase_to_agent_key(phase: str | None) -> str:
 
 
 def _state_to_json(state) -> dict:
+    actions = get_available_actions(state)
     return {
         "project_id": getattr(state, "project_id", None),
         "phase": state.phase,
@@ -97,6 +103,8 @@ def _state_to_json(state) -> dict:
         "last_assistant_message": getattr(state, "last_assistant_message", None),
         "last_error": getattr(state, "last_error"),
         "review_gate": getattr(state, "review_gate"),
+        "actions": actions,
+        "needs_decision": bool(actions),
     }
 
 
@@ -150,16 +158,18 @@ def post_chat(req: ChatRequest):
                     "reply": f"Unity project bound: {meta.get('unity_root', '')}",
                     "phase": state.phase,
                     "error": None,
-                    "needs_decision": False,
+                    "needs_decision": bool(get_available_actions(state)),
                     "review_gate": state.review_gate,
+                    "actions": get_available_actions(state),
                 }
             except Exception as e:
                 return {
                     "reply": "",
                     "phase": state.phase,
                     "error": str(e),
-                    "needs_decision": False,
+                    "needs_decision": bool(get_available_actions(state)),
                     "review_gate": state.review_gate,
+                    "actions": get_available_actions(state),
                 }
 
         if user_message.lower() == "/unity unbind":
@@ -168,8 +178,9 @@ def post_chat(req: ChatRequest):
                 "reply": f"Unity project unbound for {meta['id']}.",
                 "phase": state.phase,
                 "error": None,
-                "needs_decision": False,
+                "needs_decision": bool(get_available_actions(state)),
                 "review_gate": state.review_gate,
+                "actions": get_available_actions(state),
             }
 
         user_input = _build_user_input(user_message, req.images)
@@ -180,7 +191,8 @@ def post_chat(req: ChatRequest):
                 "reply": "",
                 "phase": state.phase,
                 "error": "输入不能为空",
-                "needs_decision": False,
+                "needs_decision": bool(get_available_actions(state)),
+                "actions": get_available_actions(state),
             }
 
         try:
@@ -188,23 +200,77 @@ def post_chat(req: ChatRequest):
             reply = getattr(state, "last_assistant_message", "") or ""
             state.last_assistant_message = None
             st.save_state(state, project_id=project_id)
-            needs = state.phase == "POST_REVIEW_DECISION"
+            actions = get_available_actions(state)
             return {
                 "reply": reply,
                 "phase": state.phase,
                 "error": getattr(state, "last_error"),
-                "needs_decision": needs,
+                "needs_decision": bool(actions),
                 "review_gate": state.review_gate,
+                "actions": actions,
             }
         except Exception as e:
             logger.exception("chat error")
             state.last_error = str(e)
             st.save_state(state, project_id=project_id)
+            actions = get_available_actions(state)
             return {
                 "reply": "",
                 "phase": state.phase,
                 "error": str(e),
-                "needs_decision": False,
+                "needs_decision": bool(actions),
+                "actions": actions,
+            }
+
+
+@app.post("/api/actions")
+def post_action(req: ActionRequest):
+    project_id = resolve_project_id()
+    lock = _get_project_lock(project_id)
+
+    with lock:
+        state = st.load_state(project_id=project_id)
+        actions = get_available_actions(state)
+        allowed_ids = {item["id"] for item in actions}
+        action_id = req.action.strip().lower()
+
+        if action_id not in allowed_ids:
+            return {
+                "reply": "",
+                "phase": state.phase,
+                "error": f"Invalid action '{req.action}' for current phase.",
+                "needs_decision": bool(actions),
+                "review_gate": state.review_gate,
+                "actions": actions,
+            }
+
+        try:
+            synthetic_input = action_user_input(action_id)
+            state = graph_step(state, synthetic_input, explicit_action=action_id)
+            reply = getattr(state, "last_assistant_message", "") or ""
+            state.last_assistant_message = None
+            st.save_state(state, project_id=project_id)
+            next_actions = get_available_actions(state)
+            return {
+                "reply": reply,
+                "phase": state.phase,
+                "error": getattr(state, "last_error"),
+                "needs_decision": bool(next_actions),
+                "review_gate": state.review_gate,
+                "actions": next_actions,
+            }
+        except Exception as e:
+            logger.exception("action error")
+            state.last_error = str(e)
+            st.save_state(state, project_id=project_id)
+            actions = get_available_actions(state)
+            return {
+                "reply": "",
+                "phase": state.phase,
+                "error": str(e),
+                "needs_decision": bool(actions),
+                "review_gate": state.review_gate,
+                "actions": actions,
             }
 
 

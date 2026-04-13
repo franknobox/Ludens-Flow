@@ -27,15 +27,15 @@ class RouterTests(unittest.TestCase):
         state = init_state()
 
         state.phase = Phase.PM_DISCUSS.value
-        next_phase, _, _ = route(state, "1")
+        next_phase, _, _ = route(state, "继续聊聊")
         self.assertEqual(next_phase, Phase.PM_DISCUSS.value)
 
         state.phase = Phase.PM_DISCUSS.value
-        next_phase, _, _ = route(state, "定稿")
+        next_phase, _, _ = route(state, "", explicit_action="pm_commit")
         self.assertEqual(next_phase, Phase.PM_COMMIT.value)
 
         state.phase = Phase.PM_DISCUSS.value
-        next_phase, _, _ = route(state, "3")
+        next_phase, _, _ = route(state, "", explicit_action="pm_back")
         self.assertEqual(next_phase, Phase.GDD_DISCUSS.value)
 
     def test_default_commit_event_transitions(self):
@@ -52,7 +52,11 @@ class RouterTests(unittest.TestCase):
     def test_review_done_without_decision_pauses_for_user(self):
         state = init_state()
         state.phase = Phase.REVIEW.value
-        state.review_gate = {"status": "REQUEST_CHANGES", "targets": ["PM"], "issues": []}
+        state.review_gate = {
+            "status": "REQUEST_CHANGES",
+            "targets": ["PM"],
+            "issues": [],
+        }
 
         next_phase, _, _ = route(state, "", last_event="REVIEW_DONE")
         self.assertEqual(next_phase, Phase.POST_REVIEW_DECISION.value)
@@ -67,7 +71,7 @@ class RouterTests(unittest.TestCase):
             "issues": [{"target": "ENG", "severity": "MINOR"}],
         }
 
-        next_phase, _, updates = route(state, "a")
+        next_phase, _, updates = route(state, "", explicit_action="review_option_a")
         self.assertEqual(next_phase, Phase.ENG_DISCUSS.value)
         self.assertEqual(updates.get("iteration_count"), 1)
 
@@ -80,7 +84,7 @@ class RouterTests(unittest.TestCase):
             "issues": [{"target": "ENG", "severity": "MINOR"}],
         }
 
-        next_phase, _, updates = route(state, "b")
+        next_phase, _, updates = route(state, "", explicit_action="review_option_b")
         self.assertEqual(next_phase, Phase.DEV_COACHING.value)
         self.assertTrue(updates.get("artifact_frozen"))
 
@@ -89,16 +93,20 @@ class RouterTests(unittest.TestCase):
             {"target": "ENG", "severity": "MINOR"},
             {"target": "PM", "severity": "MAJOR"},
         ]
-        next_phase, _, updates = route(state, "b")
+        next_phase, _, updates = route(state, "", explicit_action="review_option_b")
         self.assertEqual(next_phase, Phase.PM_DISCUSS.value)
         self.assertEqual(updates.get("iteration_count"), 1)
 
     def test_post_review_option_c_enters_dev_coaching(self):
         state = init_state()
         state.phase = Phase.POST_REVIEW_DECISION.value
-        state.review_gate = {"status": "REQUEST_CHANGES", "targets": ["GDD"], "issues": []}
+        state.review_gate = {
+            "status": "REQUEST_CHANGES",
+            "targets": ["GDD"],
+            "issues": [],
+        }
 
-        next_phase, _, updates = route(state, "c")
+        next_phase, _, updates = route(state, "", explicit_action="review_option_c")
         self.assertEqual(next_phase, Phase.DEV_COACHING.value)
         self.assertTrue(updates.get("artifact_frozen"))
 

@@ -95,10 +95,7 @@ class ReviewAgent(BaseAgent):
             score_text = "N/A"
 
         msg = f"终极评审揭晓！裁决判定：**{status}** (系统评定分: {score_text})\n\n"
-        msg += "**请对本次评审做出指示：**\n"
-        msg += "[A] 接受建议（携带问题报告回流对应阶段）\n"
-        msg += "[B] 仅重做重点（剔除小瑕疵，仅为 BLOCK/MAJOR 缺陷打回）\n"
-        msg += "[C] 全盘忽略（不管不顾，强制定权封包，进入开发模式）\n"
+        msg += "请在下方流程选项中选择下一步操作。"
 
         return AgentResult(
             assistant_message=msg,

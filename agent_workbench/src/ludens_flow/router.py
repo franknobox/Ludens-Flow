@@ -24,6 +24,90 @@ class Phase(str, Enum):
     DEV_COACHING = "DEV_COACHING"
 
 
+PHASE_ACTIONS: Dict[str, List[Dict[str, str]]] = {
+    Phase.GDD_DISCUSS.value: [
+        {
+            "id": "gdd_commit",
+            "label": "定稿并生成 GDD",
+            "description": "结束当前讨论并生成 GDD 文档。",
+        }
+    ],
+    Phase.PM_DISCUSS.value: [
+        {
+            "id": "pm_commit",
+            "label": "定稿并生成 PROJECT_PLAN",
+            "description": "结束 PM 讨论并生成项目计划。",
+        },
+        {
+            "id": "pm_back",
+            "label": "回退到 GDD",
+            "description": "返回 GDD 阶段继续澄清需求。",
+        },
+    ],
+    Phase.ENG_DISCUSS.value: [
+        {
+            "id": "eng_commit",
+            "label": "定稿并生成 IMPLEMENTATION_PLAN",
+            "description": "结束工程讨论并生成实施计划。",
+        },
+        {
+            "id": "eng_back",
+            "label": "回退到 PM",
+            "description": "返回 PM 阶段调整排期和范围。",
+        },
+    ],
+    Phase.POST_REVIEW_DECISION.value: [
+        {
+            "id": "review_option_a",
+            "label": "A: 接受建议并回流",
+            "description": "按评审 targets 回流到对应阶段。",
+        },
+        {
+            "id": "review_option_b",
+            "label": "B: 仅修 BLOCK/MAJOR",
+            "description": "仅针对严重问题回流。",
+        },
+        {
+            "id": "review_option_c",
+            "label": "C: 强制进入 DEV_COACHING",
+            "description": "忽略回流，直接进入开发辅导。",
+        },
+    ],
+}
+
+
+ACTION_USER_TEXT: Dict[str, str] = {
+    "gdd_commit": "[ACTION] 定稿并生成 GDD",
+    "pm_commit": "[ACTION] 定稿并生成 PROJECT_PLAN",
+    "pm_back": "[ACTION] 回退到 GDD",
+    "eng_commit": "[ACTION] 定稿并生成 IMPLEMENTATION_PLAN",
+    "eng_back": "[ACTION] 回退到 PM",
+    "review_option_a": "[ACTION] A: 接受建议并回流",
+    "review_option_b": "[ACTION] B: 仅修 BLOCK/MAJOR",
+    "review_option_c": "[ACTION] C: 强制进入 DEV_COACHING",
+}
+
+
+def get_phase_actions(phase: Optional[str]) -> List[Dict[str, str]]:
+    resolved_phase = phase or Phase.GDD_DISCUSS.value
+    return [dict(item) for item in PHASE_ACTIONS.get(resolved_phase, [])]
+
+
+def get_available_actions(state: LudensState) -> List[Dict[str, str]]:
+    return get_phase_actions(getattr(state, "phase", None))
+
+
+def action_user_input(action_id: str) -> str:
+    return ACTION_USER_TEXT.get(action_id, f"[ACTION] {action_id}")
+
+
+def _is_action_allowed(phase: str, action_id: Optional[str]) -> bool:
+    if not action_id:
+        return False
+    allowed_ids = {item["id"] for item in get_phase_actions(phase)}
+    return action_id in allowed_ids
+
+
 def _log_route(
     old_phase: str,
     new_phase: str,
@@ -90,7 +174,10 @@ def _get_backflow_phase(targets: List[str]) -> str:
 
 
 def route(
-    state: LudensState, user_input: str, last_event: Optional[str] = None
+    state: LudensState,
+    user_input: str,
+    last_event: Optional[str] = None,
+    explicit_action: Optional[str] = None,
 ) -> Tuple[str, str, Dict[str, Any]]:
     """
     中央路由逻辑 (State Machine)
@@ -136,23 +223,17 @@ def route(
     next_phase = current_phase
     explanation = "Stay in current phase by default."
 
-    # --- 统一解析用户意图（防误触修正） ---
-    # 规则：必须是单独敲击数字，或者句子极短(<=6)且包含关键字，防止长句闲谈如“生成式关卡”导致意外定稿
-    is_short_cmd = len(user_text) <= 8
+    # --- 统一解析工作流动作（仅接受显式选项，不做自由文本意图猜测） ---
+    action = str(explicit_action or "").strip().lower()
+    if action and not _is_action_allowed(current_phase, action):
+        action = ""
 
-    wants_commit = user_text == "2" or (
-        is_short_cmd and any(k in user_text for k in ["定稿", "commit"])
-    )
-    wants_stay = user_text == "1" or (
-        is_short_cmd and any(k in user_text for k in ["继续", "再聊", "讨论"])
-    )
-    wants_back = user_text == "3" or (
-        is_short_cmd and any(k in user_text for k in ["回退", "返回"])
-    )
+    wants_commit = action in {"gdd_commit", "pm_commit", "eng_commit"}
+    wants_back = action in {"pm_back", "eng_back"}
 
-    opt_a = user_text == "a" or (is_short_cmd and "建议" in user_text)
-    opt_b = user_text == "b" or (is_short_cmd and "只改" in user_text)
-    opt_c = user_text == "c" or (is_short_cmd and "不改" in user_text)
+    opt_a = action == "review_option_a"
+    opt_b = action == "review_option_b"
+    opt_c = action == "review_option_c"
 
     wants_unfreeze = any(
         k in user_text for k in ["解冻", "修改工件", "重新评审", "开启新迭代"]
@@ -190,8 +271,6 @@ def route(
         if wants_commit:
             next_phase = Phase.GDD_COMMIT.value
             explanation = "User chose to commit GDD."
-        elif wants_back:
-            explanation = "Cannot go back from initial phase."
         else:
             explanation = "Continuing GDD discussion."
 
@@ -343,5 +422,27 @@ def ludens_router_logic(state: LudensState, user_input: str) -> RouterResult:
     if "artifact_frozen" in ups:
         state.artifact_frozen = ups["artifact_frozen"]
         # 将这些更新后的底层值刷回图大盘，使得其它 Node 对冰封敏感
+
+    return RouterResult(next_phase=nxt, explanation=exp)
+
+
+def ludens_router_logic_with_action(
+    state: LudensState, user_input: str, explicit_action: Optional[str] = None
+) -> RouterResult:
+    """支持显式 workflow action 的路由封装。"""
+    last_event = getattr(state, "last_event", None)
+    nxt, exp, ups = route(
+        state,
+        user_input,
+        last_event,
+        explicit_action=explicit_action,
+    )
+
+    state.last_event = None
+
+    if "iteration_count" in ups:
+        state.iteration_count = ups["iteration_count"]
+    if "artifact_frozen" in ups:
+        state.artifact_frozen = ups["artifact_frozen"]
 
     return RouterResult(next_phase=nxt, explanation=exp)

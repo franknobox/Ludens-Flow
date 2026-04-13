@@ -3,7 +3,7 @@ from typing import Tuple, Dict, Any, Optional
 
 from ludens_flow.state import LudensState, save_state, write_trace_log
 from ludens_flow.artifacts import write_artifact
-from ludens_flow.router import ludens_router_logic, Phase
+from ludens_flow.router import ludens_router_logic_with_action, Phase
 from ludens_flow.agents.base import AgentResult
 
 # 引入各个单体 Agent，避免重复实例化
@@ -378,9 +378,18 @@ def run_agent_step(
 class RouterNode:
     """负责 phase 跳转，以及切换时的上下文整理。"""
 
-    def execute(self, state: LudensState, user_input: str) -> str:
+    def execute(
+        self,
+        state: LudensState,
+        user_input: str,
+        explicit_action: Optional[str] = None,
+    ) -> str:
         # 先由 router 决定下一阶段。
-        result = ludens_router_logic(state, user_input)
+        result = ludens_router_logic_with_action(
+            state,
+            user_input,
+            explicit_action=explicit_action,
+        )
 
         from_phase = state.phase
         to_phase = result.next_phase
@@ -533,13 +542,17 @@ PHASE_NODE_MAP = {
 }
 
 
-def graph_step(state: LudensState, user_input: str) -> LudensState:
+def graph_step(
+    state: LudensState,
+    user_input: str,
+    explicit_action: Optional[str] = None,
+) -> LudensState:
     """执行一次最小图推进：先路由，再决定是否调用目标节点。"""
     old_phase = state.phase
 
     # 每一步都先经过 Router。
     router_node = RouterNode()
-    router_node.execute(state, user_input)
+    router_node.execute(state, user_input, explicit_action=explicit_action)
 
     new_phase = state.phase
 

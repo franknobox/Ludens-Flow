@@ -5,6 +5,7 @@
     getWorkspaceFiles,
     getWorkspaceFileContent,
     postChat,
+    postAction,
     createProject: createProjectRequest,
     selectProject: selectProjectRequest,
     resetCurrentProject,
@@ -40,6 +41,7 @@
     chat_history: [],
     files: [],
     projects: [],
+    actions: [],
   };
 
   const historyByAgent = { design: [], pm: [], engineering: [], review: [] };
@@ -210,11 +212,26 @@
       }
     }
 
+    const shouldRenderActions =
+      currentView.type === "agent" &&
+      currentView.id === stateModel.current_agent &&
+      !readonly() &&
+      !requestInFlight &&
+      Array.isArray(stateModel.actions) &&
+      stateModel.actions.length > 0;
+
+    const actionPanel = shouldRenderActions
+      ? `<div class="message-actions"><p class="title">流程选项</p><div class="row">${stateModel.actions
+          .map((action) => `<button type="button" data-action-id="${esc(action.id)}">${esc(action.label || action.id)}</button>`)
+          .join("")}</div></div>`
+      : "";
+
     if (!rows.length) {
-      return `<div class="empty">No conversation yet for ${esc(agentName(agentKey))} in this project.</div>`;
+      const empty = `<div class="empty">No conversation yet for ${esc(agentName(agentKey))} in this project.</div>`;
+      return `<div class="messages">${empty}${actionPanel}</div>`;
     }
 
-    return `<div class="messages">${rows.map((item) => renderMessageRow(agentKey, item)).join("")}</div>`;
+    return `<div class="messages">${rows.map((item) => renderMessageRow(agentKey, item)).join("")}${actionPanel}</div>`;
   }
 
   function renderFile(fileId) {
@@ -249,10 +266,14 @@
     el("input").placeholder = readonly()
       ? `Read-only history. Current active agent is ${agentName(stateModel.current_agent)}.`
       : `Talk to ${agentName(currentView.id)} inside ${projectName()}...`;
-    el("decisionBar").style.display = stateModel.phase === "POST_REVIEW_DECISION" && !readonly() ? "block" : "none";
-
     if (currentView.type === "agent") {
       scrollContentToBottom();
+    }
+
+    if (currentView.type === "agent") {
+      el("contentArea").querySelectorAll("button[data-action-id]").forEach((button) => {
+        button.addEventListener("click", () => sendAction(button.dataset.actionId));
+      });
     }
   }
 
@@ -307,6 +328,7 @@
     stateModel.iteration_count = state.iteration_count || 0;
     stateModel.artifact_frozen = !!state.artifact_frozen;
     stateModel.review_gate = state.review_gate || null;
+    stateModel.actions = state.actions || [];
     stateModel.transcript_history = state.transcript_history || [];
     stateModel.chat_history = state.chat_history || [];
     rebuildHistory();
@@ -471,6 +493,43 @@
     }
   }
 
+  async function sendAction(actionId) {
+    if (!actionId || requestInFlight) return;
+    if (currentView.type !== "agent" || readonly()) return;
+
+    setError("");
+    requestInFlight = true;
+    transientChat = {
+      agentKey: currentView.id,
+      phase: stateModel.phase,
+      userText: `[ACTION] ${actionId}`,
+      thinking: true,
+    };
+    renderAll();
+
+    try {
+      const response = await postAction(actionId);
+      if (response.error) {
+        setError(response.error);
+      }
+      transientChat = null;
+      await loadStateIntoModel();
+      await loadProjectsIntoModel();
+      await loadFilesIntoModel();
+      await refreshFileCache();
+      renderAll();
+    } catch (error) {
+      if (transientChat) {
+        transientChat.thinking = false;
+      }
+      setError("Action failed: " + error.message);
+      renderAll();
+    } finally {
+      requestInFlight = false;
+      renderAll();
+    }
+  }
+
   async function resetProject() {
     if (!confirm(`Reset ${projectName()}?\n\nThis clears the current project's state, artifacts, and images.`)) return;
 
@@ -508,9 +567,6 @@
         } catch (_) {}
       }
       renderThumbs();
-    });
-    el("decisionBar").querySelectorAll("button[data-choice]").forEach((button) => {
-      button.addEventListener("click", () => sendMessage(button.dataset.choice));
     });
   }
 
