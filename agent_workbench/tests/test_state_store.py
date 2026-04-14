@@ -1,6 +1,7 @@
 import os
 import shutil
 import sys
+import threading
 import unittest
 from pathlib import Path
 
@@ -10,8 +11,9 @@ sys.path.insert(0, str(_ROOT / "src"))
 
 os.chdir(_ROOT)
 
-from ludens_flow.paths import get_state_file
+from ludens_flow.paths import get_logs_dir, get_state_file
 from ludens_flow.state import (
+    LudensState,
     StateConflictError,
     init_workspace,
     load_state,
@@ -65,6 +67,39 @@ class StateStoreTests(unittest.TestCase):
 
         lock_path = get_state_file().with_name(get_state_file().name + ".lock")
         self.assertFalse(lock_path.exists())
+
+        audit_log = (get_logs_dir() / "audit.log").read_text(encoding="utf-8")
+        self.assertIn("event=PROJECT_RESET", audit_log)
+
+    def test_concurrent_stale_writes_conflict_without_corrupting_state(self):
+        base = load_state()
+        save_state(base)
+
+        results = []
+        result_lock = threading.Lock()
+
+        def worker(index: int):
+            local_copy = LudensState.from_dict(base.to_dict())
+            local_copy.phase = "PM_DISCUSS" if index % 2 == 0 else "ENG_DISCUSS"
+            try:
+                save_state(local_copy)
+                with result_lock:
+                    results.append("saved")
+            except StateConflictError:
+                with result_lock:
+                    results.append("conflict")
+
+        threads = [threading.Thread(target=worker, args=(i,)) for i in range(6)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        self.assertIn("saved", results)
+        self.assertIn("conflict", results)
+
+        final_state = load_state()
+        self.assertGreaterEqual(final_state.revision, 2)
 
 
 if __name__ == "__main__":

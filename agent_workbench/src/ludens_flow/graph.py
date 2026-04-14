@@ -3,6 +3,7 @@ from typing import Tuple, Dict, Any, Optional
 
 from ludens_flow.state import LudensState, save_state, write_trace_log
 from ludens_flow.artifacts import write_artifact
+from ludens_flow.prompt_templates import load_prompt_template
 from ludens_flow.router import ludens_router_logic_with_action, Phase
 from ludens_flow.agents.base import AgentResult
 
@@ -13,6 +14,10 @@ from ludens_flow.agents.engineering_agent import EngineeringAgent
 from ludens_flow.agents.review_agent import ReviewAgent
 
 logger = logging.getLogger(__name__)
+
+_ERROR_TIMEOUT = "TIMEOUT"
+_ERROR_PARSE = "PARSE"
+_ERROR_NODE = "NODE"
 
 # Graph 编排层。
 # 负责 phase 跳转、Agent 调用、状态合并、日志和落盘。
@@ -98,6 +103,32 @@ def _merge_state_updates(state: LudensState, updates: Dict[str, Any]) -> None:
         state.review_gate = updates["review_gate"]
 
 
+def _classify_agent_error(exc: Exception) -> str:
+    message = str(exc or "").lower()
+    if isinstance(exc, TimeoutError) or "timeout" in message or "timed out" in message:
+        return _ERROR_TIMEOUT
+    if any(
+        marker in message
+        for marker in ["parse", "schema", "json", "invalid agent result"]
+    ):
+        return _ERROR_PARSE
+    return _ERROR_NODE
+
+
+def _build_recovery_reply(node_name: str, category: str) -> str:
+    if category == _ERROR_TIMEOUT:
+        return (
+            f"{node_name} 响应超时，我已保留当前阶段与上下文。"
+            "请稍后重试，或缩短输入后继续。"
+        )
+    if category == _ERROR_PARSE:
+        return (
+            f"{node_name} 本轮输出未通过结构化校验，系统已自动回退到安全态。"
+            "请换一种表述重试。"
+        )
+    return f"{node_name} 本轮执行失败，系统已保留当前阶段，避免流程漂移。请稍后重试。"
+
+
 def run_agent_step(
     agent, mode: str, state: LudensState, user_input: Any
 ) -> LudensState:
@@ -140,9 +171,6 @@ def run_agent_step(
         # 加载prompts/文件夹
         import os
 
-        prompt_dir = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "..", "..", "prompts")
-        )
         filename_map = {
             "DesignAgent": "design_agent.md",
             "PMAgent": "pm_agent.md",
@@ -154,17 +182,16 @@ def run_agent_step(
         try:
             fname = filename_map.get(getattr(agent, "name", ""))
             if fname:
-                ppath = os.path.join(prompt_dir, fname)
-                if os.path.exists(ppath):
+                prompt_template = load_prompt_template(fname)
+                if prompt_template:
                     # 对.md文件进行分割，part[0]是system prompt，part[1]是profile_instruction
-                    with open(ppath, "r", encoding="utf-8") as pf:
-                        content = pf.read()
-                        parts = content.split("===PROFILE_INSTRUCTION===")
-                        if parts:
-                            if parts[0].strip():
-                                template_system = parts[0].strip()
-                            if len(parts) > 1 and parts[1].strip():
-                                profile_instruction = parts[1].strip()
+                    built_system_prompt = prompt_template.build_system_prompt()
+                    if built_system_prompt:
+                        template_system = built_system_prompt
+                    if prompt_template.profile_instruction.strip():
+                        profile_instruction = (
+                            prompt_template.profile_instruction.strip()
+                        )
         except Exception as e:
             logger.debug(f"Failed to load prompt template for {agent.name}: {e}")
 
@@ -175,6 +202,7 @@ def run_agent_step(
 
         # 按 mode 分发到对应能力入口。
         result = None
+        agent_state_snapshot = LudensState.from_dict(state.to_dict())
         try:
             if template_system:
                 agent.system_prompt = template_system
@@ -183,28 +211,47 @@ def run_agent_step(
 
             if mode == "DISCUSS":
                 result: AgentResult = agent.discuss(
-                    state, user_input, user_persona=user_persona_block
+                    agent_state_snapshot, user_input, user_persona=user_persona_block
                 )
             elif mode == "COMMIT":
                 result: AgentResult = agent.commit(
-                    state, user_input, user_persona=user_persona_block
+                    agent_state_snapshot, user_input, user_persona=user_persona_block
                 )
             elif mode == "PLAN_DISCUSS":
                 result: AgentResult = getattr(agent, "plan_discuss")(
-                    state, user_input, None, user_persona=user_persona_block
+                    agent_state_snapshot,
+                    user_input,
+                    None,
+                    user_persona=user_persona_block,
                 )
             elif mode == "PLAN_COMMIT":
                 result: AgentResult = getattr(agent, "plan_commit")(
-                    state, user_input, None, user_persona=user_persona_block
+                    agent_state_snapshot,
+                    user_input,
+                    None,
+                    user_persona=user_persona_block,
                 )
             elif mode == "COACH":
                 result: AgentResult = getattr(agent, "coach")(
-                    state, user_input, None, user_persona=user_persona_block
+                    agent_state_snapshot,
+                    user_input,
+                    None,
+                    user_persona=user_persona_block,
                 )
             else:
                 raise ValueError(f"Unknown agent mode: {mode}")
         finally:
             agent.system_prompt = orig_prompt
+
+        if not isinstance(result, AgentResult):
+            raise TypeError("Invalid agent result type returned by node execution.")
+
+        if (
+            mode in {"DISCUSS", "PLAN_DISCUSS", "COACH"}
+            and not (result.assistant_message or "").strip()
+            and not result.commit
+        ):
+            raise ValueError("Parse failure: empty discuss/coaching reply.")
 
         # 统一提取画像更新。
         try:
@@ -356,15 +403,26 @@ def run_agent_step(
     except Exception as e:
         # 节点异常在这里收口，避免整条链路直接中断。
         err_msg = str(e)
-        logger.error(f"[Agent Error] {node_name} execution failed: {err_msg}")
-        state.last_error = err_msg
+        category = _classify_agent_error(e)
+        logger.error(
+            f"[Agent Error][{category}] {node_name} execution failed: {err_msg}"
+        )
+        state.last_error = f"[{category}] {err_msg}"
+        state.last_assistant_message = _build_recovery_reply(node_name, category)
+        _append_transcript(
+            state,
+            "assistant",
+            state.last_assistant_message,
+            current_phase,
+            node_name,
+        )
         save_state(state)
         write_trace_log(
             "LEAVE",
             node_name,
             current_phase,
             is_frozen,
-            "N",
+            f"ERR_{category}",
             error=err_msg,
             project_id=state.project_id,
         )

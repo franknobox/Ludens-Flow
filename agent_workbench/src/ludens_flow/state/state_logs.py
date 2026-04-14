@@ -62,3 +62,19 @@ def write_router_log(
         handle.write(
             f"[{ts}] | iter={iteration} | {from_phase} -> {to_phase} | choice={choice} | gate={gate} | frozen={frozen} | reason={reason}\n"
         )
+
+
+def write_audit_log(
+    event: str,
+    detail: str,
+    actor: str = "system",
+    project_id: Optional[str] = None,
+) -> None:
+    """Audit log for lifecycle operations like reset/migrate/export/import."""
+    logs_dir = get_logs_dir(resolve_project_id(project_id))
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    audit_file = logs_dir / "audit.log"
+    ts = _now_iso()
+    safe_detail = str(detail or "").replace("\n", " ").strip()
+    with open(audit_file, "a", encoding="utf-8") as handle:
+        handle.write(f"[{ts}] event={event} actor={actor} detail={safe_detail}\n")

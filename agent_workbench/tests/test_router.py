@@ -23,6 +23,23 @@ logger = logging.getLogger(__name__)
 
 
 class RouterTests(unittest.TestCase):
+    def test_free_text_keywords_do_not_trigger_commit_or_backflow(self):
+        state = init_state()
+        state.phase = Phase.PM_DISCUSS.value
+
+        next_phase, _, _ = route(state, "我想回退到 GDD")
+        self.assertEqual(next_phase, Phase.PM_DISCUSS.value)
+
+        next_phase, _, _ = route(state, "现在定稿吧")
+        self.assertEqual(next_phase, Phase.PM_DISCUSS.value)
+
+    def test_invalid_explicit_action_is_ignored(self):
+        state = init_state()
+        state.phase = Phase.GDD_DISCUSS.value
+
+        next_phase, _, _ = route(state, "", explicit_action="pm_back")
+        self.assertEqual(next_phase, Phase.GDD_DISCUSS.value)
+
     def test_discuss_phase_actions(self):
         state = init_state()
 

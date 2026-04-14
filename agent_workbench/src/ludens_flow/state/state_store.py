@@ -10,7 +10,13 @@ from typing import Iterator, Optional, Union
 
 from ludens_flow.paths import get_state_file, resolve_project_id, touch_project
 
-from .state_models import LudensState, _sync_artifact_meta, init_state
+from .state_logs import write_audit_log
+from .state_models import (
+    LudensState,
+    _sync_artifact_meta,
+    init_state,
+    migrate_state_payload,
+)
 from .state_workspace import (
     _clear_artifact_files,
     clear_images_dir,
@@ -82,6 +88,29 @@ class StateStore:
     def _lock_path(self, state_path: Path) -> Path:
         return state_path.with_name(state_path.name + ".lock")
 
+    def _atomic_write_json(self, state_path: Path, payload: dict) -> None:
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp_path = tempfile.mkstemp(
+            dir=str(state_path.parent),
+            prefix=state_path.name + ".",
+            suffix=".tmp",
+            text=True,
+        )
+
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(payload, handle, ensure_ascii=False, indent=2)
+                handle.flush()
+                os.fsync(handle.fileno())
+
+            os.replace(tmp_path, str(state_path))
+        except Exception:
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+            raise
+
     # 过期锁判定：用于崩溃后的锁文件回收。
     def _is_stale_lock(self, lock_path: Path) -> bool:
         try:
@@ -142,7 +171,15 @@ class StateStore:
 
         try:
             with open(state_path, "r", encoding="utf-8") as handle:
-                data = json.load(handle)
+                raw_data = json.load(handle)
+            data, migrated, source_version = migrate_state_payload(raw_data)
+            if migrated:
+                self._atomic_write_json(state_path, data)
+                write_audit_log(
+                    event="STATE_SCHEMA_MIGRATION",
+                    detail=f"from={source_version} to={data.get('schema_version')}",
+                    project_id=project_id,
+                )
             logger.info(f"Successfully loaded state from {state_path}.")
             return _sync_artifact_meta(LudensState.from_dict(data), project_id)
         except Exception as exc:
@@ -206,25 +243,12 @@ class StateStore:
             )
 
         new_revision = expected_revision + 1
-        state_path.parent.mkdir(parents=True, exist_ok=True)
 
         data_dict = state.to_dict()
         data_dict["revision"] = new_revision
 
-        fd, tmp_path = tempfile.mkstemp(
-            dir=str(state_path.parent),
-            prefix=state_path.name + ".",
-            suffix=".tmp",
-            text=True,
-        )
-
         try:
-            with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                json.dump(data_dict, handle, ensure_ascii=False, indent=2)
-                handle.flush()
-                os.fsync(handle.fileno())
-
-            os.replace(tmp_path, str(state_path))
+            self._atomic_write_json(state_path, data_dict)
 
             if project_id:
                 touch_project(
@@ -240,10 +264,6 @@ class StateStore:
             return new_revision
         except Exception as exc:
             logger.error(f"Failed to save state to {state_path}: {exc}")
-            try:
-                os.remove(tmp_path)
-            except OSError:
-                pass
             raise
 
     # 对外读取入口：持锁并加载状态。
@@ -286,6 +306,11 @@ class StateStore:
             _clear_artifact_files(resolved)
             if clear_images:
                 clear_images_dir(resolved)
+            write_audit_log(
+                event="PROJECT_RESET",
+                detail=f"clear_images={clear_images}",
+                project_id=resolved,
+            )
             return self._load_state_unlocked(state_path, resolved)
 
 

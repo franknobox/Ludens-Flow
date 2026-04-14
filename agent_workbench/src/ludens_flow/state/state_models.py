@@ -3,6 +3,8 @@ from typing import Any, Dict, List, Optional
 
 from ludens_flow.paths import get_artifact_paths, resolve_project_id
 
+STATE_SCHEMA_VERSION = 2
+
 
 # 工件元数据：用于追踪每个主工件的版本与归属。
 @dataclass
@@ -21,6 +23,7 @@ class LudensState:
     """系统全局运行状态"""
 
     project_id: Optional[str] = None
+    schema_version: int = STATE_SCHEMA_VERSION
     revision: int = 0
 
     phase: str = "GDD_DISCUSS"
@@ -52,17 +55,43 @@ class LudensState:
     # 反序列化：兼容未知旧字段并恢复嵌套的 ArtifactMeta。
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "LudensState":
-        artifacts_raw = data.pop("artifacts", {})
+        normalized, _, _ = migrate_state_payload(data)
+
+        artifacts_raw = normalized.pop("artifacts", {})
         artifacts = {}
         for key, value in artifacts_raw.items():
             artifacts[key] = ArtifactMeta(**value)
 
         valid_keys = cls.__dataclass_fields__.keys()
-        filtered_data = {key: value for key, value in data.items() if key in valid_keys}
+        filtered_data = {
+            key: value for key, value in normalized.items() if key in valid_keys
+        }
 
         state = cls(**filtered_data)
         state.artifacts = artifacts
         return state
+
+
+def migrate_state_payload(data: Dict[str, Any]) -> tuple[Dict[str, Any], bool, int]:
+    """Normalize and migrate a persisted state payload to current schema."""
+    payload = dict(data or {})
+
+    raw_version = payload.get("schema_version", 1)
+    try:
+        source_version = int(raw_version)
+    except (TypeError, ValueError):
+        source_version = 1
+
+    migrated = False
+
+    if source_version < 2:
+        payload.setdefault("revision", 0)
+        migrated = True
+
+    payload["schema_version"] = STATE_SCHEMA_VERSION
+    migrated = migrated or source_version != STATE_SCHEMA_VERSION
+
+    return payload, migrated, source_version
 
 
 # 工件写入责任映射：保证单一职责 Agent。

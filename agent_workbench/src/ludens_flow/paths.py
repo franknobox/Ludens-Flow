@@ -13,6 +13,7 @@ ACTIVE_PROJECT_FILE = ".active_project"
 PROJECTS_DIR_NAME = "projects"
 PROJECT_META_FILE_NAME = "meta.json"
 DEFAULT_PROJECT_PREFIX = "project"
+PROJECT_META_SCHEMA_VERSION = 2
 _UNSET = object()
 
 # 统一管理仓库根目录、工作区根目录和项目级路径。
@@ -69,9 +70,68 @@ def _read_project_meta(project_id: str) -> Dict[str, Any]:
         return {}
 
     try:
-        return json.loads(meta_file.read_text(encoding="utf-8"))
+        raw = json.loads(meta_file.read_text(encoding="utf-8"))
+        migrated, changed, source_version = _migrate_project_meta_payload(
+            project_id, raw
+        )
+        if changed:
+            _write_project_meta(project_id, migrated)
+            if source_version != PROJECT_META_SCHEMA_VERSION:
+                from ludens_flow.state.state_logs import write_audit_log
+
+                write_audit_log(
+                    event="PROJECT_META_SCHEMA_MIGRATION",
+                    detail=(f"from={source_version} to={PROJECT_META_SCHEMA_VERSION}"),
+                    project_id=project_id,
+                )
+        return migrated
     except Exception:
         return {}
+
+
+def _migrate_project_meta_payload(
+    project_id: str, raw_meta: Dict[str, Any]
+) -> tuple[Dict[str, Any], bool, int]:
+    meta = dict(raw_meta or {})
+
+    raw_version = meta.get("schema_version", 1)
+    try:
+        source_version = int(raw_version)
+    except (TypeError, ValueError):
+        source_version = 1
+
+    now = _now_iso()
+    display_name = (
+        str(meta.get("display_name") or meta.get("title") or project_id).strip()
+        or project_id
+    )
+
+    normalized_id = project_id
+    try:
+        candidate_id = _normalize_project_id(str(meta.get("id") or project_id))
+        if candidate_id:
+            normalized_id = candidate_id
+    except Exception:
+        normalized_id = project_id
+
+    migrated = {
+        "schema_version": PROJECT_META_SCHEMA_VERSION,
+        "id": normalized_id,
+        "display_name": display_name,
+        "title": str(meta.get("title") or display_name).strip() or display_name,
+        "created_at": meta.get("created_at", "") or now,
+        "updated_at": meta.get("updated_at", "") or now,
+        "last_active_at": meta.get("last_active_at", ""),
+        "last_phase": meta.get("last_phase", ""),
+        "archived": _coerce_bool(meta.get("archived", False)),
+        "last_message_preview": str(meta.get("last_message_preview", "") or ""),
+        "unity_root": str(meta.get("unity_root", "") or ""),
+    }
+
+    changed = source_version != PROJECT_META_SCHEMA_VERSION or any(
+        migrated.get(key) != meta.get(key) for key in migrated.keys()
+    )
+    return migrated, changed, source_version
 
 
 def _write_project_meta(project_id: str, meta: Dict[str, Any]) -> Dict[str, Any]:
@@ -90,6 +150,7 @@ def _build_project_meta_record(
         meta.get("display_name") or meta.get("title") or project_id
     ).strip() or project_id
     record = {
+        "schema_version": meta.get("schema_version", PROJECT_META_SCHEMA_VERSION),
         "id": project_id,
         "display_name": display_name,
         "title": display_name,
@@ -135,6 +196,7 @@ def _upsert_project_meta(
     ).strip() or normalized
 
     meta = {
+        "schema_version": PROJECT_META_SCHEMA_VERSION,
         "id": normalized,
         "display_name": chosen_name,
         "title": chosen_name,

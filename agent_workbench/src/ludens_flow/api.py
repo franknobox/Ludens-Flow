@@ -68,6 +68,17 @@ class ActionRequest(BaseModel):
     action: str
 
 
+class ProjectExportRequest(BaseModel):
+    output_path: str
+
+
+class ProjectImportRequest(BaseModel):
+    bundle_path: str
+    project_id: str | None = None
+    set_active: bool = True
+    overwrite: bool = False
+
+
 def _phase_to_agent_key(phase: str | None) -> str:
     if not phase:
         return "system"
@@ -86,6 +97,7 @@ def _state_to_json(state) -> dict:
     actions = get_available_actions(state)
     return {
         "project_id": getattr(state, "project_id", None),
+        "schema_version": getattr(state, "schema_version", None),
         "phase": state.phase,
         "current_agent": _phase_to_agent_key(state.phase),
         "iteration_count": state.iteration_count,
@@ -346,6 +358,32 @@ def select_project(project_id: str):
     state = st.load_state(project_id=active_project)
     return {
         "active_project": active_project,
+        "state": _state_to_json(state),
+    }
+
+
+@app.post("/api/projects/current/export")
+def post_export_current_project(req: ProjectExportRequest):
+    state = st.load_state()
+    project_id = getattr(state, "project_id", None)
+    bundle = st.export_project_bundle(req.output_path, project_id=project_id)
+    return {
+        "project_id": project_id,
+        "bundle_path": str(bundle),
+    }
+
+
+@app.post("/api/projects/import")
+def post_import_project_bundle(req: ProjectImportRequest):
+    imported_project = st.import_project_bundle(
+        req.bundle_path,
+        project_id=req.project_id,
+        set_active=req.set_active,
+        overwrite=req.overwrite,
+    )
+    state = st.load_state(project_id=imported_project)
+    return {
+        "project_id": imported_project,
         "state": _state_to_json(state),
     }
 

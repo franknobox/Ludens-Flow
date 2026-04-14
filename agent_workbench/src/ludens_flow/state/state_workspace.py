@@ -1,18 +1,24 @@
+import json
 import shutil
+import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 from ludens_flow.paths import (
+    PROJECT_META_FILE_NAME,
     create_project,
     get_artifact_paths,
     get_dev_notes_dir,
     get_images_dir,
     get_logs_dir,
+    get_project_meta_file,
     get_memory_dir,
     get_patches_dir,
     get_project_dir,
     get_workspace_dir,
     get_workspace_root_dir,
+    get_state_file,
     resolve_project_id,
     touch_project,
 )
@@ -84,6 +90,15 @@ def migrate_legacy_workspace_to_project(project_id: Optional[str] = None) -> lis
     for legacy_name, target_name in LEGACY_ROOT_DIRS.items():
         if _move_legacy_entry(workspace_root / legacy_name, project_dir / target_name):
             moved.append(legacy_name)
+
+    if moved:
+        from .state_logs import write_audit_log
+
+        write_audit_log(
+            event="WORKSPACE_MIGRATION",
+            detail=f"moved_legacy_entries={','.join(moved)}",
+            project_id=resolved,
+        )
 
     return moved
 
@@ -171,3 +186,123 @@ def reset_workspace_state(
 ) -> LudensState:
     """Compatibility alias for older callers."""
     return reset_current_project_state(clear_images=clear_images, project_id=project_id)
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def export_project_bundle(
+    output_path: Union[str, Path], project_id: Optional[str] = None
+) -> Path:
+    """Export one project's state and artifacts as a zip bundle."""
+    resolved = resolve_project_id(project_id)
+    project_dir = get_project_dir(resolved)
+    if not project_dir.exists():
+        raise FileNotFoundError(f"Project directory not found: {project_dir}")
+
+    output = Path(output_path)
+    if output.exists() and output.is_dir():
+        output = output / f"{resolved}-bundle-{_now_iso().replace(':', '-')}.zip"
+    elif output.suffix.lower() != ".zip":
+        output = output.with_suffix(".zip")
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    artifact_paths = get_artifact_paths(resolved)
+    included_files = [
+        get_state_file(resolved),
+        get_project_meta_file(resolved),
+        project_dir / "USER_PROFILE.md",
+        *artifact_paths.values(),
+    ]
+
+    manifest = {
+        "bundle_schema_version": 1,
+        "project_id": resolved,
+        "exported_at": _now_iso(),
+        "files": [],
+    }
+
+    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for file_path in included_files:
+            if not file_path.exists() or not file_path.is_file():
+                continue
+            rel = file_path.relative_to(project_dir).as_posix()
+            arcname = f"project/{rel}"
+            archive.write(file_path, arcname=arcname)
+            manifest["files"].append(arcname)
+        archive.writestr(
+            "manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2)
+        )
+
+    from .state_logs import write_audit_log
+
+    write_audit_log(
+        event="PROJECT_EXPORT",
+        detail=f"output={output} files={len(manifest['files'])}",
+        project_id=resolved,
+    )
+    return output.resolve()
+
+
+def import_project_bundle(
+    bundle_path: Union[str, Path],
+    project_id: Optional[str] = None,
+    *,
+    set_active: bool = True,
+    overwrite: bool = False,
+) -> str:
+    """Import state/artifacts bundle into a target project."""
+    bundle = Path(bundle_path)
+    if not bundle.exists() or not bundle.is_file():
+        raise FileNotFoundError(f"Bundle not found: {bundle}")
+
+    target_project = resolve_project_id(project_id)
+    target_dir = get_project_dir(target_project)
+
+    if (
+        not overwrite
+        and target_dir.exists()
+        and any(entry.name != PROJECT_META_FILE_NAME for entry in target_dir.iterdir())
+    ):
+        raise RuntimeError(
+            f"Target project '{target_project}' already has files. Use overwrite=True."
+        )
+
+    if overwrite:
+        shutil.rmtree(target_dir, ignore_errors=True)
+
+    create_project(target_project, set_active=False)
+    target_dir = get_project_dir(target_project)
+
+    with zipfile.ZipFile(bundle, "r") as archive:
+        members = [name for name in archive.namelist() if name.startswith("project/")]
+        for member in members:
+            rel = Path(member).relative_to("project")
+            if rel.is_absolute() or ".." in rel.parts:
+                continue
+            destination = target_dir / rel
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            if member.endswith("/"):
+                destination.mkdir(parents=True, exist_ok=True)
+                continue
+            with archive.open(member) as src, open(destination, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+
+    init_workspace(project_id=target_project)
+    touch_project(target_project, mark_active=set_active)
+
+    if set_active:
+        from ludens_flow.paths import set_active_project_id
+
+        set_active_project_id(target_project)
+
+    from .state_logs import write_audit_log
+
+    write_audit_log(
+        event="PROJECT_IMPORT",
+        detail=f"bundle={bundle.resolve()} overwrite={overwrite}",
+        project_id=target_project,
+    )
+    return target_project
