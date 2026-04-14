@@ -68,6 +68,8 @@ export interface ChatResponse {
 export interface ProjectsResponse {
   active_project: string;
   projects: ProjectMeta[];
+  active_projects: ProjectMeta[];
+  archived_projects: ProjectMeta[];
 }
 
 export interface WorkspaceFilesResponse {
@@ -111,6 +113,8 @@ export interface WorkbenchStateModel {
   chat_history: HistoryEntry[];
   files: WorkspaceFileItem[];
   projects: ProjectMeta[];
+  active_projects: ProjectMeta[];
+  archived_projects: ProjectMeta[];
   actions: WorkflowAction[];
 }
 

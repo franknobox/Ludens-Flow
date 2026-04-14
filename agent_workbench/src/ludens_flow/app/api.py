@@ -47,7 +47,7 @@ app.add_middleware(
 _PROJECT_LOCKS: dict[str, threading.Lock] = {}
 _PROJECT_LOCKS_GUARD = threading.Lock()
 
-WORKBENCH_ROOT = Path(__file__).resolve().parents[2]
+WORKBENCH_ROOT = Path(__file__).resolve().parents[3]
 WEB_DIST_DIR = WORKBENCH_ROOT / "web" / "dist"
 STATIC_DIR = WEB_DIST_DIR
 
@@ -505,7 +505,7 @@ def index():
 def main() -> None:
     parser = argparse.ArgumentParser(description="Ludens-Flow API server runner")
     parser.add_argument("--host", default="127.0.0.1", help="Bind host")
-    parser.add_argument("--port", type=int, default=8010, help="Bind port")
+    parser.add_argument("--port", type=int, default=8011, help="Bind port")
     parser.add_argument(
         "--reload",
         action="store_true",

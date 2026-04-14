@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -273,10 +274,11 @@ def ensure_active_project_id() -> str:
     """确保当前总有一个激活项目。"""
     active_project = get_active_project_id()
     if active_project:
-        create_project(active_project, set_active=False)
-        return active_project
+        meta = create_project(active_project, set_active=False)
+        if not meta.get("archived", False):
+            return active_project
 
-    projects = list_projects()
+    projects = list_projects(include_archived=False)
     if projects:
         latest = projects[0]["id"]
         set_active_project_id(latest)
@@ -297,7 +299,9 @@ def set_active_project_id(project_id: Optional[str]) -> Optional[str]:
         active_file.unlink(missing_ok=True)
         return None
 
-    create_project(normalized, set_active=False)
+    meta = create_project(normalized, set_active=False)
+    if meta.get("archived", False):
+        raise ValueError(f"Cannot activate archived project: {normalized}")
     active_file.write_text(normalized, encoding="utf-8")
     touch_project(normalized, mark_active=True)
     return normalized
@@ -427,7 +431,7 @@ def get_project_unity_root(project_id: Optional[str] = None) -> Optional[str]:
     return root or None
 
 
-def list_projects() -> List[Dict[str, Any]]:
+def list_projects(*, include_archived: bool = True) -> List[Dict[str, Any]]:
     """扫描多项目目录并返回项目元数据列表。"""
     projects_dir = get_projects_dir()
     if not projects_dir.exists():
@@ -441,7 +445,10 @@ def list_projects() -> List[Dict[str, Any]]:
         if not project_id:
             continue
         meta = _read_project_meta(project_id)
-        projects.append(_build_project_meta_record(project_id, meta, entry))
+        record = _build_project_meta_record(project_id, meta, entry)
+        if not include_archived and record.get("archived", False):
+            continue
+        projects.append(record)
 
     projects.sort(
         key=lambda item: (
@@ -451,6 +458,83 @@ def list_projects() -> List[Dict[str, Any]]:
         reverse=True,
     )
     return projects
+
+
+def list_active_projects() -> List[Dict[str, Any]]:
+    return list_projects(include_archived=False)
+
+
+def list_archived_projects() -> List[Dict[str, Any]]:
+    return [item for item in list_projects(include_archived=True) if item.get("archived")]
+
+
+def archive_project(project_id: str) -> Dict[str, Any]:
+    normalized = _normalize_project_id(project_id)
+    if not normalized:
+        raise ValueError("Project id is required.")
+
+    meta = create_project(normalized, set_active=False)
+    if meta.get("archived", False):
+        return meta
+
+    archived_meta = touch_project(normalized, archived=True)
+    if get_active_project_id() == normalized:
+        remaining = [
+            item for item in list_active_projects() if item["id"] != normalized
+        ]
+        if remaining:
+            set_active_project_id(remaining[0]["id"])
+        else:
+            set_active_project_id(_next_project_id())
+    return archived_meta
+
+
+def restore_project(project_id: str, *, set_active: bool = False) -> Dict[str, Any]:
+    normalized = _normalize_project_id(project_id)
+    if not normalized:
+        raise ValueError("Project id is required.")
+
+    create_project(normalized, set_active=False)
+    restored_meta = touch_project(normalized, archived=False)
+    if set_active:
+        set_active_project_id(normalized)
+    return restored_meta
+
+
+def rename_project(project_id: str, display_name: str) -> Dict[str, Any]:
+    normalized = _normalize_project_id(project_id)
+    if not normalized:
+        raise ValueError("Project id is required.")
+
+    if not _read_project_meta(normalized):
+        raise FileNotFoundError(f"Project not found: {normalized}")
+
+    cleaned_name = str(display_name or "").strip()
+    if not cleaned_name:
+        raise ValueError("Display name is required.")
+
+    return touch_project(normalized, display_name=cleaned_name, title=cleaned_name)
+
+
+def delete_project(project_id: str) -> str:
+    normalized = _normalize_project_id(project_id)
+    if not normalized:
+        raise ValueError("Project id is required.")
+
+    meta = _read_project_meta(normalized)
+    if not meta:
+        raise FileNotFoundError(f"Project not found: {normalized}")
+    if not _coerce_bool(meta.get("archived", False)):
+        raise RuntimeError(
+            f"Project '{normalized}' must be archived before it can be deleted."
+        )
+    if get_active_project_id() == normalized:
+        raise RuntimeError(f"Cannot delete active project '{normalized}'.")
+
+    project_dir = get_project_dir(normalized)
+    if project_dir.exists():
+        shutil.rmtree(project_dir, ignore_errors=False)
+    return normalized
 
 
 def get_logs_dir(project_id: Optional[str] = None) -> Path:

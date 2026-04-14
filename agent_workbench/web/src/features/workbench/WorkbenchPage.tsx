@@ -32,6 +32,8 @@ const INITIAL_MODEL: WorkbenchStateModel = {
   chat_history: [],
   files: [],
   projects: [],
+  active_projects: [],
+  archived_projects: [],
   actions: [],
 };
 
@@ -47,6 +49,8 @@ function toModelState(state: StateResponse): WorkbenchStateModel {
     chat_history: state.chat_history || [],
     files: [],
     projects: [],
+    active_projects: [],
+    archived_projects: [],
     actions: state.actions || [],
   };
 }
@@ -67,7 +71,7 @@ function mergeChatResponse(
 export function WorkbenchPage() {
   const [model, setModel] = useState<WorkbenchStateModel>(INITIAL_MODEL);
   const [currentView, setCurrentView] = useState<ViewState>({ type: "agent", id: "design" });
-  const [sidebarMode, setSidebarMode] = useState<"projects" | "project">("projects");
+  const [sidebarMode, setSidebarMode] = useState<"projects" | "project" | "history">("projects");
   const [fileCache, setFileCache] = useState<Record<string, string>>({});
   const [requestInFlight, setRequestInFlight] = useState(false);
   const [transientChat, setTransientChat] = useState<TransientChat | null>(null);
@@ -103,6 +107,8 @@ export function WorkbenchPage() {
     setModel((prev) => ({
       ...toModelState(state),
       projects: prev.projects,
+      active_projects: prev.active_projects,
+      archived_projects: prev.archived_projects,
       files: prev.files,
     }));
     return state;
@@ -113,6 +119,8 @@ export function WorkbenchPage() {
     setModel((prev) => ({
       ...prev,
       projects: data.projects || [],
+      active_projects: data.active_projects || data.projects || [],
+      archived_projects: data.archived_projects || [],
     }));
   };
 
@@ -126,6 +134,8 @@ export function WorkbenchPage() {
     setModel((prev) => ({
       ...toModelState(state),
       projects: projects.projects || [],
+      active_projects: projects.active_projects || projects.projects || [],
+      archived_projects: projects.archived_projects || [],
       files: files.files || [],
     }));
     setFileCache((prev) => {
@@ -194,6 +204,77 @@ export function WorkbenchPage() {
     } catch (error) {
       setErrorText("Create project failed: " + toErrorMessage(error));
       return false;
+    }
+  };
+
+  const renameProject = async (projectId: string, displayName: string): Promise<boolean> => {
+    setErrorText("");
+    try {
+      await workbenchApi.renameProject(projectId, displayName);
+      await hardRefresh();
+      return true;
+    } catch (error) {
+      setErrorText("Rename project failed: " + toErrorMessage(error));
+      return false;
+    }
+  };
+
+  const archiveProject = async (projectId: string) => {
+    const target = model.projects.find((project) => project.id === projectId);
+    const yes = window.confirm(
+      `Archive ${target?.display_name || projectId}?\n\nThe project will move to History Projects and can be restored later.`,
+    );
+    if (!yes) {
+      return;
+    }
+
+    setErrorText("");
+    try {
+      await workbenchApi.archiveProject(projectId);
+      setTransientChat(null);
+      setFileCache({});
+      if (projectId === model.project_id) {
+        setSidebarMode("projects");
+      }
+      await hardRefresh();
+    } catch (error) {
+      setErrorText("Archive project failed: " + toErrorMessage(error));
+    }
+  };
+
+  const restoreProject = async (projectId: string) => {
+    const target = model.archived_projects.find((project) => project.id === projectId);
+    const yes = window.confirm(
+      `Restore ${target?.display_name || projectId}?\n\nThe project will return to the active project list.`,
+    );
+    if (!yes) {
+      return;
+    }
+
+    setErrorText("");
+    try {
+      await workbenchApi.restoreProject(projectId, false);
+      await hardRefresh();
+    } catch (error) {
+      setErrorText("Restore project failed: " + toErrorMessage(error));
+    }
+  };
+
+  const deleteProject = async (projectId: string) => {
+    const target = model.archived_projects.find((project) => project.id === projectId);
+    const yes = window.confirm(
+      `Delete ${target?.display_name || projectId} permanently?\n\nThis removes the archived project directory and cannot be undone.`,
+    );
+    if (!yes) {
+      return;
+    }
+
+    setErrorText("");
+    try {
+      await workbenchApi.deleteProject(projectId);
+      await hardRefresh();
+    } catch (error) {
+      setErrorText("Delete project failed: " + toErrorMessage(error));
     }
   };
 
@@ -330,10 +411,12 @@ export function WorkbenchPage() {
         sidebarMode={sidebarMode}
         projectName={projectName}
         activeProjectId={model.project_id}
-        projects={model.projects}
+        projects={model.active_projects}
+        archivedProjects={model.archived_projects}
         files={model.files}
         currentView={currentView}
         onBack={() => setSidebarMode("projects")}
+        onOpenHistory={() => setSidebarMode("history")}
         onRefresh={() => {
           void hardRefresh();
         }}
@@ -347,6 +430,18 @@ export function WorkbenchPage() {
           void openFile(fileId);
         }}
         onCreateProject={createProject}
+        onRenameProject={(projectId, displayName) => {
+          void renameProject(projectId, displayName);
+        }}
+        onArchiveProject={(projectId) => {
+          void archiveProject(projectId);
+        }}
+        onRestoreProject={(projectId) => {
+          void restoreProject(projectId);
+        }}
+        onDeleteProject={(projectId) => {
+          void deleteProject(projectId);
+        }}
       />
 
       <MainPanel

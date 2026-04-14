@@ -79,15 +79,21 @@ python agent_workbench/run_agents.py
 .\agent_workbench\scripts\start_web.ps1
 ```
 
-访问：`http://127.0.0.1:8010/`
+也可显式写为：
+
+```powershell
+.\agent_workbench\scripts\start_web.ps1 -Mode product
+```
+
+访问：`http://127.0.0.1:8011/`
 
 热更新开发模式：
 
 ```powershell
-.\agent_workbench\scripts\start_web.ps1 -FrontendMode dev
+.\agent_workbench\scripts\start_web.ps1 -Mode dev
 ```
 
-访问：`http://127.0.0.1:4173/`（前端）和 `http://127.0.0.1:8010/`（API）
+访问：`http://127.0.0.1:4173/`（前端）和 `http://127.0.0.1:8011/`（API）
 
 ## 工作流阶段
 
@@ -152,5 +158,5 @@ workspace/
 
 当前前端已迁移为 `Vite + React + TypeScript`（目录：`agent_workbench/web/`），并保持与原先工作台基本一致的外观与交互。
 
-- 生产/演示模式：使用 `npm run build` 后由 FastAPI 同源托管静态资源。
-- 开发联调模式：使用 Vite Dev Server（默认 `4173`）+ FastAPI API（默认 `8010`）。
+- 生产/演示模式：使用 `start_web.ps1` 默认产品态，由 FastAPI 同源托管静态资源。
+- 开发联调模式：使用 `start_web.ps1 -Mode dev`，即 Vite Dev Server（默认 `4173`）+ FastAPI API（默认 `8011`）。

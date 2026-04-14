@@ -1,9 +1,9 @@
 param(
     [Alias("Host")]
     [string]$BindHost = "127.0.0.1",
-    [int]$Port = 8010,
-    [ValidateSet("serve", "dev")]
-    [string]$FrontendMode = "serve",
+    [int]$Port = 8011,
+    [ValidateSet("product", "dev", "serve")]
+    [string]$Mode = "product",
     [int]$WebPort = 4173,
     [bool]$HideBackendWindow = $true
 )
@@ -61,25 +61,31 @@ function Ensure-WebBuild {
             Pop-Location
         }
     }
+}
 
-    if (-not (Test-Path (Join-Path $webDir "dist\index.html"))) {
-        Write-Host "Building React frontend..."
-        Push-Location $webDir
-        try {
-            & $npmCmd.Source run build
-        }
-        finally {
-            Pop-Location
-        }
+function Build-WebApp {
+    $npmCmd = Get-Command npm -ErrorAction SilentlyContinue
+    if (-not $npmCmd) {
+        throw "npm not found. Please install Node.js 18+ and retry."
+    }
+
+    Ensure-WebBuild
+    Write-Host "Building React frontend..."
+    Push-Location $webDir
+    try {
+        & $npmCmd.Source run build
+    }
+    finally {
+        Pop-Location
     }
 }
 
 function Start-UvicornForeground([hashtable]$runner) {
     if ($runner.Kind -eq "py") {
-        & $runner.Path -3 -m uvicorn ludens_flow.app.api:app --host $BindHost --port $Port
+        & $runner.Path -3 -m uvicorn ludens_flow.app.api:app --app-dir agent_workbench/src --host $BindHost --port $Port
     }
     else {
-        & $runner.Path -m uvicorn ludens_flow.app.api:app --host $BindHost --port $Port
+        & $runner.Path -m uvicorn ludens_flow.app.api:app --app-dir agent_workbench/src --host $BindHost --port $Port
     }
 }
 
@@ -95,6 +101,7 @@ function Start-UvicornBackground([hashtable]$runner) {
     if ($runner.Kind -eq "py") {
         return Start-Process -FilePath $runner.Path -ArgumentList @(
             "-3", "-m", "uvicorn", "ludens_flow.app.api:app",
+            "--app-dir", "agent_workbench/src",
             "--host", $BindHost,
             "--port", $Port,
             "--reload"
@@ -103,6 +110,7 @@ function Start-UvicornBackground([hashtable]$runner) {
 
     return Start-Process -FilePath $runner.Path -ArgumentList @(
         "-m", "uvicorn", "ludens_flow.app.api:app",
+        "--app-dir", "agent_workbench/src",
         "--host", $BindHost,
         "--port", $Port,
         "--reload"
@@ -110,10 +118,11 @@ function Start-UvicornBackground([hashtable]$runner) {
 }
 
 $pythonRunner = Resolve-PythonRunner
+$effectiveMode = if ($Mode -eq "serve") { "product" } else { $Mode }
 
-if ($FrontendMode -eq "serve") {
-    Ensure-WebBuild
-    Write-Host "Starting Ludens-Flow web workbench at http://$BindHost`:$Port/ (mode: serve)"
+if ($effectiveMode -eq "product") {
+    Build-WebApp
+    Write-Host "Starting Ludens-Flow web workbench at http://$BindHost`:$Port/ (mode: product)"
     Write-Host "Repo root: $repoRoot"
     Start-UvicornForeground $pythonRunner
     exit $LASTEXITCODE
@@ -126,6 +135,7 @@ if (-not $npmCmd) {
 
 Write-Host "Starting Ludens-Flow backend at http://$BindHost`:$Port/ and Vite at http://$BindHost`:$WebPort/"
 Write-Host "Repo root: $repoRoot"
+Write-Host "Mode: dev"
 
 $backend = Start-UvicornBackground $pythonRunner
 Write-Host "Backend PID: $($backend.Id)"

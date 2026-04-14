@@ -72,4 +72,46 @@ export const workbenchApi = {
       method: "POST",
     });
   },
+
+  renameProject(projectId: string, display_name: string) {
+    return fetchJson<ProjectsResponse>(
+      `/api/projects/${encodeURIComponent(projectId)}/rename`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ display_name }),
+      },
+    );
+  },
+
+  archiveProject(projectId: string) {
+    return fetchJson<ProjectsResponse>(
+      `/api/projects/${encodeURIComponent(projectId)}/archive`,
+      {
+        method: "POST",
+      },
+    );
+  },
+
+  restoreProject(projectId: string, setActive = false) {
+    return fetchJson<ProjectsResponse>(
+      `/api/projects/${encodeURIComponent(projectId)}/restore`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ set_active: setActive }),
+      },
+    );
+  },
+
+  deleteProject(projectId: string) {
+    return fetchJson<{
+      deleted_project: string;
+      active_project: string;
+      active_projects: ProjectsResponse["active_projects"];
+      archived_projects: ProjectsResponse["archived_projects"];
+    }>(`/api/projects/${encodeURIComponent(projectId)}`, {
+      method: "DELETE",
+    });
+  },
 };

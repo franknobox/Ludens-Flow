@@ -64,6 +64,12 @@ body {
   flex-direction: column;
 }
 
+.shell.left {
+  position: relative;
+  overflow: visible;
+  z-index: 5;
+}
+
 .main {
   background: rgba(255, 255, 255, 0.84);
   border: 1px solid rgba(255, 255, 255, 0.7);
@@ -112,6 +118,13 @@ body {
 
 .section-fill {
   flex: 1;
+}
+
+.sidebar-pane {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
 }
 
 .create-box {
@@ -177,11 +190,112 @@ body {
 .list {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: 0 12px 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.project-card-shell {
+  position: relative;
+}
+
+.project-card {
+  padding-right: 46px;
+}
+
+.card-corner-btn {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--shell-text);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.card-corner-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.sidebar-popover {
+  position: absolute;
+  left: calc(100% + 10px);
+  width: 190px;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  background: rgba(20, 30, 43, 0.98);
+  box-shadow: 0 12px 26px rgba(7, 12, 19, 0.32);
+  display: grid;
+  gap: 8px;
+  z-index: 4;
+}
+
+.menu-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sidebar-popover input {
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--shell-text);
+  padding: 0 10px;
+  outline: none;
+}
+
+.menu-label {
+  font-size: 11px;
+  color: var(--shell-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.menu-close-btn {
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--shell-text);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.menu-close-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.menu-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.shell-btn.danger {
+  border-color: rgba(255, 98, 89, 0.72);
+  background: rgba(177, 30, 21, 0.98);
+  color: #fff1ef;
+}
+
+.shell-btn.danger:hover {
+  background: rgba(193, 36, 25, 1);
 }
 
 .item {
@@ -225,6 +339,41 @@ body {
   overflow: hidden;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+}
+
+.history-entry-wrap {
+  padding: 0 12px 12px;
+}
+
+.history-entry {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--shell-text);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.history-entry:hover {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.history-card {
+  cursor: default;
+}
+
+.history-actions {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .tag {
