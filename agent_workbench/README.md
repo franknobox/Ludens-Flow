@@ -31,22 +31,29 @@ LLM_TEMPERATURE=0.2
 
 ### 2. 安装依赖
 
-最小依赖建议直接安装：
+推荐使用可编辑安装（同时安装依赖并注册 CLI 入口）：
 
 ```bash
-pip install openai python-dotenv fastapi "uvicorn[standard]" Pillow
+pip install -e ./agent_workbench
 ```
 
 说明：
 
-- `fastapi` + `uvicorn` 用于 Web 工作台
-- `Pillow` 用于 CLI / Web 图片输入时的压缩与处理
+- 安装后可直接使用 `ludensflow` 与 `ludensflow-api` 命令
+- 仍可通过仓库脚本启动 Web（`start_web.ps1`）
+- 可执行 `python agent_workbench/scripts/smoke_install.py` 做安装与启动 smoke 检查
 
 ## 启动方式
 
 ### 方式 A：CLI 交互模式
 
-在项目根目录运行：
+推荐命令：
+
+```bash
+ludensflow
+```
+
+兼容命令（老入口）：
 
 ```bash
 python agent_workbench/run_agents.py

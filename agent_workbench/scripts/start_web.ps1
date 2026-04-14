@@ -10,7 +10,17 @@ param(
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $webDir = Join-Path $repoRoot "agent_workbench\web"
+$srcDir = Join-Path $repoRoot "agent_workbench\src"
 Set-Location $repoRoot
+
+if (Test-Path $srcDir) {
+    if ($env:PYTHONPATH) {
+        $env:PYTHONPATH = "$srcDir;$($env:PYTHONPATH)"
+    }
+    else {
+        $env:PYTHONPATH = $srcDir
+    }
+}
 
 function Resolve-PythonRunner {
     $pythonCmd = Get-Command python -ErrorAction SilentlyContinue
@@ -66,10 +76,10 @@ function Ensure-WebBuild {
 
 function Start-UvicornForeground([hashtable]$runner) {
     if ($runner.Kind -eq "py") {
-        & $runner.Path -3 -m uvicorn agent_workbench.api:app --host $BindHost --port $Port
+        & $runner.Path -3 -m uvicorn ludens_flow.api:app --host $BindHost --port $Port
     }
     else {
-        & $runner.Path -m uvicorn agent_workbench.api:app --host $BindHost --port $Port
+        & $runner.Path -m uvicorn ludens_flow.api:app --host $BindHost --port $Port
     }
 }
 
@@ -84,7 +94,7 @@ function Start-UvicornBackground([hashtable]$runner) {
 
     if ($runner.Kind -eq "py") {
         return Start-Process -FilePath $runner.Path -ArgumentList @(
-            "-3", "-m", "uvicorn", "agent_workbench.api:app",
+            "-3", "-m", "uvicorn", "ludens_flow.api:app",
             "--host", $BindHost,
             "--port", $Port,
             "--reload"
@@ -92,7 +102,7 @@ function Start-UvicornBackground([hashtable]$runner) {
     }
 
     return Start-Process -FilePath $runner.Path -ArgumentList @(
-        "-m", "uvicorn", "agent_workbench.api:app",
+        "-m", "uvicorn", "ludens_flow.api:app",
         "--host", $BindHost,
         "--port", $Port,
         "--reload"

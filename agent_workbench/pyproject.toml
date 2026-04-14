@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ludensflow"
+version = "0.1.0"
+description = "Ludens-Flow multi-agent game development workbench"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "openai>=1.0.0",
+  "python-dotenv>=1.0.0",
+  "fastapi>=0.100.0",
+  "uvicorn[standard]>=0.22.0",
+  "ddgs>=9.11.2",
+  "Pillow>=10.0.0",
+]
+
+[project.scripts]
+ludensflow = "ludens_flow.cli:main"
+ludensflow-api = "ludens_flow.api:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
