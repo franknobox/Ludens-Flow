@@ -8,16 +8,19 @@
    - 完成 `pyproject.toml` 与标准入口命令（`ludensflow` / `ludensflow-api`）。
    - 去除 `sys.path` 注入依赖，统一包内入口与导入路径。
    - 增加安装与启动 smoke test，保证本地/CI 可复现。
+   - 进度：已完成（`216b570`）。
 
 2. **Workflow Core 稳定性门禁（必须）**
    - 统一节点失败、解析失败、超时等异常恢复策略。
    - 补齐主链路端到端回归（多轮、回流、冻结/解冻、并发）。
    - 增加误跳转/误回退等关键断言，避免流程漂移。
+   - 进度：已完成（`6965419`）。
 
 3. **状态与项目生命周期完整性（必须）**
    - 为状态与项目元数据建立 `schema_version` 与 migration 机制。
    - 提供项目导出/导入能力（至少覆盖 state + artifacts）。
    - 补齐 reset/migrate 关键操作审计日志。
+   - 进度：已完成（`6965419`）。
 
 4. **前端实时同步最小闭环（建议按必须执行）**
    - 增加 SSE 推送通道，支持生成中状态与增量刷新。
@@ -40,13 +43,7 @@
   - 继续收口外置 Prompt、用户画像注入和结构化解析之间的边界，减少配置漂移和协议不一致问题。
   - 继续打磨多项目工作台的边界行为与管理能力，重点关注项目级上下文一致性、reset / migrate / active project 等稳定性细节。
   - 清理冗余代码与历史遗留实现，降低后续功能扩展成本,持续修复bug。
-- **安装包与工程化收口（ludensflow）**：
-  - 补齐 `agent_workbench/pyproject.toml`，明确构建后端、项目元数据、依赖与 `src/` 包发现规则。
-  - 以 `ludensflow` 作为安装包名，保留 `ludens_flow` 作为 Python 导入包名，统一命名语义。
-  - 提供标准入口：`ludensflow`（CLI）与 `ludensflow-api`（Web/API），逐步替代脚本式运行方式。
-  - 将 `agent_workbench/api.py`、`agent_workbench/run_agents.py` 迁移为包内入口并移除 `sys.path` 注入；兼容期保留薄封装入口，避免中断现有使用。
-  - 增加安装与启动 smoke test（如 `pip install -e ./agent_workbench` + 命令启动校验），保证本地、CI、部署环境行为一致。
-- **进度状态**：进行中
+- **进度状态**：V3 必做项 1/2/3 已完成，继续推进 4/5/6。
 
 ## 2. 提示词 (Prompt) 优化与结构化输出 (Schemas)
 - **核心目标**：提升提示词稳定性、输出质量与工具调用一致性，减少非结构化输出带来的脆弱性。
