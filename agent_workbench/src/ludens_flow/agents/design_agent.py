@@ -3,6 +3,7 @@ from typing import Optional, Dict, Any
 import json
 
 from ludens_flow.agents.base import BaseAgent, AgentResult, CommitSpec
+from ludens_flow.schemas import DISCUSS_RESPONSE_SCHEMA_TEXT, parse_discuss_payload
 from ludens_flow.state import LudensState
 from llm.provider import LLMConfig
 
@@ -40,14 +41,7 @@ class DesignAgent(BaseAgent):
             "3. 鼓励创意冒险，聚焦于能在有限时间内跑通的最小核心体验（类似 Game Jam 思维）。\n"
             "4. 如果有模糊地带，用友好的反问牵引思考；如果用户给的方向清晰，热烈肯定并发散脑洞。\n"
             "5. 保持轻松、活泼、富有创造力的对话节奏。\n"
-            "\n\n请严格仅输出一个合法的 JSON 对象，且不要包含任何多余的解释文字或注释。JSON 格式如下： \n"
-            "{\n"
-            ' "reply": "显示给用户的自然语言回答",\n'
-            ' "state_updates": {},\n'
-            ' "profile_updates": ["[PROFILE_UPDATE] key: value", ...],\n'
-            ' "events": [],\n'
-            "}\n"
-            "重要：如果某字段无值，请使用 null、{} 或 [] 表示；不要输出多余文本。"
+            f"\n\n{DISCUSS_RESPONSE_SCHEMA_TEXT}"
         )
 
         raw = self._call(
@@ -59,17 +53,13 @@ class DesignAgent(BaseAgent):
         )
 
         # 尝试解析结构化 JSON 响应。
-        parsed, remaining = self.parse_structured_response(raw)
-        if parsed:
-            assistant_text = parsed.get("reply", remaining or "")
-            state_updates = parsed.get("state_updates", {}) or {}
-            profile_updates = parsed.get("profile_updates", []) or []
-            events = parsed.get("events", []) or []
+        payload, _ = parse_discuss_payload(raw)
+        if payload:
             return AgentResult(
-                assistant_message=(assistant_text or "").strip(),
-                state_updates=state_updates,
-                events=events,
-                profile_updates=profile_updates,
+                assistant_message=payload.reply,
+                state_updates=payload.state_updates,
+                events=payload.events,
+                profile_updates=payload.profile_updates,
             )
 
         # 无JSON

@@ -1,39 +1,40 @@
+import json
 import logging
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Union
 
+from ludens_flow.schemas import extract_structured_json_object
 from ludens_flow.state import LudensState
-from llm.provider import LLMConfig, generate
 from ludens_flow.tools.registry import dispatch_tool_call, merge_tool_schemas
+from llm.provider import LLMConfig, generate
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class CommitSpec:
-    """Agent 交给 Graph 的落盘描述。"""
+    """Commit description passed from an Agent back to the graph."""
 
-    artifact_name: str  # 目标工件名
-    content: str  # 最终内容
-    reason: str  # 写入原因
+    artifact_name: str
+    content: str
+    reason: str
 
 
 @dataclass
 class AgentResult:
-    """Agent 标准返回结构。"""
+    """Standard result contract returned by an Agent step."""
 
-    assistant_message: str  # 给用户的自然语言回复
-    state_updates: Dict[str, Any] = field(
-        default_factory=dict
-    )  # 要合并回 LudensState 的增量更新
-    commit: Optional[CommitSpec] = None  # 定稿阶段的落盘描述
-    events: List[str] = field(default_factory=list)  # 供 Router 消费的事件
-    profile_updates: List[str] = field(default_factory=list)  # 待写入用户画像的条目
+    assistant_message: str
+    state_updates: Dict[str, Any] = field(default_factory=dict)
+    commit: Optional[CommitSpec] = None
+    events: List[str] = field(default_factory=list)
+    profile_updates: List[str] = field(default_factory=list)
 
 
 class BaseAgent(ABC):
-    """所有 Agent 的公共基类。约定 discuss 负责对话，commit 负责定稿。"""
+    """Shared base class for all agents."""
 
     name: str = "BaseAgent"
     system_prompt: str = ""
@@ -47,7 +48,7 @@ class BaseAgent(ABC):
         user_persona: Optional[str] = None,
         project_id: Optional[str] = None,
     ) -> str:
-        """统一 LLM 调用入口，处理配置和多轮 tool calling。"""
+        """Shared LLM call entrypoint with optional tool-calling loop."""
         from llm.provider import load_config
 
         if cfg is None:
@@ -59,19 +60,16 @@ class BaseAgent(ABC):
         if history is None:
             history = []
         else:
-            # 避免直接改调用方传入的 history。
             history = list(history)
 
         max_tool_iterations = 5
         iterations = 0
 
-        # LLM 在回答时能把用户画像作为独立的上下文参考
         if user_persona:
             history.append({"role": "user", "content": user_persona})
 
         active_tools = merge_tool_schemas(tools)
 
-        # 首轮模型调用。
         response = generate(
             system=self.system_prompt,
             user=user_prompt,
@@ -87,7 +85,6 @@ class BaseAgent(ABC):
         ):
             iterations += 1
 
-            # 首轮工具调用时，把原始用户输入补进 history，后续改用中性续写提示。
             if iterations == 1:
                 history.append({"role": "user", "content": user_prompt})
                 user_prompt = "Please continue."
@@ -109,27 +106,21 @@ class BaseAgent(ABC):
             }
             history.append(assistant_msg)
 
-            # 执行模型请求的工具。
             for tool_call in response.tool_calls:
                 tool_name = tool_call.function.name
                 tool_args_str = tool_call.function.arguments
 
                 try:
-                    import json
-
                     args = json.loads(tool_args_str)
-
-                    logger.info(f"Agent executing tool: {tool_name}")
+                    logger.info("Agent executing tool: %s", tool_name)
                     tool_result = dispatch_tool_call(
                         tool_name,
                         args,
                         project_id=project_id,
                     )
+                except Exception as exc:
+                    tool_result = f"Error executing tool {tool_name}: {exc}"
 
-                except Exception as e:
-                    tool_result = f"Error executing tool {tool_name}: {e}"
-
-                # 把工具结果回灌给模型。
                 history.append(
                     {
                         "role": "tool",
@@ -138,7 +129,6 @@ class BaseAgent(ABC):
                     }
                 )
 
-            # 继续请求模型生成最终回复。
             response = generate(
                 system=self.system_prompt,
                 user=user_prompt,
@@ -149,53 +139,51 @@ class BaseAgent(ABC):
 
         if hasattr(response, "tool_calls"):
             logger.warning(
-                f"Agent exceeded maximum tool iterations ({max_tool_iterations}). Forcing exit."
+                "Agent exceeded maximum tool iterations (%s). Forcing exit.",
+                max_tool_iterations,
             )
             return (response.content or "").strip()
 
-        # 普通文本响应。
         return str(response)
 
     def extract_profile_updates(self, assistant_text: str) -> List[str]:
-        """提取 [PROFILE_UPDATE] 行，并标准化为字符串列表。"""
-        import re, json
-
+        """Extract [PROFILE_UPDATE] lines as normalized strings."""
         if not assistant_text:
             return []
+
         lines = assistant_text.splitlines()
         updates: List[str] = []
         pattern = re.compile(r"^\s*\[PROFILE_UPDATE\]\s*(.*)$", re.IGNORECASE)
+
         for line in lines:
-            m = pattern.match(line)
-            if not m:
+            match = pattern.match(line)
+            if not match:
                 continue
-            payload = m.group(1).strip()
+
+            payload = match.group(1).strip()
             if not payload:
                 continue
-            # 支持把 JSON payload 拆成多条更新。
+
             if (payload.startswith("{") and payload.endswith("}")) or (
                 payload.startswith("[") and payload.endswith("]")
             ):
                 try:
                     parsed = json.loads(payload)
-                    # dict 展开为 key/value，list 展开为逐条字符串。
                     if isinstance(parsed, dict):
-                        for k, v in parsed.items():
-                            updates.append(f"{k}: {v}")
+                        for key, value in parsed.items():
+                            updates.append(f"{key}: {value}")
                     elif isinstance(parsed, list):
                         for item in parsed:
                             updates.append(str(item))
                 except Exception:
-                    # 解析失败时保留原始文本。
                     updates.append(payload)
             else:
                 updates.append(payload)
 
-        # 去重并保持顺序。
         seen = set()
         result = []
-        for u in updates:
-            key = u.strip()
+        for item in updates:
+            key = item.strip()
             if key and key not in seen:
                 seen.add(key)
                 result.append(key)
@@ -204,51 +192,7 @@ class BaseAgent(ABC):
     def parse_structured_response(
         self, assistant_text: str
     ) -> tuple[Optional[dict], str]:
-        import json, re
-
-        if not assistant_text or not assistant_text.strip():
-            return None, ""
-        text = assistant_text.strip()
-
-        # 1) 优先处理 ```json ``` 的代码块
-        m = re.search(r"```json\s*(\{.*?\})\s*```", text, re.DOTALL | re.IGNORECASE)
-        if m:
-            try:
-                return json.loads(m.group(1)), (
-                    text[: m.start()] + text[m.end() :]
-                ).strip()
-            except Exception:
-                pass
-
-        # 2) 处理自定义标记（例如 <<TAG>> ... <<END>>）
-        m = re.search(r"<<[^>]+>>\s*(\{.*?\})\s*<<END_[^>]+>>", text, re.DOTALL)
-        if m:
-            try:
-                return json.loads(m.group(1)), (
-                    text[: m.start()] + text[m.end() :]
-                ).strip()
-            except Exception:
-                pass
-
-        # 3) 花括号平衡查找第一个完整 JSON 对象
-        start = text.find("{")
-        while start != -1:
-            depth = 0
-            for i in range(start, len(text)):
-                if text[i] == "{":
-                    depth += 1
-                elif text[i] == "}":
-                    depth -= 1
-                    if depth == 0:
-                        candidate = text[start : i + 1]
-                        try:
-                            parsed = json.loads(candidate)
-                            remaining = (text[:start] + text[i + 1 :]).strip()
-                            return parsed, remaining
-                        except Exception:
-                            break
-            start = text.find("{", start + 1)
-        return None, text
+        return extract_structured_json_object(assistant_text)
 
     @abstractmethod
     def discuss(
@@ -258,7 +202,7 @@ class BaseAgent(ABC):
         cfg: Optional[LLMConfig] = None,
         user_persona: Optional[str] = None,
     ) -> AgentResult:
-        """讨论阶段入口。"""
+        """Discussion-phase entrypoint."""
         ...
 
     @abstractmethod
@@ -269,5 +213,5 @@ class BaseAgent(ABC):
         cfg: Optional[LLMConfig] = None,
         user_persona: Optional[str] = None,
     ) -> AgentResult:
-        """定稿阶段入口。"""
+        """Commit-phase entrypoint."""
         ...

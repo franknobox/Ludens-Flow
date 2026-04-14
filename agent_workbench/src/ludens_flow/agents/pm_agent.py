@@ -3,6 +3,7 @@ from typing import Optional, Dict, Any
 import json
 
 from ludens_flow.agents.base import BaseAgent, AgentResult, CommitSpec
+from ludens_flow.schemas import DISCUSS_RESPONSE_SCHEMA_TEXT, parse_discuss_payload
 from ludens_flow.state import LudensState
 from ludens_flow.artifacts import read_artifact
 from llm.provider import LLMConfig
@@ -43,14 +44,7 @@ class PMAgent(BaseAgent):
             "2. 结合 GDD 中的功能，主动帮用户识别哪些功能是核心体验不可缺少的，哪些可以在 Game Jam 或 MVP 阶段果断砍掉。\n"
             "3. 所有建议以 Unity PC Standalone（Editor 可以 Play Mode 验收）为默认交付目标，不主动引入跨平台或多人联网议题。\n"
             "4. 以自然语言流畅地回复用户，不带任何特殊格式标签。\n"
-            "\n\n请严格仅输出一个合法的 JSON 对象，且不要包含任何多余的解释文字或注释。JSON 格式如下： \n"
-            "{\n"
-            ' "reply": "显示给用户的自然语言回答",\n'
-            ' "state_updates": {},\n'
-            ' "profile_updates": ["[PROFILE_UPDATE] key: value", ...],\n'
-            ' "events": [],\n'
-            "}\n"
-            "重要：如果某字段无值，请使用 null、{} 或 [] 表示；不要输出多余文本。"
+            f"\n\n{DISCUSS_RESPONSE_SCHEMA_TEXT}"
         )
         raw = self._call(
             prompt,
@@ -59,17 +53,13 @@ class PMAgent(BaseAgent):
             user_persona=user_persona,
             project_id=state.project_id,
         )
-        parsed, remaining = self.parse_structured_response(raw)
-        if parsed:
-            assistant_text = parsed.get("reply", remaining or "")
-            state_updates = parsed.get("state_updates", {}) or {}
-            profile_updates = parsed.get("profile_updates", []) or []
-            events = parsed.get("events", []) or []
+        payload, _ = parse_discuss_payload(raw)
+        if payload:
             return AgentResult(
-                assistant_message=(assistant_text or "").strip(),
-                state_updates=state_updates,
-                events=events,
-                profile_updates=profile_updates,
+                assistant_message=payload.reply,
+                state_updates=payload.state_updates,
+                events=payload.events,
+                profile_updates=payload.profile_updates,
             )
 
         reply = raw or ""

@@ -4,6 +4,7 @@ from typing import Optional
 
 from ludens_flow.agents.base import BaseAgent, AgentResult, CommitSpec
 from ludens_flow.artifacts import read_artifact
+from ludens_flow.schemas import DISCUSS_RESPONSE_SCHEMA_TEXT, parse_discuss_payload
 from ludens_flow.state import LudensState
 from llm.provider import LLMConfig
 
@@ -141,14 +142,7 @@ class EngineeringAgent(BaseAgent):
             "2. 如果用户已经明确选择了某个预设，请围绕该预设继续讨论，不要重新发散。\n"
             "3. 讨论应聚焦 Unity 项目的可执行性、目录结构、模块边界和调试成本。\n"
             "4. 语气专业、清晰、友好，用自然语言回答。\n"
-            "\n\n请严格仅输出一个合法的 JSON 对象，且不要包含任何多余的解释文字或注释。JSON 格式如下： \n"
-            "{\n"
-            ' "reply": "显示给用户的自然语言回答",\n'
-            ' "state_updates": {},\n'
-            ' "profile_updates": ["[PROFILE_UPDATE] key: value", ...],\n'
-            ' "events": [],\n'
-            "}\n"
-            "重要：如果某字段无值，请使用 null、{} 或 [] 表示；不要输出多余文本。"
+            f"\n\n{DISCUSS_RESPONSE_SCHEMA_TEXT}"
         )
 
         updates = {}
@@ -160,19 +154,16 @@ class EngineeringAgent(BaseAgent):
             user_persona=user_persona,
             project_id=state.project_id,
         )
-        parsed, remaining = self.parse_structured_response(raw)
-        if parsed:
-            assistant_text = parsed.get("reply", remaining or "")
-            state_updates = parsed.get("state_updates", {}) or {}
+        payload, _ = parse_discuss_payload(raw)
+        if payload:
+            state_updates = dict(payload.state_updates)
             if detected_style and detected_style != state.style_preset:
                 state_updates["style_preset"] = detected_style
-            profile_updates = parsed.get("profile_updates", []) or []
-            events = parsed.get("events", []) or []
             return AgentResult(
-                assistant_message=(assistant_text or "").strip(),
+                assistant_message=payload.reply,
                 state_updates=state_updates,
-                events=events,
-                profile_updates=profile_updates,
+                events=payload.events,
+                profile_updates=payload.profile_updates,
             )
 
         reply = raw or ""
