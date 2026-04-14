@@ -12,8 +12,8 @@ sys.path.insert(0, str(_ROOT / "src"))
 
 os.chdir(_ROOT)
 
+from ludens_flow.input_parser import parse_user_input
 from ludens_flow.tools import search as search_tool
-from run_agents import parse_user_input
 
 
 # 1x1 transparent PNG

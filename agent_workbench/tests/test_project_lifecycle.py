@@ -11,6 +11,8 @@ sys.path.insert(0, str(_ROOT / "src"))
 
 os.chdir(_ROOT)
 
+import ludens_flow.state as st
+from ludens_flow import api
 from ludens_flow.artifacts import read_artifact, write_artifact
 from ludens_flow.paths import (
     PROJECT_META_SCHEMA_VERSION,
@@ -142,6 +144,81 @@ class ProjectLifecycleTests(unittest.TestCase):
         beta_audit = (get_logs_dir("beta") / "audit.log").read_text(encoding="utf-8")
         self.assertIn("event=PROJECT_EXPORT", alpha_audit)
         self.assertIn("event=PROJECT_IMPORT", beta_audit)
+
+    def test_state_endpoint_contains_schema_version(self):
+        payload = api.get_state()
+        self.assertEqual(payload.get("schema_version"), STATE_SCHEMA_VERSION)
+        self.assertTrue(payload.get("project_id"))
+
+    def test_api_export_import_endpoints_roundtrip(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+        alpha_state = st.load_state(project_id="alpha")
+        alpha_state.phase = "ENG_DISCUSS"
+        st.save_state(alpha_state, project_id="alpha")
+
+        write_artifact(
+            "GDD",
+            "alpha gdd",
+            reason="test",
+            actor="DesignAgent",
+            state=alpha_state,
+            project_id="alpha",
+        )
+
+        export_resp = api.post_export_current_project(
+            api.ProjectExportRequest(output_path=str(self.workspace_root / "exports"))
+        )
+        bundle_path = Path(export_resp["bundle_path"])
+        self.assertTrue(bundle_path.exists())
+
+        import_resp = api.post_import_project_bundle(
+            api.ProjectImportRequest(
+                bundle_path=str(bundle_path),
+                project_id="beta",
+                set_active=False,
+                overwrite=True,
+            )
+        )
+        self.assertEqual(import_resp["project_id"], "beta")
+        self.assertEqual(import_resp["state"]["phase"], "ENG_DISCUSS")
+        self.assertEqual(import_resp["state"]["schema_version"], STATE_SCHEMA_VERSION)
+        self.assertEqual(read_artifact("GDD", project_id="beta"), "alpha gdd\n")
+
+    def test_api_import_requires_overwrite_for_nonempty_target(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+        alpha_state = st.load_state(project_id="alpha")
+        write_artifact(
+            "GDD",
+            "alpha gdd",
+            reason="test",
+            actor="DesignAgent",
+            state=alpha_state,
+            project_id="alpha",
+        )
+        export_resp = api.post_export_current_project(
+            api.ProjectExportRequest(output_path=str(self.workspace_root / "exports"))
+        )
+
+        create_project("beta", set_active=False)
+        beta_state = st.load_state(project_id="beta")
+        write_artifact(
+            "GDD",
+            "beta existing",
+            reason="test",
+            actor="DesignAgent",
+            state=beta_state,
+            project_id="beta",
+        )
+
+        with self.assertRaises(RuntimeError):
+            api.post_import_project_bundle(
+                api.ProjectImportRequest(
+                    bundle_path=export_resp["bundle_path"],
+                    project_id="beta",
+                    set_active=False,
+                    overwrite=False,
+                )
+            )
 
 
 if __name__ == "__main__":

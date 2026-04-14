@@ -223,6 +223,41 @@ def run_cli_loop() -> None:
                 print(f"\n✨ [System]: 已切换到项目 {active_project}")
                 continue
 
+            if raw_input.lower().startswith("/project export "):
+                output_path = raw_input[len("/project export ") :].strip().strip('"')
+                if not output_path:
+                    print("Usage: /project export <output_zip_or_dir>")
+                    continue
+                try:
+                    bundle = st.export_project_bundle(
+                        output_path, project_id=state.project_id
+                    )
+                    print(f"\n✨ [System]: 项目导出成功 -> {bundle}")
+                except Exception as e:
+                    print(f"\n[⚠️ WARNING]: 项目导出失败: {e}")
+                continue
+
+            if raw_input.lower().startswith("/project import "):
+                body = raw_input[len("/project import ") :].strip()
+                if not body:
+                    print("Usage: /project import <bundle_path> [project_id]")
+                    continue
+                parts = body.split()
+                bundle_path = parts[0].strip('"')
+                target_id = parts[1] if len(parts) > 1 else None
+                try:
+                    imported = st.import_project_bundle(
+                        bundle_path,
+                        project_id=target_id,
+                        set_active=True,
+                        overwrite=False,
+                    )
+                    state = st.load_state(project_id=imported)
+                    print(f"\n✨ [System]: 项目导入成功并切换 -> {imported}")
+                except Exception as e:
+                    print(f"\n[⚠️ WARNING]: 项目导入失败: {e}")
+                continue
+
             if raw_input.lower().startswith("/unity bind "):
                 unity_root = raw_input[len("/unity bind ") :].strip().strip('"')
                 if not unity_root:

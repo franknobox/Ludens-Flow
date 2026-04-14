@@ -147,7 +147,7 @@ def run_agent_step(
         project_id=state.project_id,
     )
 
-    print(f"[DEBUG] run_agent_step - Calling agent: {node_name} Mode: {mode}")
+    logger.debug("run_agent_step -> agent=%s mode=%s", node_name, mode)
 
     try:
         orig_prompt = getattr(agent, "system_prompt", "") or ""
@@ -160,11 +160,12 @@ def run_agent_step(
         )
         try:
             # 加载用户画像
-            from ludens_flow.user_profile import load_profile
+            from ludens_flow.user_profile import load_profile, format_profile_for_prompt
 
-            profile_text = (
+            raw_profile_text = (
                 load_profile(max_chars=2000, project_id=state.project_id) or ""
             ).strip()
+            profile_text = format_profile_for_prompt(raw_profile_text)
         except Exception as e:
             logger.warning(f"Failed to load user profile: {e}")
 
@@ -614,7 +615,7 @@ def graph_step(
 
     new_phase = state.phase
 
-    print(f"\n[DEBUG] Graph Step - Router Output Phase: {new_phase}")
+    logger.debug("graph_step -> router output phase=%s", new_phase)
 
     # REVIEW 后若进入人工决策点，立即暂停。
     if new_phase == Phase.POST_REVIEW_DECISION.value:
@@ -641,7 +642,7 @@ def graph_step(
 
     # 其余情况交给目标节点执行。
     active_node = PHASE_NODE_MAP.get(new_phase)
-    print(f"[DEBUG] Graph Step - Active Node mapped: {active_node}")
+    logger.debug("graph_step -> active node=%s", active_node)
     if active_node:
         state = active_node.execute(state, user_input)
     else:
