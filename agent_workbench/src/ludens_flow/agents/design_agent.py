@@ -23,7 +23,7 @@ class DesignAgent(BaseAgent):
         user_persona: Optional[str] = None,
     ) -> AgentResult:
         # 回流修改时，把当前 GDD 一并带入讨论上下文。
-        from ludens_flow.artifacts import read_artifact
+        from ludens_flow.app.artifacts import read_artifact
 
         existing_gdd = read_artifact("GDD", project_id=state.project_id)
 

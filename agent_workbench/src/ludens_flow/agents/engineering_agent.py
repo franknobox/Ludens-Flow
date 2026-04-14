@@ -3,7 +3,7 @@ import re
 from typing import Optional
 
 from ludens_flow.agents.base import BaseAgent, AgentResult, CommitSpec
-from ludens_flow.artifacts import read_artifact
+from ludens_flow.app.artifacts import read_artifact
 from ludens_flow.schemas import DISCUSS_RESPONSE_SCHEMA_TEXT, parse_discuss_payload
 from ludens_flow.state import LudensState
 from llm.provider import LLMConfig

@@ -76,10 +76,10 @@ function Ensure-WebBuild {
 
 function Start-UvicornForeground([hashtable]$runner) {
     if ($runner.Kind -eq "py") {
-        & $runner.Path -3 -m uvicorn ludens_flow.api:app --host $BindHost --port $Port
+        & $runner.Path -3 -m uvicorn ludens_flow.app.api:app --host $BindHost --port $Port
     }
     else {
-        & $runner.Path -m uvicorn ludens_flow.api:app --host $BindHost --port $Port
+        & $runner.Path -m uvicorn ludens_flow.app.api:app --host $BindHost --port $Port
     }
 }
 
@@ -94,7 +94,7 @@ function Start-UvicornBackground([hashtable]$runner) {
 
     if ($runner.Kind -eq "py") {
         return Start-Process -FilePath $runner.Path -ArgumentList @(
-            "-3", "-m", "uvicorn", "ludens_flow.api:app",
+            "-3", "-m", "uvicorn", "ludens_flow.app.api:app",
             "--host", $BindHost,
             "--port", $Port,
             "--reload"
@@ -102,7 +102,7 @@ function Start-UvicornBackground([hashtable]$runner) {
     }
 
     return Start-Process -FilePath $runner.Path -ArgumentList @(
-        "-m", "uvicorn", "ludens_flow.api:app",
+        "-m", "uvicorn", "ludens_flow.app.api:app",
         "--host", $BindHost,
         "--port", $Port,
         "--reload"

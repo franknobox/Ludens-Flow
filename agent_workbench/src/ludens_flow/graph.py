@@ -1,9 +1,9 @@
 import logging
 from typing import Tuple, Dict, Any, Optional
 
+from ludens_flow.app.artifacts import write_artifact
+from ludens_flow.context.prompt_templates import load_prompt_template
 from ludens_flow.state import LudensState, save_state, write_trace_log
-from ludens_flow.artifacts import write_artifact
-from ludens_flow.prompt_templates import load_prompt_template
 from ludens_flow.router import ludens_router_logic_with_action, Phase
 from ludens_flow.agents.base import AgentResult
 
@@ -160,7 +160,10 @@ def run_agent_step(
         )
         try:
             # 加载用户画像
-            from ludens_flow.user_profile import load_profile, format_profile_for_prompt
+            from ludens_flow.context.user_profile import (
+                format_profile_for_prompt,
+                load_profile,
+            )
 
             raw_profile_text = (
                 load_profile(max_chars=2000, project_id=state.project_id) or ""
@@ -378,7 +381,7 @@ def run_agent_step(
         # 用户画像独立于主工件冻结规则。
         try:
             if getattr(result, "profile_updates", None):
-                from ludens_flow.user_profile import update_profile
+                from ludens_flow.context.user_profile import update_profile
 
                 if update_profile(
                     result.profile_updates,
@@ -490,7 +493,7 @@ class RouterNode:
                 # 回流时补充当前工件内容，作为接手上下文。
                 artifact_context = ""
                 if is_backflow:
-                    from ludens_flow.artifacts import read_artifact
+                    from ludens_flow.app.artifacts import read_artifact
 
                     if to_phase.startswith("GDD_"):
                         existing = read_artifact("GDD", project_id=state.project_id)

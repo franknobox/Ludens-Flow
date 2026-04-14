@@ -5,7 +5,7 @@ import json
 from ludens_flow.agents.base import BaseAgent, AgentResult, CommitSpec
 from ludens_flow.schemas import DISCUSS_RESPONSE_SCHEMA_TEXT, parse_discuss_payload
 from ludens_flow.state import LudensState
-from ludens_flow.artifacts import read_artifact
+from ludens_flow.app.artifacts import read_artifact
 from llm.provider import LLMConfig
 
 logger = logging.getLogger(__name__)

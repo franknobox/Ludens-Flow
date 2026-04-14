@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Optional
 
 
-_PROMPT_DIR = Path(__file__).resolve().parents[2] / "prompts"
+_PROMPT_DIR = Path(__file__).resolve().parents[3] / "prompts"
 
 
 @dataclass

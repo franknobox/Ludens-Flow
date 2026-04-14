@@ -18,8 +18,8 @@ dependencies = [
 ]
 
 [project.scripts]
-ludensflow = "ludens_flow.cli:main"
-ludensflow-api = "ludens_flow.api:main"
+ludensflow = "ludens_flow.app.cli:main"
+ludensflow-api = "ludens_flow.app.api:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

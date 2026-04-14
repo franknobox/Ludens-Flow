@@ -10,7 +10,7 @@ sys.path.insert(0, str(_ROOT / "src"))
 
 os.chdir(_ROOT)
 
-from ludens_flow.artifacts import (
+from ludens_flow.app.artifacts import (
     artifact_exists,
     read_artifact,
     write_artifact,
@@ -44,7 +44,13 @@ class ArtifactTests(unittest.TestCase):
             os.environ["LUDENS_PROJECT_ID"] = self.previous_project
 
     def test_write_artifact_updates_version_and_hash(self):
-        write_artifact("GDD", "# Game Design Document\nThis is a test.", reason="Initial commit of GDD", actor="DesignAgent", state=self.state)
+        write_artifact(
+            "GDD",
+            "# Game Design Document\nThis is a test.",
+            reason="Initial commit of GDD",
+            actor="DesignAgent",
+            state=self.state,
+        )
         write_artifact(
             "GDD",
             "# Game Design Document\nThis is a test.\n\nAdded new storylines.",
@@ -58,11 +64,23 @@ class ArtifactTests(unittest.TestCase):
 
     def test_write_artifact_blocks_wrong_owner(self):
         with self.assertRaises(PermissionError):
-            write_artifact("GDD", "Illegal inject", reason="Hack", actor="PMAgent", state=self.state)
+            write_artifact(
+                "GDD",
+                "Illegal inject",
+                reason="Hack",
+                actor="PMAgent",
+                state=self.state,
+            )
 
     def test_write_artifact_rejects_unknown_name(self):
         with self.assertRaises(ValueError):
-            write_artifact("INVALID_DOC", "...", reason="...", actor="DesignAgent", state=self.state)
+            write_artifact(
+                "INVALID_DOC",
+                "...",
+                reason="...",
+                actor="DesignAgent",
+                state=self.state,
+            )
 
     def test_read_artifact_recreates_missing_file(self):
         gdd_path = Path(self.state.artifacts["gdd"].path)
@@ -78,9 +96,19 @@ class ArtifactTests(unittest.TestCase):
         save_state(self.state)
 
         with self.assertRaises(PermissionError):
-            write_artifact("GDD", "This should fail", reason="Try hack frozen state", actor="DesignAgent", state=self.state)
+            write_artifact(
+                "GDD",
+                "This should fail",
+                reason="Try hack frozen state",
+                actor="DesignAgent",
+                state=self.state,
+            )
 
-        note_path = write_dev_note("DECISIONS", "Decision 001: 缩减关卡数量。", project_id=self.state.project_id)
+        note_path = write_dev_note(
+            "DECISIONS",
+            "Decision 001: 缩减关卡数量。",
+            project_id=self.state.project_id,
+        )
         patch_path = write_patch(
             "0001",
             "This patch proposes changes to the UI scheme without touching implementation_plan.md directly.",

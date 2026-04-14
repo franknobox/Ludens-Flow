@@ -12,16 +12,22 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from ludens_flow.artifacts import read_artifact
-from ludens_flow.bootstrap import load_env_if_available
+from ludens_flow.app.artifacts import read_artifact
+from ludens_flow.app.env import load_env_if_available
 from ludens_flow.graph import graph_step
-from ludens_flow.input_parser import parse_user_input
+from ludens_flow.app.input_parser import parse_user_input
 from ludens_flow.paths import (
+    archive_project,
     clear_project_unity_root,
     create_project,
+    delete_project,
     get_project_unity_root,
+    list_active_projects,
+    list_archived_projects,
     list_projects,
+    rename_project,
     resolve_project_id,
+    restore_project,
     set_active_project_id,
     set_project_unity_root,
 )
@@ -77,6 +83,14 @@ class ProjectImportRequest(BaseModel):
     project_id: str | None = None
     set_active: bool = True
     overwrite: bool = False
+
+
+class ProjectRestoreRequest(BaseModel):
+    set_active: bool = False
+
+
+class ProjectRenameRequest(BaseModel):
+    display_name: str
 
 
 def _phase_to_agent_key(phase: str | None) -> str:
@@ -332,6 +346,8 @@ def get_projects():
     return {
         "active_project": resolve_project_id(),
         "projects": list_projects(),
+        "active_projects": list_active_projects(),
+        "archived_projects": list_archived_projects(),
     }
 
 
@@ -359,6 +375,64 @@ def select_project(project_id: str):
     return {
         "active_project": active_project,
         "state": _state_to_json(state),
+    }
+
+
+@app.post("/api/projects/{project_id}/archive")
+def post_archive_project(project_id: str):
+    archived = archive_project(project_id)
+    active_project = resolve_project_id()
+    state = st.load_state(project_id=active_project)
+    return {
+        "project": archived,
+        "active_project": active_project,
+        "state": _state_to_json(state),
+        "projects": list_projects(),
+        "active_projects": list_active_projects(),
+        "archived_projects": list_archived_projects(),
+    }
+
+
+@app.post("/api/projects/{project_id}/rename")
+def post_rename_project(project_id: str, req: ProjectRenameRequest):
+    renamed = rename_project(project_id, req.display_name)
+    active_project = resolve_project_id()
+    state = st.load_state(project_id=active_project)
+    return {
+        "project": renamed,
+        "active_project": active_project,
+        "state": _state_to_json(state),
+        "projects": list_projects(),
+        "active_projects": list_active_projects(),
+        "archived_projects": list_archived_projects(),
+    }
+
+
+@app.post("/api/projects/{project_id}/restore")
+def post_restore_project(project_id: str, req: ProjectRestoreRequest | None = None):
+    restore_req = req or ProjectRestoreRequest()
+    restored = restore_project(project_id, set_active=restore_req.set_active)
+    active_project = resolve_project_id()
+    state = st.load_state(project_id=active_project)
+    return {
+        "project": restored,
+        "active_project": active_project,
+        "state": _state_to_json(state),
+        "projects": list_projects(),
+        "active_projects": list_active_projects(),
+        "archived_projects": list_archived_projects(),
+    }
+
+
+@app.delete("/api/projects/{project_id}")
+def delete_archived_project(project_id: str):
+    deleted_project = delete_project(project_id)
+    return {
+        "deleted_project": deleted_project,
+        "active_project": resolve_project_id(),
+        "projects": list_projects(),
+        "active_projects": list_active_projects(),
+        "archived_projects": list_archived_projects(),
     }
 
 
@@ -442,7 +516,7 @@ def main() -> None:
     import uvicorn
 
     uvicorn.run(
-        "ludens_flow.api:app", host=args.host, port=args.port, reload=args.reload
+        "ludens_flow.app.api:app", host=args.host, port=args.port, reload=args.reload
     )
 
 

@@ -44,15 +44,23 @@ def main() -> None:
             env=env,
         )
 
-    run([sys.executable, "-m", "ludens_flow.cli", "--help"], cwd=repo_root, env=env)
-    run([sys.executable, "-m", "ludens_flow.api", "--help"], cwd=repo_root, env=env)
+    run(
+        [sys.executable, "-m", "ludens_flow.app.cli", "--help"],
+        cwd=repo_root,
+        env=env,
+    )
+    run(
+        [sys.executable, "-m", "ludens_flow.app.api", "--help"],
+        cwd=repo_root,
+        env=env,
+    )
 
     process = subprocess.Popen(
         [
             sys.executable,
             "-m",
             "uvicorn",
-            "ludens_flow.api:app",
+            "ludens_flow.app.api:app",
             "--host",
             args.host,
             "--port",

@@ -12,15 +12,22 @@ sys.path.insert(0, str(_ROOT / "src"))
 os.chdir(_ROOT)
 
 import ludens_flow.state as st
-from ludens_flow import api
-from ludens_flow.artifacts import read_artifact, write_artifact
+import ludens_flow.app.api as api
+from ludens_flow.app.artifacts import read_artifact, write_artifact
 from ludens_flow.paths import (
     PROJECT_META_SCHEMA_VERSION,
+    archive_project,
     create_project,
+    delete_project,
+    get_active_project_id,
     get_logs_dir,
     get_project_dir,
     get_project_meta_file,
+    list_active_projects,
+    list_archived_projects,
     list_projects,
+    rename_project,
+    restore_project,
 )
 from ludens_flow.state import (
     STATE_SCHEMA_VERSION,
@@ -219,6 +226,81 @@ class ProjectLifecycleTests(unittest.TestCase):
                     overwrite=False,
                 )
             )
+
+    def test_archiving_active_project_moves_it_to_history_and_switches_active(self):
+        create_project("alpha", set_active=True)
+        archived = archive_project("alpha")
+
+        self.assertTrue(archived["archived"])
+        self.assertEqual([item["id"] for item in list_archived_projects()], ["alpha"])
+        self.assertNotEqual(get_active_project_id(), "alpha")
+        self.assertTrue(list_active_projects())
+
+    def test_restore_project_removes_it_from_history(self):
+        create_project("alpha", set_active=True)
+        archive_project("alpha")
+
+        restored = restore_project("alpha", set_active=False)
+
+        self.assertFalse(restored["archived"])
+        self.assertEqual([item["id"] for item in list_archived_projects()], [])
+        self.assertIn("alpha", {item["id"] for item in list_active_projects()})
+
+    def test_rename_project_updates_display_name(self):
+        create_project("alpha", display_name="Alpha", set_active=False)
+
+        renamed = rename_project("alpha", "Alpha Renamed")
+
+        self.assertEqual(renamed["display_name"], "Alpha Renamed")
+        listed = {item["id"]: item for item in list_projects()}
+        self.assertEqual(listed["alpha"]["display_name"], "Alpha Renamed")
+
+    def test_delete_project_requires_archived_status(self):
+        create_project("alpha", set_active=False)
+        with self.assertRaises(RuntimeError):
+            delete_project("alpha")
+
+        archive_project("alpha")
+        deleted = delete_project("alpha")
+        self.assertEqual(deleted, "alpha")
+        self.assertFalse(get_project_dir("alpha").exists())
+
+    def test_api_project_lists_split_active_and_archived(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+        api.post_project(api.ProjectRequest(project_id="beta"))
+        api.post_archive_project("alpha")
+
+        payload = api.get_projects()
+
+        self.assertEqual(payload["active_project"], get_active_project_id())
+        self.assertIn("beta", {item["id"] for item in payload["active_projects"]})
+        self.assertIn("alpha", {item["id"] for item in payload["archived_projects"]})
+
+    def test_api_restore_and_delete_archived_project(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+        api.post_project(api.ProjectRequest(project_id="beta"))
+        api.post_archive_project("alpha")
+
+        restored = api.post_restore_project(
+            "alpha", api.ProjectRestoreRequest(set_active=False)
+        )
+        self.assertIn("alpha", {item["id"] for item in restored["active_projects"]})
+        self.assertEqual(restored["archived_projects"], [])
+
+        api.post_archive_project("alpha")
+        deleted = api.delete_archived_project("alpha")
+        self.assertEqual(deleted["deleted_project"], "alpha")
+        self.assertNotIn("alpha", {item["id"] for item in deleted["archived_projects"]})
+
+    def test_api_rename_project_updates_project_lists(self):
+        api.post_project(api.ProjectRequest(project_id="alpha", display_name="Alpha"))
+
+        renamed = api.post_rename_project(
+            "alpha", api.ProjectRenameRequest(display_name="Alpha Prime")
+        )
+
+        project_lookup = {item["id"]: item for item in renamed["projects"]}
+        self.assertEqual(project_lookup["alpha"]["display_name"], "Alpha Prime")
 
 
 if __name__ == "__main__":

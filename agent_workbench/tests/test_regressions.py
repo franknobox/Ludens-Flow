@@ -25,17 +25,17 @@ from ludens_flow.agents.design_agent import DesignAgent
 from ludens_flow.agents.engineering_agent import EngineeringAgent
 from ludens_flow.agents.pm_agent import PMAgent
 from ludens_flow.agents.review_agent import ReviewAgent
-from ludens_flow.artifacts import read_artifact, write_artifact
-from ludens_flow.graph import _merge_state_updates, run_agent_step
-from ludens_flow.prompt_templates import load_prompt_template
-from ludens_flow.schemas import parse_discuss_payload, parse_review_gate_payload
-from ludens_flow.state import init_state, init_workspace, load_state
-from ludens_flow.user_profile import (
+from ludens_flow.app.artifacts import read_artifact, write_artifact
+from ludens_flow.context.prompt_templates import load_prompt_template
+from ludens_flow.context.user_profile import (
     format_profile_for_prompt,
     load_profile,
     migrate_profile_file,
     migrate_profile_text_to_current_template,
 )
+from ludens_flow.graph import _merge_state_updates, run_agent_step
+from ludens_flow.schemas import parse_discuss_payload, parse_review_gate_payload
+from ludens_flow.state import init_state, init_workspace, load_state
 
 
 class RegressionTests(unittest.TestCase):
@@ -97,7 +97,10 @@ class RegressionTests(unittest.TestCase):
 
         state.style_preset = None
         state.chat_history = [
-            {"role": "user", "content": "This time choose Preset C and keep feature slices."},
+            {
+                "role": "user",
+                "content": "This time choose Preset C and keep feature slices.",
+            },
             {"role": "assistant", "content": "Noted."},
         ]
 
@@ -240,7 +243,9 @@ class RegressionTests(unittest.TestCase):
         self.assertIn("- nickname: Alice", formatted)
 
     def test_load_profile_creates_structured_template(self):
-        workspace_root = Path(tempfile.gettempdir()) / "ludens_flow_tests" / "profile_template"
+        workspace_root = (
+            Path(tempfile.gettempdir()) / "ludens_flow_tests" / "profile_template"
+        )
         if workspace_root.exists():
             shutil.rmtree(workspace_root)
 
@@ -298,7 +303,9 @@ class RegressionTests(unittest.TestCase):
         self.assertIn("- 喜欢轻量玩法", migrated)
 
     def test_migrate_profile_file_updates_legacy_profile(self):
-        workspace_root = Path(tempfile.gettempdir()) / "ludens_flow_tests" / "profile_migration"
+        workspace_root = (
+            Path(tempfile.gettempdir()) / "ludens_flow_tests" / "profile_migration"
+        )
         if workspace_root.exists():
             shutil.rmtree(workspace_root)
 
@@ -313,7 +320,9 @@ class RegressionTests(unittest.TestCase):
         with patch.dict(os.environ, {"LUDENS_WORKSPACE_DIR": str(workspace_root)}):
             profile_dir = workspace_root / "projects" / "migrate-me"
             profile_dir.mkdir(parents=True, exist_ok=True)
-            (profile_dir / "USER_PROFILE.md").write_text(legacy_profile, encoding="utf-8")
+            (profile_dir / "USER_PROFILE.md").write_text(
+                legacy_profile, encoding="utf-8"
+            )
 
             changed = migrate_profile_file(project_id="migrate-me")
             migrated = (profile_dir / "USER_PROFILE.md").read_text(encoding="utf-8")
@@ -337,7 +346,7 @@ class RegressionTests(unittest.TestCase):
         state.phase = "GDD_DISCUSS"
 
         with patch(
-            "ludens_flow.user_profile.load_profile",
+            "ludens_flow.context.user_profile.load_profile",
             return_value="# User Profile\n\n## Basics\n- nickname: Alice\n- preferences: minimal UI",
         ):
             run_agent_step(agent, "DISCUSS", state, "hello")
@@ -357,7 +366,8 @@ class RegressionTests(unittest.TestCase):
         state.phase = "GDD_DISCUSS"
 
         with patch(
-            "ludens_flow.user_profile.load_profile", return_value="profile text"
+            "ludens_flow.context.user_profile.load_profile",
+            return_value="profile text",
         ) as mocked_load:
             run_agent_step(agent, "DISCUSS", state, "hello")
 

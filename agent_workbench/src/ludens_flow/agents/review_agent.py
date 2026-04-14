@@ -2,7 +2,7 @@ import logging
 from typing import Any, Dict, Optional
 
 from ludens_flow.agents.base import AgentResult, BaseAgent, CommitSpec
-from ludens_flow.artifacts import read_artifact
+from ludens_flow.app.artifacts import read_artifact
 from ludens_flow.schemas import (
     REVIEW_GATE_SCHEMA_TEXT,
     ReviewGatePayload,
@@ -101,9 +101,7 @@ class ReviewAgent(BaseAgent):
             events=["REVIEW_DONE"],
         )
 
-    def _parse_review_gate(
-        self, report_text: str
-    ) -> tuple[ReviewGatePayload, str]:
+    def _parse_review_gate(self, report_text: str) -> tuple[ReviewGatePayload, str]:
         """Parse ReviewGate JSON and apply hard-stop validation rules."""
         gate_payload, clean_md = parse_review_gate_payload(report_text)
 

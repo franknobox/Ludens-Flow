@@ -5,6 +5,7 @@ happy_path_manual.py — 全链路 Happy Path 手工集成脚本（可选真实 
   python agent_workbench/scripts/happy_path_manual.py
   python agent_workbench/scripts/happy_path_manual.py --skip-llm
 """
+
 import sys
 from pathlib import Path
 import argparse
@@ -15,20 +16,32 @@ sys.path.insert(0, str(_ROOT / "src"))
 
 import os
 import tempfile
+
 os.chdir(_ROOT)
 os.environ.setdefault(
     "LUDENS_WORKSPACE_DIR",
-    str((Path(tempfile.gettempdir()) / "ludens_flow_tests" / "happy_path_manual").resolve()),
+    str(
+        (
+            Path(tempfile.gettempdir()) / "ludens_flow_tests" / "happy_path_manual"
+        ).resolve()
+    ),
 )
 
 parser = argparse.ArgumentParser(add_help=False)
-parser.add_argument("--skip-llm", action="store_true", help="强制使用 Mock，跳过真实 LLM 调用")
+parser.add_argument(
+    "--skip-llm", action="store_true", help="强制使用 Mock，跳过真实 LLM 调用"
+)
 args, _ = parser.parse_known_args()
 
 from dotenv import load_dotenv
+
 load_dotenv(_ROOT.parent / ".env")
 
-_api_key = os.getenv("OPENAI_API_KEY") or os.getenv("MOONSHOT_API_KEY") or os.getenv("LLM_API_KEY")
+_api_key = (
+    os.getenv("OPENAI_API_KEY")
+    or os.getenv("MOONSHOT_API_KEY")
+    or os.getenv("LLM_API_KEY")
+)
 USE_MOCK = args.skip_llm or not bool(_api_key)
 
 if USE_MOCK:
@@ -43,8 +56,11 @@ from ludens_flow.agents.engineering_agent import EngineeringAgent
 from ludens_flow.agents.review_agent import ReviewAgent
 
 if USE_MOCK:
+
     def _mock_gdd_discuss(self, state, user_input, cfg=None):
-        return AgentResult(assistant_message="[Mock Dam] 好主意！做 Roguelike 战斗。", state_updates={})
+        return AgentResult(
+            assistant_message="[Mock Dam] 好主意！做 Roguelike 战斗。", state_updates={}
+        )
 
     def _mock_gdd_commit(self, state, user_input, cfg=None):
         return AgentResult(
@@ -59,7 +75,9 @@ if USE_MOCK:
         )
 
     def _mock_pm_discuss(self, state, user_input, cfg=None):
-        return AgentResult(assistant_message="[Mock Pax] 三周 M0/M1。", state_updates={})
+        return AgentResult(
+            assistant_message="[Mock Pax] 三周 M0/M1。", state_updates={}
+        )
 
     def _mock_pm_commit(self, state, user_input, cfg=None):
         return AgentResult(
@@ -74,7 +92,10 @@ if USE_MOCK:
         )
 
     def _mock_eng_discuss(self, state, user_input, cfg=None):
-        return AgentResult(assistant_message="[Mock Eon] Preset A。", state_updates={"style_preset": "A"})
+        return AgentResult(
+            assistant_message="[Mock Eon] Preset A。",
+            state_updates={"style_preset": "A"},
+        )
 
     def _mock_eng_commit(self, state, user_input, cfg=None):
         return AgentResult(
@@ -89,15 +110,24 @@ if USE_MOCK:
         )
 
     def _mock_eng_coach(self, state, user_input, cfg=None):
-        return AgentResult(assistant_message="[Mock Eon Coach] 这是思路……", state_updates={})
+        return AgentResult(
+            assistant_message="[Mock Eon Coach] 这是思路……", state_updates={}
+        )
 
     def _mock_review_commit(self, state, user_input, cfg=None):
         return AgentResult(
             assistant_message="",
             state_updates={
-                "review_gate": {"status": "PASS", "targets": [], "scores": {"design": 9, "engineering": 8}, "issues": []}
+                "review_gate": {
+                    "status": "PASS",
+                    "targets": [],
+                    "scores": {"design": 9, "engineering": 8},
+                    "issues": [],
+                }
             },
-            commit=CommitSpec(artifact_name="REVIEW_REPORT", content="# REVIEW\nPASS", reason="mock"),
+            commit=CommitSpec(
+                artifact_name="REVIEW_REPORT", content="# REVIEW\nPASS", reason="mock"
+            ),
             events=["REVIEW_DONE"],
         )
 
@@ -111,7 +141,7 @@ if USE_MOCK:
     ReviewAgent.commit = _mock_review_commit
 
 import ludens_flow.state as st
-from ludens_flow.artifacts import write_artifact
+from ludens_flow.app.artifacts import write_artifact
 from ludens_flow.graph import graph_step
 from ludens_flow.router import Phase
 
@@ -128,7 +158,9 @@ def assert_reply_quality(state, keyword: str, phase_name: str):
         return
     msg = state.last_assistant_message or ""
     assert len(msg) > 20, f"[{phase_name}] LLM 回复过短（{len(msg)} 字），可能调用失败"
-    assert keyword in msg or len(msg) > 100, f"[{phase_name}] 回复未包含期待关键词 '{keyword}'，内容：{msg[:120]}…"
+    assert keyword in msg or len(msg) > 100, (
+        f"[{phase_name}] 回复未包含期待关键词 '{keyword}'，内容：{msg[:120]}…"
+    )
 
 
 def run_happy_path():
