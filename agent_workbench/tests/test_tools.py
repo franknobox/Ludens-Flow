@@ -12,14 +12,12 @@ sys.path.insert(0, str(_ROOT / "src"))
 
 os.chdir(_ROOT)
 
+from ludens_flow.app.input_parser import parse_user_input
 from ludens_flow.tools import search as search_tool
-from run_agents import parse_user_input
 
 
 # 1x1 transparent PNG
-_TINY_PNG_B64 = (
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2M4X8AAAAASUVORK5CYII="
-)
+_TINY_PNG_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2M4X8AAAAASUVORK5CYII="
 
 
 class _MockDDGS:
@@ -60,7 +58,9 @@ class ToolsTests(unittest.TestCase):
         try:
             real_import = builtins.__import__
 
-            def _import_without_pil(name, globals=None, locals=None, fromlist=(), level=0):
+            def _import_without_pil(
+                name, globals=None, locals=None, fromlist=(), level=0
+            ):
                 if name == "PIL" or name.startswith("PIL."):
                     raise ImportError("mock no pillow")
                 return real_import(name, globals, locals, fromlist, level)
@@ -70,9 +70,56 @@ class ToolsTests(unittest.TestCase):
             self.assertIsInstance(parsed, list)
             self.assertTrue(any(item.get("type") == "image_url" for item in parsed))
             image_items = [item for item in parsed if item.get("type") == "image_url"]
-            self.assertTrue(image_items[0]["image_url"]["url"].startswith("data:image/"))
+            self.assertTrue(
+                image_items[0]["image_url"]["url"].startswith("data:image/")
+            )
         finally:
             image_path.unlink(missing_ok=True)
+
+    def test_parse_user_input_with_absolute_image_path_returns_multimodal_payload(self):
+        image_path = (_ROOT / "test_dummy_abs.png").resolve()
+        image_path.write_bytes(base64.b64decode(_TINY_PNG_B64))
+        try:
+            real_import = builtins.__import__
+
+            def _import_without_pil(
+                name, globals=None, locals=None, fromlist=(), level=0
+            ):
+                if name == "PIL" or name.startswith("PIL."):
+                    raise ImportError("mock no pillow")
+                return real_import(name, globals, locals, fromlist, level)
+
+            with patch("builtins.__import__", side_effect=_import_without_pil):
+                parsed = parse_user_input(f"look {image_path} please")
+            self.assertIsInstance(parsed, list)
+            self.assertTrue(any(item.get("type") == "image_url" for item in parsed))
+        finally:
+            image_path.unlink(missing_ok=True)
+
+    def test_parse_user_input_with_absolute_image_path_containing_spaces_returns_multimodal_payload(
+        self,
+    ):
+        image_dir = _ROOT / "test image dir"
+        image_dir.mkdir(exist_ok=True)
+        image_path = (image_dir / "test image spaced.png").resolve()
+        image_path.write_bytes(base64.b64decode(_TINY_PNG_B64))
+        try:
+            real_import = builtins.__import__
+
+            def _import_without_pil(
+                name, globals=None, locals=None, fromlist=(), level=0
+            ):
+                if name == "PIL" or name.startswith("PIL."):
+                    raise ImportError("mock no pillow")
+                return real_import(name, globals, locals, fromlist, level)
+
+            with patch("builtins.__import__", side_effect=_import_without_pil):
+                parsed = parse_user_input(f"look {image_path} please")
+            self.assertIsInstance(parsed, list)
+            self.assertTrue(any(item.get("type") == "image_url" for item in parsed))
+        finally:
+            image_path.unlink(missing_ok=True)
+            image_dir.rmdir()
 
     @unittest.skipUnless(
         os.getenv("RUN_INTERNET_TESTS") == "1",

@@ -1,71 +1,158 @@
+import logging
+import os
 import sys
+import tempfile
+import unittest
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_ROOT))
 sys.path.insert(0, str(_ROOT / "src"))
 
-import logging
-import os
-import tempfile
 os.chdir(_ROOT)
 os.environ.setdefault(
     "LUDENS_WORKSPACE_DIR",
     str((Path(tempfile.gettempdir()) / "ludens_flow_tests" / "test_router").resolve()),
 )
 
-from ludens_flow.state import init_state, save_state
-from ludens_flow.router import route, Phase
+from ludens_flow.router import Phase, route
+from ludens_flow.state import init_state
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
-def run_tests():
-    # 使用全新内存状态，避免磁盘 state 污染
-    state = init_state()
-    save_state(state)  # 写盘确保 WorkspaceDir 及日志目录存在
-    
-    logger.info("--- 1. Testing GDD_DISCUSS -> GDD_COMMIT ---")
-    state.phase = Phase.GDD_DISCUSS.value
-    next_phase, explanation, updates = route(state, "定稿")
-    logger.info(f"Route: {state.phase} -> {next_phase} ({explanation})")
-    assert next_phase == Phase.GDD_COMMIT.value, f"Expected GDD_COMMIT, got {next_phase}"
-    state.phase = next_phase
-    
-    logger.info("--- 2. Testing GDD_COMMIT -> PM_DISCUSS (via last_event) ---")
-    next_phase, explanation, updates = route(state, "", last_event="GDD_COMMITTED")
-    logger.info(f"Route: {state.phase} -> {next_phase} ({explanation})")
-    assert next_phase == Phase.PM_DISCUSS.value, f"Expected PM_DISCUSS, got {next_phase}"
-    state.phase = next_phase
 
-    logger.info("--- 3. Fast Forward to REVIEW ---")
-    state.phase = Phase.REVIEW.value
-    state.review_gate = {"status": "REQUEST_CHANGES", "targets": ["PM"]}
-    next_phase, explanation, updates = route(state, "", last_event="REVIEW_DONE")
-    logger.info(f"Route: {state.phase} -> {next_phase} ({explanation})")
-    assert next_phase == Phase.POST_REVIEW_DECISION.value, f"Expected POST_REVIEW_DECISION, got {next_phase}"
-    state.phase = next_phase
+class RouterTests(unittest.TestCase):
+    def test_free_text_keywords_do_not_trigger_commit_or_backflow(self):
+        state = init_state()
+        state.phase = Phase.PM_DISCUSS.value
 
-    logger.info("--- 4. POST_REVIEW_DECISION -> PM (option A with PM target) ---")
-    state.iteration_count = 0
-    state.review_gate = {"status": "REQUEST_CHANGES", "targets": ["PM"], "issues": []}
-    # 使用单字母 "a" 精确触发 opt_a
-    next_phase, explanation, updates = route(state, "a")
-    logger.info(f"Route: {state.phase} -> {next_phase} ({explanation})")
-    assert next_phase == Phase.PM_DISCUSS.value, f"Expected PM_DISCUSS, got {next_phase}"
-    assert updates.get("iteration_count") == 1
-    state.phase = next_phase
+        next_phase, _, _ = route(state, "我想回退到 GDD")
+        self.assertEqual(next_phase, Phase.PM_DISCUSS.value)
 
-    logger.info("--- 5. POST_REVIEW_DECISION -> DEV_COACHING (option C) ---")
-    state.phase = Phase.POST_REVIEW_DECISION.value
-    # 单字母 "c" 精确触发 opt_c
-    next_phase, explanation, updates = route(state, "c")
-    logger.info(f"Route: {state.phase} -> {next_phase} ({explanation})")
-    assert next_phase == Phase.DEV_COACHING.value, f"Expected DEV_COACHING, got {next_phase}"
-    assert updates.get("artifact_frozen") is True
+        next_phase, _, _ = route(state, "现在定稿吧")
+        self.assertEqual(next_phase, Phase.PM_DISCUSS.value)
 
-    logger.info("All manual router checks passed.")
-    save_state(state)
+    def test_invalid_explicit_action_is_ignored(self):
+        state = init_state()
+        state.phase = Phase.GDD_DISCUSS.value
+
+        next_phase, _, _ = route(state, "", explicit_action="pm_back")
+        self.assertEqual(next_phase, Phase.GDD_DISCUSS.value)
+
+    def test_discuss_phase_actions(self):
+        state = init_state()
+
+        state.phase = Phase.PM_DISCUSS.value
+        next_phase, _, _ = route(state, "继续聊聊")
+        self.assertEqual(next_phase, Phase.PM_DISCUSS.value)
+
+        state.phase = Phase.PM_DISCUSS.value
+        next_phase, _, _ = route(state, "", explicit_action="pm_commit")
+        self.assertEqual(next_phase, Phase.PM_COMMIT.value)
+
+        state.phase = Phase.PM_DISCUSS.value
+        next_phase, _, _ = route(state, "", explicit_action="pm_back")
+        self.assertEqual(next_phase, Phase.GDD_DISCUSS.value)
+
+    def test_default_commit_event_transitions(self):
+        state = init_state()
+
+        state.phase = Phase.GDD_COMMIT.value
+        next_phase, _, _ = route(state, "", last_event="GDD_COMMITTED")
+        self.assertEqual(next_phase, Phase.PM_DISCUSS.value)
+
+        state.phase = Phase.PM_COMMIT.value
+        next_phase, _, _ = route(state, "", last_event="PM_COMMITTED")
+        self.assertEqual(next_phase, Phase.ENG_DISCUSS.value)
+
+    def test_review_done_without_decision_pauses_for_user(self):
+        state = init_state()
+        state.phase = Phase.REVIEW.value
+        state.review_gate = {
+            "status": "REQUEST_CHANGES",
+            "targets": ["PM"],
+            "issues": [],
+        }
+
+        next_phase, _, _ = route(state, "", last_event="REVIEW_DONE")
+        self.assertEqual(next_phase, Phase.POST_REVIEW_DECISION.value)
+
+    def test_post_review_option_a_flows_back_to_targets(self):
+        state = init_state()
+        state.phase = Phase.POST_REVIEW_DECISION.value
+        state.iteration_count = 0
+        state.review_gate = {
+            "status": "REQUEST_CHANGES",
+            "targets": ["ENG"],
+            "issues": [{"target": "ENG", "severity": "MINOR"}],
+        }
+
+        next_phase, _, updates = route(state, "", explicit_action="review_option_a")
+        self.assertEqual(next_phase, Phase.ENG_DISCUSS.value)
+        self.assertEqual(updates.get("iteration_count"), 1)
+
+    def test_post_review_option_b_filters_major_and_block(self):
+        state = init_state()
+        state.phase = Phase.POST_REVIEW_DECISION.value
+        state.review_gate = {
+            "status": "REQUEST_CHANGES",
+            "targets": ["ENG"],
+            "issues": [{"target": "ENG", "severity": "MINOR"}],
+        }
+
+        next_phase, _, updates = route(state, "", explicit_action="review_option_b")
+        self.assertEqual(next_phase, Phase.DEV_COACHING.value)
+        self.assertTrue(updates.get("artifact_frozen"))
+
+        state.phase = Phase.POST_REVIEW_DECISION.value
+        state.review_gate["issues"] = [
+            {"target": "ENG", "severity": "MINOR"},
+            {"target": "PM", "severity": "MAJOR"},
+        ]
+        next_phase, _, updates = route(state, "", explicit_action="review_option_b")
+        self.assertEqual(next_phase, Phase.PM_DISCUSS.value)
+        self.assertEqual(updates.get("iteration_count"), 1)
+
+    def test_post_review_option_c_enters_dev_coaching(self):
+        state = init_state()
+        state.phase = Phase.POST_REVIEW_DECISION.value
+        state.review_gate = {
+            "status": "REQUEST_CHANGES",
+            "targets": ["GDD"],
+            "issues": [],
+        }
+
+        next_phase, _, updates = route(state, "", explicit_action="review_option_c")
+        self.assertEqual(next_phase, Phase.DEV_COACHING.value)
+        self.assertTrue(updates.get("artifact_frozen"))
+
+    def test_dev_coaching_freeze_and_unfreeze_behavior(self):
+        state = init_state()
+        state.phase = Phase.DEV_COACHING.value
+        state.artifact_frozen = True
+
+        next_phase, _, updates = route(state, "这段代码怎么写？")
+        self.assertEqual(next_phase, Phase.DEV_COACHING.value)
+        self.assertTrue(updates.get("artifact_frozen"))
+
+        next_phase, _, updates = route(state, "定稿")
+        self.assertEqual(next_phase, Phase.DEV_COACHING.value)
+        self.assertTrue(updates.get("artifact_frozen"))
+
+        next_phase, _, updates = route(state, "解冻")
+        self.assertEqual(next_phase, Phase.ENG_DISCUSS.value)
+        self.assertFalse(updates.get("artifact_frozen"))
+
+    def test_iteration_limit_forces_dev_coaching(self):
+        state = init_state()
+        state.phase = Phase.GDD_DISCUSS.value
+        state.iteration_count = 10
+
+        next_phase, _, updates = route(state, "随便")
+        self.assertEqual(next_phase, Phase.DEV_COACHING.value)
+        self.assertTrue(updates.get("artifact_frozen"))
+
 
 if __name__ == "__main__":
-    run_tests()
+    unittest.main()

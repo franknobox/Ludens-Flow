@@ -1,6 +1,6 @@
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from dataclasses import dataclass
@@ -24,19 +24,108 @@ class Phase(str, Enum):
     DEV_COACHING = "DEV_COACHING"
 
 
-def _log_route(old_phase: str, new_phase: str, explanation: str,
-               user_input: str = "", state: Optional[LudensState] = None) -> None:
+PHASE_ACTIONS: Dict[str, List[Dict[str, str]]] = {
+    Phase.GDD_DISCUSS.value: [
+        {
+            "id": "gdd_commit",
+            "label": "定稿并生成 GDD",
+            "description": "结束当前讨论并生成 GDD 文档。",
+        }
+    ],
+    Phase.PM_DISCUSS.value: [
+        {
+            "id": "pm_commit",
+            "label": "定稿并生成 PROJECT_PLAN",
+            "description": "结束 PM 讨论并生成项目计划。",
+        },
+        {
+            "id": "pm_back",
+            "label": "回退到 GDD",
+            "description": "返回 GDD 阶段继续澄清需求。",
+        },
+    ],
+    Phase.ENG_DISCUSS.value: [
+        {
+            "id": "eng_commit",
+            "label": "定稿并生成 IMPLEMENTATION_PLAN",
+            "description": "结束工程讨论并生成实施计划。",
+        },
+        {
+            "id": "eng_back",
+            "label": "回退到 PM",
+            "description": "返回 PM 阶段调整排期和范围。",
+        },
+    ],
+    Phase.POST_REVIEW_DECISION.value: [
+        {
+            "id": "review_option_a",
+            "label": "A: 接受建议并回流",
+            "description": "按评审 targets 回流到对应阶段。",
+        },
+        {
+            "id": "review_option_b",
+            "label": "B: 仅修 BLOCK/MAJOR",
+            "description": "仅针对严重问题回流。",
+        },
+        {
+            "id": "review_option_c",
+            "label": "C: 强制进入 DEV_COACHING",
+            "description": "忽略回流，直接进入开发辅导。",
+        },
+    ],
+}
+
+
+ACTION_USER_TEXT: Dict[str, str] = {
+    "gdd_commit": "[ACTION] 定稿并生成 GDD",
+    "pm_commit": "[ACTION] 定稿并生成 PROJECT_PLAN",
+    "pm_back": "[ACTION] 回退到 GDD",
+    "eng_commit": "[ACTION] 定稿并生成 IMPLEMENTATION_PLAN",
+    "eng_back": "[ACTION] 回退到 PM",
+    "review_option_a": "[ACTION] A: 接受建议并回流",
+    "review_option_b": "[ACTION] B: 仅修 BLOCK/MAJOR",
+    "review_option_c": "[ACTION] C: 强制进入 DEV_COACHING",
+}
+
+
+def get_phase_actions(phase: Optional[str]) -> List[Dict[str, str]]:
+    resolved_phase = phase or Phase.GDD_DISCUSS.value
+    return [dict(item) for item in PHASE_ACTIONS.get(resolved_phase, [])]
+
+
+def get_available_actions(state: LudensState) -> List[Dict[str, str]]:
+    return get_phase_actions(getattr(state, "phase", None))
+
+
+def action_user_input(action_id: str) -> str:
+    return ACTION_USER_TEXT.get(action_id, f"[ACTION] {action_id}")
+
+
+def _is_action_allowed(phase: str, action_id: Optional[str]) -> bool:
+    if not action_id:
+        return False
+    allowed_ids = {item["id"] for item in get_phase_actions(phase)}
+    return action_id in allowed_ids
+
+
+def _log_route(
+    old_phase: str,
+    new_phase: str,
+    explanation: str,
+    user_input: str = "",
+    state: Optional[LudensState] = None,
+) -> None:
     """写入符合检索标准的格式化路由决策日志"""
-    timestamp = datetime.utcnow().isoformat() + "Z"
-    
+    timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
     # 获取迭代状态信息
     iter_info = "iter=0/6"
     gate_info = ""
     art_info = ""
-    
+
     if state:
         iter_info = f"iter={state.iteration_count}/{state.max_iterations}"
-        
+
         # 获取最新的 Review Gate 结论
         if state.review_gate and isinstance(state.review_gate, dict):
             status = state.review_gate.get("status", "")
@@ -52,20 +141,23 @@ def _log_route(old_phase: str, new_phase: str, explanation: str,
             art_info = f"v_gdd={v_gdd} v_pm={v_pm} v_eng={v_eng}"
 
     # 清理一下用户输入避免破行
-    safe_input = user_input.replace('\n', ' ').strip()
+    safe_input = user_input.replace("\n", " ").strip()
     user_choice = f'choice="{safe_input}"' if safe_input else 'choice=""'
 
     # 拼装最终单行日志
     log_line = (
         f"{timestamp} {iter_info} {old_phase}->{new_phase} "
-        f"{user_choice} {gate_info}reason=\"{explanation}\" {art_info}\n"
+        f'{user_choice} {gate_info}reason="{explanation}" {art_info}\n'
     )
-    
-    router_log_file = get_logs_dir() / "router.log"
+
+    router_log_file = (
+        get_logs_dir(getattr(state, "project_id", None) if state else None)
+        / "router.log"
+    )
     router_log_file.parent.mkdir(parents=True, exist_ok=True)
     with open(router_log_file, "a", encoding="utf-8") as f:
         f.write(log_line)
-        
+
     logger.info(f"Router Decision: {old_phase} -> {new_phase} ({explanation})")
 
 
@@ -84,11 +176,12 @@ def _get_backflow_phase(targets: List[str]) -> str:
 def route(
     state: LudensState,
     user_input: str,
-    last_event: Optional[str] = None
+    last_event: Optional[str] = None,
+    explicit_action: Optional[str] = None,
 ) -> Tuple[str, str, Dict[str, Any]]:
     """
     中央路由逻辑 (State Machine)
-    
+
     Args:
         state: 当前状态
         user_input: 用户的原始输入，用于提取命令选项
@@ -96,58 +189,80 @@ def route(
     """
     # 兼容没有初始化的状况
     current_phase = state.phase or Phase.GDD_DISCUSS.value
-    
+
     # Extract text content safely if user_input is a multimodal list
     if isinstance(user_input, list):
-        text_parts = [item.get("text", "") for item in user_input if item.get("type") == "text"]
+        text_parts = [
+            item.get("text", "") for item in user_input if item.get("type") == "text"
+        ]
         user_text = " ".join(text_parts).strip().lower()
     else:
         user_text = str(user_input).strip().lower()
-    
+
     updates: Dict[str, Any] = {}
     if not state.phase:
-         updates["phase"] = current_phase
+        updates["phase"] = current_phase
 
     # --- 防无限回路与死锁拦截 ---
-    if state.iteration_count > state.max_iterations and current_phase != Phase.DEV_COACHING.value:
-        explanation = f"Reached iteration limit ({state.max_iterations}). Forcing DEV_COACHING."
-        _log_route(current_phase, Phase.DEV_COACHING.value, explanation, user_text, state)
-        return Phase.DEV_COACHING.value, explanation, {"phase": Phase.DEV_COACHING.value, "artifact_frozen": True}
+    if (
+        state.iteration_count > state.max_iterations
+        and current_phase != Phase.DEV_COACHING.value
+    ):
+        explanation = (
+            f"Reached iteration limit ({state.max_iterations}). Forcing DEV_COACHING."
+        )
+        _log_route(
+            current_phase, Phase.DEV_COACHING.value, explanation, user_text, state
+        )
+        return (
+            Phase.DEV_COACHING.value,
+            explanation,
+            {"phase": Phase.DEV_COACHING.value, "artifact_frozen": True},
+        )
 
     next_phase = current_phase
     explanation = "Stay in current phase by default."
 
-    # --- 统一解析用户意图（防误触修正） ---
-    # 规则：必须是单独敲击数字，或者句子极短(<=6)且包含关键字，防止长句闲谈如“生成式关卡”导致意外定稿
-    is_short_cmd = len(user_text) <= 8
-    
-    wants_commit = user_text == "2" or (is_short_cmd and any(k in user_text for k in ["定稿", "commit"]))
-    wants_stay = user_text == "1" or (is_short_cmd and any(k in user_text for k in ["继续", "再聊", "讨论"]))
-    wants_back = user_text == "3" or (is_short_cmd and any(k in user_text for k in ["回退", "返回"]))
-    
-    opt_a = user_text == "a" or (is_short_cmd and "建议" in user_text)
-    opt_b = user_text == "b" or (is_short_cmd and "只改" in user_text)
-    opt_c = user_text == "c" or (is_short_cmd and "不改" in user_text)
+    # --- 统一解析工作流动作（仅接受显式选项，不做自由文本意图猜测） ---
+    action = str(explicit_action or "").strip().lower()
+    if action and not _is_action_allowed(current_phase, action):
+        action = ""
 
-    wants_unfreeze = any(k in user_text for k in ["解冻", "修改工件", "重新评审", "开启新迭代"])
+    wants_commit = action in {"gdd_commit", "pm_commit", "eng_commit"}
+    wants_back = action in {"pm_back", "eng_back"}
+
+    opt_a = action == "review_option_a"
+    opt_b = action == "review_option_b"
+    opt_c = action == "review_option_c"
+
+    wants_unfreeze = any(
+        k in user_text for k in ["解冻", "修改工件", "重新评审", "开启新迭代"]
+    )
 
     # 如果已经在 DEV_COACHING，做第一优先级的冰封判断 (Step 3.4 冻结拦截)
     if current_phase == Phase.DEV_COACHING.value:
         if wants_commit and not wants_unfreeze:
             explanation = "User attempted to commit during DEV_COACHING (Frozen). Suggesting unfreeze first."
-            return next_phase, explanation, {"artifact_frozen": True}  # 拦截跳转，原路返回提示
-            
+            _log_route(current_phase, next_phase, explanation, user_text, state)
+            return (
+                next_phase,
+                explanation,
+                {"artifact_frozen": True},
+            )  # 拦截跳转，原路返回提示
+
         if wants_unfreeze:
             next_phase = Phase.ENG_DISCUSS.value  # 默认解冻回最近的一步，也可后续做动态
-            explanation = "User requested unfreeze. Opening new iteration at ENG_DISCUSS."
+            explanation = (
+                "User requested unfreeze. Opening new iteration at ENG_DISCUSS."
+            )
             updates["artifact_frozen"] = False
             updates["iteration_count"] = state.iteration_count + 1
         else:
             explanation = "Continuing DEV_COACHING."
             updates["artifact_frozen"] = True
-            
+
+        _log_route(current_phase, next_phase, explanation, user_text, state)
         if next_phase != current_phase:
-            _log_route(current_phase, next_phase, explanation, user_text, state)
             updates["phase"] = next_phase
         return next_phase, explanation, updates
 
@@ -156,8 +271,6 @@ def route(
         if wants_commit:
             next_phase = Phase.GDD_COMMIT.value
             explanation = "User chose to commit GDD."
-        elif wants_back:
-            explanation = "Cannot go back from initial phase."
         else:
             explanation = "Continuing GDD discussion."
 
@@ -210,11 +323,14 @@ def route(
                 updates["iteration_count"] = state.iteration_count + 1
             elif opt_b:
                 serious_targets = [
-                    issue.get("target", "GDD") for issue in gate_issues
+                    issue.get("target", "GDD")
+                    for issue in gate_issues
                     if issue.get("severity", "").upper() in ("BLOCK", "MAJOR")
                 ]
                 if not serious_targets:
-                    explanation = "Option B: No BLOCK/MAJOR issues. Flowing to DEV_COACHING."
+                    explanation = (
+                        "Option B: No BLOCK/MAJOR issues. Flowing to DEV_COACHING."
+                    )
                     next_phase = Phase.DEV_COACHING.value
                     updates["artifact_frozen"] = True
                 else:
@@ -246,7 +362,8 @@ def route(
             updates["iteration_count"] = state.iteration_count + 1
         elif opt_b:
             serious_targets = [
-                issue.get("target", "GDD") for issue in gate_issues
+                issue.get("target", "GDD")
+                for issue in gate_issues
                 if issue.get("severity", "").upper() in ("BLOCK", "MAJOR")
             ]
             if not serious_targets:
@@ -259,26 +376,32 @@ def route(
                 updates["iteration_count"] = state.iteration_count + 1
         elif opt_c or gate_status == "PASS":
             next_phase = Phase.DEV_COACHING.value
-            explanation = "User Option C or PASS: Entering DEV_COACHING and freezing artifacts."
+            explanation = (
+                "User Option C or PASS: Entering DEV_COACHING and freezing artifacts."
+            )
             updates["artifact_frozen"] = True
         else:
             explanation = "Waiting for user decision on Review results."
 
     else:
-        explanation = f"Unknown phase '{current_phase}'. Forcing to GDD_DISCUSS to recover."
+        explanation = (
+            f"Unknown phase '{current_phase}'. Forcing to GDD_DISCUSS to recover."
+        )
         next_phase = Phase.GDD_DISCUSS.value
 
     # --- 统一更新机制 ---
+    _log_route(current_phase, next_phase, explanation, user_text, state)
     if next_phase != current_phase:
-        _log_route(current_phase, next_phase, explanation, user_text, state)
         updates["phase"] = next_phase
-        
+
     return next_phase, explanation, updates
+
 
 @dataclass
 class RouterResult:
     next_phase: str
     explanation: str
+
 
 def ludens_router_logic(state: LudensState, user_input: str) -> RouterResult:
     """
@@ -289,15 +412,37 @@ def ludens_router_logic(state: LudensState, user_input: str) -> RouterResult:
     """
     last_event = getattr(state, "last_event", None)
     nxt, exp, ups = route(state, user_input, last_event)
-    
+
     # 清理掉 last_event 表示已被消耗
     state.last_event = None
-    
+
     # 应用关键状态机变量
     if "iteration_count" in ups:
-         state.iteration_count = ups["iteration_count"]
+        state.iteration_count = ups["iteration_count"]
     if "artifact_frozen" in ups:
-         state.artifact_frozen = ups["artifact_frozen"]
-         # 将这些更新后的底层值刷回图大盘，使得其它 Node 对冰封敏感
-         
+        state.artifact_frozen = ups["artifact_frozen"]
+        # 将这些更新后的底层值刷回图大盘，使得其它 Node 对冰封敏感
+
+    return RouterResult(next_phase=nxt, explanation=exp)
+
+
+def ludens_router_logic_with_action(
+    state: LudensState, user_input: str, explicit_action: Optional[str] = None
+) -> RouterResult:
+    """支持显式 workflow action 的路由封装。"""
+    last_event = getattr(state, "last_event", None)
+    nxt, exp, ups = route(
+        state,
+        user_input,
+        last_event,
+        explicit_action=explicit_action,
+    )
+
+    state.last_event = None
+
+    if "iteration_count" in ups:
+        state.iteration_count = ups["iteration_count"]
+    if "artifact_frozen" in ups:
+        state.artifact_frozen = ups["artifact_frozen"]
+
     return RouterResult(next_phase=nxt, explanation=exp)

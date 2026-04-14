@@ -166,8 +166,8 @@ cython_debug/
 #  Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore 
 #  that can be found at https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore
 #  and can be added to the global gitignore or merged into this file. However, if you prefer, 
-#  you could uncomment the following to ignore the entire vscode folder
-# .vscode/
+# Ignore local VS Code workspace settings/tasks
+.vscode/
 
 # Ruff stuff:
 .ruff_cache/
@@ -188,9 +188,10 @@ marimo/_lsp/
 __marimo__/
 
 
-workspace/logs/
-workspace/memory/
-workspace/*.md
-workspace/state.json
-workspace/dev_notes/LEGACY_WORKSPACE_MIGRATION_*.md
+# Runtime workspace: ignore everything except the docs file below.
+workspace/**
+!workspace/
+!workspace/README.md
+
 agent_workbench/workspace/
+agent_workbench/web/node_modules/
