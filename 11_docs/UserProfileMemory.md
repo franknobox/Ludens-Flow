@@ -67,4 +67,3 @@
 2. [graph.py](file:///e:/GitDesktop/Ludens-Flow/agent_workbench/src/ludens_flow/graph.py) 的 [run_agent_step()](file:///e:/GitDesktop/Ludens-Flow/agent_workbench/src/ludens_flow/graph.py#46-148) — 了解总控如何处理 Agent 返回值
 3. [artifacts.py](file:///e:/GitDesktop/Ludens-Flow/agent_workbench/tests/test_artifacts.py) — 参考工件写入的设计范式
 4. 任意一个 Agent 文件 — 了解 prompt 拼装方式
-
