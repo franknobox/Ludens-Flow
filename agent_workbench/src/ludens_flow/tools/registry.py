@@ -46,6 +46,7 @@ def dispatch_tool_call(
             relative_path=args.get("relative_path", ""),
             max_entries=args.get("max_entries", 200),
             project_id=project_id,
+            workspace_id=args.get("workspace_id"),
         )
 
     if tool_name == "unity_read_file":
@@ -53,6 +54,7 @@ def dispatch_tool_call(
             relative_path=args.get("relative_path", ""),
             max_chars=args.get("max_chars", 12000),
             project_id=project_id,
+            workspace_id=args.get("workspace_id"),
         )
 
     if tool_name == "unity_find_files":
@@ -61,6 +63,7 @@ def dispatch_tool_call(
             relative_path=args.get("relative_path", ""),
             max_results=args.get("max_results", 200),
             project_id=project_id,
+            workspace_id=args.get("workspace_id"),
         )
 
     return f"Error: Tool '{tool_name}' not found."

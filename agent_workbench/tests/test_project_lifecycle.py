@@ -17,6 +17,7 @@ import ludens_flow.app.api as api
 from ludens_flow.app.artifacts import read_artifact, write_artifact
 from ludens_flow.paths import (
     PROJECT_META_SCHEMA_VERSION,
+    add_project_workspace,
     archive_project,
     create_project,
     delete_project,
@@ -27,6 +28,7 @@ from ludens_flow.paths import (
     list_active_projects,
     list_archived_projects,
     list_projects,
+    list_project_workspaces,
     rename_project,
     restore_project,
 )
@@ -85,7 +87,13 @@ class ProjectLifecycleTests(unittest.TestCase):
         create_project("alpha")
         meta_file = get_project_meta_file("alpha")
         meta_file.write_text(
-            json.dumps({"id": "alpha", "title": "Alpha Legacy"}),
+            json.dumps(
+                {
+                    "id": "alpha",
+                    "title": "Alpha Legacy",
+                    "unity_root": str((_ROOT / "legacy_unity_project").resolve()),
+                }
+            ),
             encoding="utf-8",
         )
 
@@ -93,10 +101,15 @@ class ProjectLifecycleTests(unittest.TestCase):
         self.assertEqual(
             items["alpha"].get("schema_version"), PROJECT_META_SCHEMA_VERSION
         )
+        self.assertEqual(
+            items["alpha"]["workspaces"][0]["kind"],
+            "unity",
+        )
 
         persisted = json.loads(meta_file.read_text(encoding="utf-8"))
         self.assertEqual(persisted.get("schema_version"), PROJECT_META_SCHEMA_VERSION)
         self.assertEqual(persisted.get("display_name"), "Alpha Legacy")
+        self.assertTrue(persisted.get("workspaces"))
 
         audit_log = (get_logs_dir("alpha") / "audit.log").read_text(encoding="utf-8")
         self.assertIn("event=PROJECT_META_SCHEMA_MIGRATION", audit_log)
@@ -302,6 +315,27 @@ class ProjectLifecycleTests(unittest.TestCase):
 
         project_lookup = {item["id"]: item for item in renamed["projects"]}
         self.assertEqual(project_lookup["alpha"]["display_name"], "Alpha Prime")
+
+    def test_api_can_manage_project_workspace_list(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+        unity_root = (self.workspace_root / "unity_api_project").resolve()
+        (unity_root / "Assets").mkdir(parents=True, exist_ok=True)
+        (unity_root / "ProjectSettings").mkdir(parents=True, exist_ok=True)
+
+        created = api.post_current_project_workspace(
+            api.ProjectWorkspaceRequest(
+                root=str(unity_root),
+                kind="unity",
+                workspace_id="unity-alpha",
+                label="Unity Alpha",
+            )
+        )
+        self.assertEqual(created["workspace"]["id"], "unity-alpha")
+        listing = api.get_current_project_workspaces()
+        self.assertEqual(listing["workspaces"][0]["id"], "unity-alpha")
+
+        deleted = api.delete_current_project_workspace("unity-alpha")
+        self.assertEqual(deleted["workspaces"], [])
 
     def test_chat_emits_started_and_state_updated_events(self):
         state = st.load_state()

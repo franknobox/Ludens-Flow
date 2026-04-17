@@ -322,6 +322,7 @@ class BaseAgent(ABC):
         user_input: str,
         cfg: Optional[LLMConfig] = None,
         user_persona: Optional[str] = None,
+        stream_handler: Optional[Callable[[str], None]] = None,
     ) -> AgentResult:
         """Discussion-phase entrypoint."""
         ...

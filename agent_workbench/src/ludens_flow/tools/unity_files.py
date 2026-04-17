@@ -2,30 +2,40 @@ import fnmatch
 from pathlib import Path
 from typing import Optional
 
-from ludens_flow.paths import get_project_unity_root, resolve_project_id
+from ludens_flow.paths import get_project_workspace, resolve_project_id
 
 
-def _bound_unity_root(project_id: Optional[str] = None) -> Path:
+def _bound_unity_workspace(
+    project_id: Optional[str] = None, workspace_id: Optional[str] = None
+) -> tuple[dict, Path]:
     resolved = resolve_project_id(project_id)
-    unity_root = get_project_unity_root(resolved)
-    if not unity_root:
+    workspace = get_project_workspace(
+        resolved,
+        workspace_id=workspace_id,
+        kind="unity",
+        require_enabled=True,
+    )
+    if not workspace:
         raise RuntimeError(
-            "Unity project is not bound for current project. Use '/unity bind <path>' first."
+            "No enabled Unity workspace is configured for current project. Add one to the project workspace list first."
         )
 
+    unity_root = str(workspace.get("root", "") or "").strip()
     root = Path(unity_root).resolve()
     if not root.exists() or not root.is_dir():
-        raise RuntimeError(f"Bound Unity path is unavailable: {root}")
-    return root
+        raise RuntimeError(f"Configured Unity workspace is unavailable: {root}")
+    return workspace, root
 
 
 def _resolve_inside_root(root: Path, relative_path: str = "") -> Path:
     rel = str(relative_path or "").strip()
+    if rel and Path(rel).is_absolute():
+        raise RuntimeError("Only relative paths inside the configured workspace are allowed.")
     target = (root / rel).resolve() if rel else root
     try:
         target.relative_to(root)
     except ValueError:
-        raise RuntimeError("Path escapes bound Unity project root.")
+        raise RuntimeError("Path escapes configured Unity workspace root.")
     return target
 
 
@@ -33,8 +43,9 @@ def unity_list_dir(
     relative_path: str = "",
     max_entries: int = 200,
     project_id: Optional[str] = None,
+    workspace_id: Optional[str] = None,
 ) -> str:
-    root = _bound_unity_root(project_id)
+    workspace, root = _bound_unity_workspace(project_id, workspace_id)
     target = _resolve_inside_root(root, relative_path)
 
     if not target.exists() or not target.is_dir():
@@ -48,7 +59,11 @@ def unity_list_dir(
     bounded_max = max(1, min(int(max_entries or 200), 1000))
     shown = entries[:bounded_max]
 
-    lines = [f"Unity Root: {root}", f"Directory: {target}"]
+    lines = [
+        f"Workspace: {workspace.get('id', '')} ({workspace.get('label', '')})",
+        f"Unity Root: {root}",
+        f"Directory: {target}",
+    ]
     for item in shown:
         label = item.name + ("/" if item.is_dir() else "")
         lines.append(f"- {label}")
@@ -66,8 +81,9 @@ def unity_read_file(
     relative_path: str,
     max_chars: int = 12000,
     project_id: Optional[str] = None,
+    workspace_id: Optional[str] = None,
 ) -> str:
-    root = _bound_unity_root(project_id)
+    workspace, root = _bound_unity_workspace(project_id, workspace_id)
     target = _resolve_inside_root(root, relative_path)
 
     if not target.exists() or not target.is_file():
@@ -82,7 +98,10 @@ def unity_read_file(
             f"\n\n... truncated at {bounded_max} chars (total {len(content)} chars)"
         )
 
-    return f"Unity Root: {root}\nFile: {target}\n\n{truncated}"
+    return (
+        f"Workspace: {workspace.get('id', '')} ({workspace.get('label', '')})\n"
+        f"Unity Root: {root}\nFile: {target}\n\n{truncated}"
+    )
 
 
 def unity_find_files(
@@ -90,8 +109,9 @@ def unity_find_files(
     relative_path: str = "",
     max_results: int = 200,
     project_id: Optional[str] = None,
+    workspace_id: Optional[str] = None,
 ) -> str:
-    root = _bound_unity_root(project_id)
+    workspace, root = _bound_unity_workspace(project_id, workspace_id)
     start = _resolve_inside_root(root, relative_path)
 
     if not start.exists() or not start.is_dir():
@@ -113,6 +133,7 @@ def unity_find_files(
                 break
 
     lines = [
+        f"Workspace: {workspace.get('id', '')} ({workspace.get('label', '')})",
         f"Unity Root: {root}",
         f"Search Start: {start}",
         f"Pattern: {normalized_pattern}",
@@ -143,6 +164,10 @@ UNITY_LIST_DIR_TOOL_SCHEMA = {
                     "type": "integer",
                     "description": "Maximum number of entries to show (1-1000).",
                 },
+                "workspace_id": {
+                    "type": "string",
+                    "description": "Optional Unity workspace id from the project's approved workspace list.",
+                },
             },
         },
     },
@@ -164,6 +189,10 @@ UNITY_READ_FILE_TOOL_SCHEMA = {
                 "max_chars": {
                     "type": "integer",
                     "description": "Maximum characters to return (200-200000).",
+                },
+                "workspace_id": {
+                    "type": "string",
+                    "description": "Optional Unity workspace id from the project's approved workspace list.",
                 },
             },
             "required": ["relative_path"],
@@ -191,6 +220,10 @@ UNITY_FIND_FILES_TOOL_SCHEMA = {
                 "max_results": {
                     "type": "integer",
                     "description": "Maximum number of results to return (1-2000).",
+                },
+                "workspace_id": {
+                    "type": "string",
+                    "description": "Optional Unity workspace id from the project's approved workspace list.",
                 },
             },
         },

@@ -21,14 +21,17 @@ from ludens_flow.app.artifacts import read_artifact
 from ludens_flow.app.env import load_env_if_available
 from ludens_flow.graph import graph_step
 from ludens_flow.paths import (
+    add_project_workspace,
     archive_project,
     clear_project_unity_root,
     create_project,
     delete_project,
     get_project_unity_root,
+    list_project_workspaces,
     list_active_projects,
     list_archived_projects,
     list_projects,
+    remove_project_workspace,
     rename_project,
     resolve_project_id,
     restore_project,
@@ -74,6 +77,15 @@ class ProjectRequest(BaseModel):
 
 class UnityBindRequest(BaseModel):
     unity_root: str
+
+
+class ProjectWorkspaceRequest(BaseModel):
+    root: str
+    kind: str = "unity"
+    workspace_id: str | None = None
+    label: str | None = None
+    writable: bool = False
+    enabled: bool = True
 
 
 class ActionRequest(BaseModel):
@@ -556,11 +568,13 @@ def get_current_project_unity_binding():
     project_id = resolve_project_id()
     unity_root = get_project_unity_root(project_id)
     exists = bool(unity_root and Path(unity_root).exists())
+    workspaces = list_project_workspaces(project_id=project_id, kind="unity")
     return {
         "project_id": project_id,
         "unity_root": unity_root,
         "bound": bool(unity_root),
         "exists": exists,
+        "workspaces": workspaces,
     }
 
 
@@ -572,6 +586,7 @@ def post_current_project_unity_bind(req: UnityBindRequest):
         "project_id": project_id,
         "unity_root": meta.get("unity_root", ""),
         "bound": bool(meta.get("unity_root", "")),
+        "workspaces": meta.get("workspaces", []),
     }
 
 
@@ -583,6 +598,55 @@ def post_current_project_unity_unbind():
         "project_id": project_id,
         "unity_root": meta.get("unity_root", ""),
         "bound": False,
+        "workspaces": meta.get("workspaces", []),
+    }
+
+
+@app.get("/api/projects/current/workspaces")
+def get_current_project_workspaces():
+    project_id = resolve_project_id()
+    return {
+        "project_id": project_id,
+        "workspaces": list_project_workspaces(project_id=project_id, include_disabled=True),
+    }
+
+
+@app.post("/api/projects/current/workspaces")
+def post_current_project_workspace(req: ProjectWorkspaceRequest):
+    project_id = resolve_project_id()
+    meta = add_project_workspace(
+        req.root,
+        project_id=project_id,
+        kind=req.kind,
+        workspace_id=req.workspace_id,
+        label=req.label,
+        writable=req.writable,
+        enabled=req.enabled,
+    )
+    workspaces = meta.get("workspaces", [])
+    normalized_root = str(Path(req.root).expanduser().resolve())
+    added_workspace = next(
+        (
+            item
+            for item in workspaces
+            if item.get("root") == normalized_root and item.get("kind") == req.kind.lower()
+        ),
+        None,
+    )
+    return {
+        "project_id": project_id,
+        "workspace": added_workspace,
+        "workspaces": workspaces,
+    }
+
+
+@app.delete("/api/projects/current/workspaces/{workspace_id}")
+def delete_current_project_workspace(workspace_id: str):
+    project_id = resolve_project_id()
+    meta = remove_project_workspace(workspace_id, project_id=project_id)
+    return {
+        "project_id": project_id,
+        "workspaces": meta.get("workspaces", []),
     }
 
 

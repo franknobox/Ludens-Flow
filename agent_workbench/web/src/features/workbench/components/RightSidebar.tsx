@@ -35,13 +35,13 @@ export function RightSidebar(props: RightSidebarProps) {
   return (
     <aside className="shell right">
       <div className="head">
-        <strong>Project Status</strong>
+        <strong>项目状态</strong>
       </div>
       <div className="status-box">
         <div className="status-card">
           <div className="status-grid">
             <div>
-              <div className="status-label">Project</div>
+              <div className="status-label">项目</div>
               <div className="status-value">{projectName}</div>
             </div>
             <div>
@@ -49,27 +49,27 @@ export function RightSidebar(props: RightSidebarProps) {
               <div className="status-value">{agentName(currentAgent)}</div>
             </div>
             <div>
-              <div className="status-label">Phase</div>
+              <div className="status-label">阶段</div>
               <div className="status-value">{phaseLabel}</div>
             </div>
             <div>
-              <div className="status-label">Iterations</div>
+              <div className="status-label">迭代次数</div>
               <div className="status-value">{iterationCount}</div>
             </div>
             <div>
-              <div className="status-label">Artifacts</div>
-              <div className="status-value">{filesCount} files</div>
+              <div className="status-label">工件</div>
+              <div className="status-value">{filesCount} 个文件</div>
             </div>
             <div>
-              <div className="status-label">Mode</div>
+              <div className="status-label">模式</div>
               <div className="status-value">{modeLabel}</div>
             </div>
             <div>
-              <div className="status-label">Updated</div>
+              <div className="status-label">更新时间</div>
               <div className="status-value">{statusUpdated}</div>
             </div>
             <div>
-              <div className="status-label">Last Phase</div>
+              <div className="status-label">上个阶段</div>
               <div className="status-value">{statusLastPhase}</div>
             </div>
           </div>
@@ -77,7 +77,7 @@ export function RightSidebar(props: RightSidebarProps) {
       </div>
 
       <section className="section">
-        <span className="section-title">Agents</span>
+        <span className="section-title">Agent 列表</span>
         <div className="list">
           {AGENTS.map((agent) => (
             <button
@@ -91,10 +91,10 @@ export function RightSidebar(props: RightSidebarProps) {
             >
               <div className="item-title">
                 <span>{agent.name}</span>
-                <span className="tag">{agent.key === currentAgent ? "CURRENT" : "HISTORY"}</span>
+                <span className="tag">{agent.key === currentAgent ? "当前" : "历史"}</span>
               </div>
               <div className="item-sub">
-                {agent.key === currentAgent ? "Writable now" : "Read-only transcript"}
+                {agent.key === currentAgent ? "当前可写会话" : "只读历史记录"}
               </div>
             </button>
           ))}

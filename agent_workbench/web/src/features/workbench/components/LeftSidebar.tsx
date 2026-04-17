@@ -56,7 +56,9 @@ export function LeftSidebar(props: LeftSidebarProps) {
   const inProject = sidebarMode === "project";
   const inHistory = sidebarMode === "history";
   const selectedProject =
-    !inProject && !inHistory ? projects.find((project) => project.id === menuProjectId) || null : null;
+    !inProject && !inHistory
+      ? projects.find((project) => project.id === menuProjectId) || null
+      : null;
 
   const handleCreate = async () => {
     const ok = await onCreateProject(projectIdInput.trim(), projectTitleInput.trim());
@@ -67,10 +69,7 @@ export function LeftSidebar(props: LeftSidebarProps) {
     setProjectTitleInput("");
   };
 
-  const toggleProjectMenu = (
-    event: MouseEvent<HTMLButtonElement>,
-    project: ProjectMeta,
-  ) => {
+  const toggleProjectMenu = (event: MouseEvent<HTMLButtonElement>, project: ProjectMeta) => {
     if (menuProjectId === project.id) {
       setMenuProjectId("");
       setMenuTop(0);
@@ -89,14 +88,14 @@ export function LeftSidebar(props: LeftSidebarProps) {
     <aside className="shell left" ref={shellRef}>
       <div className="head">
         <div className="head-row">
-          <strong>{inProject ? projectName : inHistory ? "History Projects" : "Workspace"}</strong>
+          <strong>{inProject ? projectName : inHistory ? "历史项目" : "工作区"}</strong>
           <button
             className="shell-btn compact"
             type="button"
             onClick={onBack}
             style={{ display: inProject || inHistory ? "inline-flex" : "none" }}
           >
-            Back
+            返回
           </button>
         </div>
       </div>
@@ -108,13 +107,13 @@ export function LeftSidebar(props: LeftSidebarProps) {
               value={projectIdInput}
               onChange={(event) => setProjectIdInput(event.target.value)}
               type="text"
-              placeholder="project id, e.g. arcade-run"
+              placeholder="项目 ID，例如 arcade-run"
             />
             <input
               value={projectTitleInput}
               onChange={(event) => setProjectTitleInput(event.target.value)}
               type="text"
-              placeholder="display name, optional"
+              placeholder="项目显示名，可选"
             />
             <div className="row">
               <button
@@ -124,53 +123,60 @@ export function LeftSidebar(props: LeftSidebarProps) {
                   void handleCreate();
                 }}
               >
-                New Project
+                新建项目
               </button>
               <button className="shell-btn" type="button" onClick={onRefresh}>
-                Refresh
+                刷新
               </button>
             </div>
           </div>
 
           <section className="section section-fill">
-            <span className="section-title">Projects</span>
+            <span className="section-title">项目列表</span>
             <div className="list">
               {!projects.length ? (
-                <div className="empty">No projects yet.</div>
+                <div className="empty">还没有项目。</div>
               ) : (
                 projects.map((project) => (
                   <div key={project.id} className="project-card-shell">
                     <button
                       type="button"
-                      className={"item project-card" + (project.id === activeProjectId ? " active" : "")}
+                      className={
+                        "item project-card" +
+                        (project.id === activeProjectId ? " active" : "")
+                      }
                       onClick={() => onOpenProject(project.id)}
                     >
                       <div className="item-title">
                         <span>{project.display_name || project.id}</span>
-                        <span className={"tag " + (project.id === activeProjectId ? "active" : "")}>
-                          {project.id === activeProjectId ? "ACTIVE" : "OPEN"}
+                        <span
+                          className={
+                            "tag " + (project.id === activeProjectId ? "active" : "")
+                          }
+                        >
+                          {project.id === activeProjectId ? "当前" : "打开"}
                         </span>
                       </div>
                       <div className="item-sub">
-                        {project.id} 路 {project.last_phase || "No phase yet"}
+                        {project.id} · {project.last_phase || "暂无阶段"}
                       </div>
                       <div className="item-sub">{projectUpdated(project)}</div>
                       <div className="item-sub preview">
-                        {project.last_message_preview || "No assistant message yet"}
+                        {project.last_message_preview || "暂无 Agent 回复"}
                       </div>
                     </button>
 
-                      <button
-                        type="button"
-                        className="card-corner-btn"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          toggleProjectMenu(event, project);
-                        }}
-                        aria-label={`Open settings for ${project.display_name || project.id}`}
-                      >
-                        ⚙
-                      </button>
+                    <button
+                      type="button"
+                      className="card-corner-btn"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        toggleProjectMenu(event, project);
+                      }}
+                      aria-label={`打开 ${project.display_name || project.id} 的设置菜单`}
+                    >
+                      ⚙
+                    </button>
                   </div>
                 ))
               )}
@@ -179,7 +185,7 @@ export function LeftSidebar(props: LeftSidebarProps) {
 
           <div className="history-entry-wrap">
             <button className="history-entry" type="button" onClick={onOpenHistory}>
-              <span>History Projects</span>
+              <span>历史项目</span>
               <span className="tag">{archivedProjects.length}</span>
             </button>
           </div>
@@ -187,23 +193,23 @@ export function LeftSidebar(props: LeftSidebarProps) {
       ) : inHistory ? (
         <div className="sidebar-pane">
           <section className="section section-fill">
-            <span className="section-title">Archived</span>
+            <span className="section-title">已归档</span>
             <div className="list">
               {!archivedProjects.length ? (
-                <div className="empty">No archived projects yet.</div>
+                <div className="empty">还没有历史项目。</div>
               ) : (
                 archivedProjects.map((project) => (
                   <div key={project.id} className="item history-card">
                     <div className="item-title">
                       <span>{project.display_name || project.id}</span>
-                      <span className="tag">ARCHIVED</span>
+                      <span className="tag">已归档</span>
                     </div>
                     <div className="item-sub">
-                      {project.id} 路 {project.last_phase || "No phase yet"}
+                      {project.id} · {project.last_phase || "暂无阶段"}
                     </div>
                     <div className="item-sub">{projectUpdated(project)}</div>
                     <div className="item-sub preview">
-                      {project.last_message_preview || "No assistant message yet"}
+                      {project.last_message_preview || "暂无 Agent 回复"}
                     </div>
                     <div className="history-actions">
                       <button
@@ -211,14 +217,14 @@ export function LeftSidebar(props: LeftSidebarProps) {
                         type="button"
                         onClick={() => onRestoreProject(project.id)}
                       >
-                        Restore
+                        恢复
                       </button>
                       <button
                         className="shell-btn danger compact"
                         type="button"
                         onClick={() => onDeleteProject(project.id)}
                       >
-                        Delete
+                        删除
                       </button>
                     </div>
                   </div>
@@ -230,7 +236,7 @@ export function LeftSidebar(props: LeftSidebarProps) {
       ) : (
         <div className="sidebar-pane">
           <section className="section section-fill">
-            <span className="section-title">Artifacts</span>
+            <span className="section-title">工件</span>
             <div className="list">
               {files.map((file) => (
                 <button
@@ -244,9 +250,9 @@ export function LeftSidebar(props: LeftSidebarProps) {
                 >
                   <div className="item-title">
                     <span>{file.name}</span>
-                    <span className="tag">FILE</span>
+                    <span className="tag">文件</span>
                   </div>
-                  <div className="item-sub">Project-local artifact</div>
+                  <div className="item-sub">当前项目内的工件</div>
                 </button>
               ))}
             </div>
@@ -261,7 +267,7 @@ export function LeftSidebar(props: LeftSidebarProps) {
           onClick={onReset}
           style={{ display: inProject ? "inline-flex" : "none" }}
         >
-          Reset
+          重置
         </button>
       </div>
 
@@ -269,7 +275,7 @@ export function LeftSidebar(props: LeftSidebarProps) {
         <div className="sidebar-popover" style={{ top: `${menuTop}px` }}>
           <div className="menu-head">
             <label className="menu-label" htmlFor={`rename-${selectedProject.id}`}>
-              Rename
+              重命名
             </label>
             <button
               className="menu-close-btn"
@@ -279,7 +285,7 @@ export function LeftSidebar(props: LeftSidebarProps) {
                 setMenuTop(0);
                 setRenameDraft("");
               }}
-              aria-label={`Close settings for ${selectedProject.display_name || selectedProject.id}`}
+              aria-label={`关闭 ${selectedProject.display_name || selectedProject.id} 的设置菜单`}
             >
               ×
             </button>
@@ -289,7 +295,7 @@ export function LeftSidebar(props: LeftSidebarProps) {
             value={renameDraft}
             onChange={(event) => setRenameDraft(event.target.value)}
             type="text"
-            placeholder="Display name"
+            placeholder="输入显示名称"
           />
           <div className="menu-actions">
             <button
@@ -306,7 +312,7 @@ export function LeftSidebar(props: LeftSidebarProps) {
                 setRenameDraft("");
               }}
             >
-              Save
+              保存
             </button>
             <button
               className="shell-btn danger compact"
@@ -318,7 +324,7 @@ export function LeftSidebar(props: LeftSidebarProps) {
                 setRenameDraft("");
               }}
             >
-              Archive
+              归档
             </button>
           </div>
         </div>

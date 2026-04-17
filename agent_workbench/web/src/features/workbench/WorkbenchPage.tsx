@@ -57,10 +57,7 @@ function toModelState(state: StateResponse): WorkbenchStateModel {
   };
 }
 
-function mergeChatResponse(
-  prev: WorkbenchStateModel,
-  response: ChatResponse,
-): WorkbenchStateModel {
+function mergeChatResponse(prev: WorkbenchStateModel, response: ChatResponse): WorkbenchStateModel {
   return {
     ...prev,
     phase: response.phase || prev.phase,
@@ -108,22 +105,21 @@ export function WorkbenchPage() {
     () => model.projects.find((project) => project.id === model.project_id),
     [model.project_id, model.projects],
   );
-  const projectName = activeProject?.display_name || model.project_id || "Project";
+  const projectName = activeProject?.display_name || model.project_id || "项目";
 
-  const readOnly =
-    currentView.type !== "agent" || currentView.id !== model.current_agent;
+  const readOnly = currentView.type !== "agent" || currentView.id !== model.current_agent;
 
   const statusNote = useMemo(() => {
     if (activeProject?.archived) {
-      return "Current project is archived. You can still inspect its local state and artifacts.";
+      return "当前项目已归档，你仍然可以查看它的本地状态和工件。";
     }
     if (model.artifact_frozen) {
-      return "Current project is in DEV_COACHING. Canonical artifacts are frozen.";
+      return "当前项目处于持续开发辅导阶段，主工件已冻结。";
     }
     if (activeProject?.last_message_preview) {
       return activeProject.last_message_preview;
     }
-    return "Current project is writable. State, artifacts, profile and logs stay inside this project.";
+    return "当前项目可写，状态、工件、画像和日志都会保留在这个项目内。";
   }, [activeProject, model.artifact_frozen]);
 
   const syncStateOnly = async (): Promise<StateResponse> => {
@@ -187,10 +183,9 @@ export function WorkbenchPage() {
         prev
           ? prev
           : {
-              agentKey:
-                event.current_agent || phaseToAgent(event.phase || ""),
+              agentKey: event.current_agent || phaseToAgent(event.phase || ""),
               phase: event.phase || "",
-              userText: event.message || "[Processing]",
+              userText: event.message || "[处理中]",
               thinking: true,
               assistantText: "",
             },
@@ -207,10 +202,9 @@ export function WorkbenchPage() {
               assistantText: prev.assistantText || "",
             }
           : {
-              agentKey:
-                event.current_agent || phaseToAgent(event.phase || ""),
+              agentKey: event.current_agent || phaseToAgent(event.phase || ""),
               phase: event.phase || "",
-              userText: "[Processing]",
+              userText: "[处理中]",
               thinking: true,
               assistantText: "",
             },
@@ -227,10 +221,9 @@ export function WorkbenchPage() {
               assistantText: `${prev.assistantText || ""}${event.delta || ""}`,
             }
           : {
-              agentKey:
-                event.current_agent || phaseToAgent(event.phase || ""),
+              agentKey: event.current_agent || phaseToAgent(event.phase || ""),
               phase: event.phase || "",
-              userText: "[Processing]",
+              userText: "[处理中]",
               thinking: false,
               assistantText: event.delta || "",
             },
@@ -239,14 +232,7 @@ export function WorkbenchPage() {
     }
 
     if (event.type === "assistant_stream_completed") {
-      setTransientChat((prev) =>
-        prev
-          ? {
-              ...prev,
-              thinking: false,
-            }
-          : prev,
-      );
+      setTransientChat((prev) => (prev ? { ...prev, thinking: false } : prev));
       return;
     }
 
@@ -289,9 +275,8 @@ export function WorkbenchPage() {
       }
       setTransientChat(null);
       setRequestInFlight(false);
-      setErrorText(event.error || "Request failed.");
+      setErrorText(event.error || "请求失败。");
       setWarningText("");
-      return;
     }
   };
 
@@ -308,7 +293,7 @@ export function WorkbenchPage() {
       await workbenchApi.selectProject(projectId);
       await hardRefresh();
     } catch (error) {
-      setErrorText("Switch project failed: " + toErrorMessage(error));
+      setErrorText("切换项目失败：" + toErrorMessage(error));
     }
   };
 
@@ -326,14 +311,14 @@ export function WorkbenchPage() {
     } catch (error) {
       setFileCache((prev) => ({
         ...prev,
-        [cacheKey]: `Load failed: ${toErrorMessage(error)}`,
+        [cacheKey]: `加载失败：${toErrorMessage(error)}`,
       }));
     }
   };
 
   const createProject = async (projectId: string, title: string): Promise<boolean> => {
     if (!projectId) {
-      setErrorText("Project id is required.");
+      setErrorText("项目 ID 不能为空。");
       return false;
     }
 
@@ -347,7 +332,7 @@ export function WorkbenchPage() {
       await hardRefresh();
       return true;
     } catch (error) {
-      setErrorText("Create project failed: " + toErrorMessage(error));
+      setErrorText("创建项目失败：" + toErrorMessage(error));
       return false;
     }
   };
@@ -359,7 +344,7 @@ export function WorkbenchPage() {
       await hardRefresh();
       return true;
     } catch (error) {
-      setErrorText("Rename project failed: " + toErrorMessage(error));
+      setErrorText("重命名项目失败：" + toErrorMessage(error));
       return false;
     }
   };
@@ -367,7 +352,7 @@ export function WorkbenchPage() {
   const archiveProject = async (projectId: string) => {
     const target = model.projects.find((project) => project.id === projectId);
     const yes = window.confirm(
-      `Archive ${target?.display_name || projectId}?\n\nThe project will move to History Projects and can be restored later.`,
+      `要归档 ${target?.display_name || projectId} 吗？\n\n项目会移动到“历史项目”，之后仍可恢复。`,
     );
     if (!yes) {
       return;
@@ -383,14 +368,14 @@ export function WorkbenchPage() {
       }
       await hardRefresh();
     } catch (error) {
-      setErrorText("Archive project failed: " + toErrorMessage(error));
+      setErrorText("归档项目失败：" + toErrorMessage(error));
     }
   };
 
   const restoreProject = async (projectId: string) => {
     const target = model.archived_projects.find((project) => project.id === projectId);
     const yes = window.confirm(
-      `Restore ${target?.display_name || projectId}?\n\nThe project will return to the active project list.`,
+      `要恢复 ${target?.display_name || projectId} 吗？\n\n项目会重新回到当前项目列表。`,
     );
     if (!yes) {
       return;
@@ -401,14 +386,14 @@ export function WorkbenchPage() {
       await workbenchApi.restoreProject(projectId, false);
       await hardRefresh();
     } catch (error) {
-      setErrorText("Restore project failed: " + toErrorMessage(error));
+      setErrorText("恢复项目失败：" + toErrorMessage(error));
     }
   };
 
   const deleteProject = async (projectId: string) => {
     const target = model.archived_projects.find((project) => project.id === projectId);
     const yes = window.confirm(
-      `Delete ${target?.display_name || projectId} permanently?\n\nThis removes the archived project directory and cannot be undone.`,
+      `要永久删除 ${target?.display_name || projectId} 吗？\n\n这会删除已归档项目目录，而且无法撤销。`,
     );
     if (!yes) {
       return;
@@ -419,7 +404,7 @@ export function WorkbenchPage() {
       await workbenchApi.deleteProject(projectId);
       await hardRefresh();
     } catch (error) {
-      setErrorText("Delete project failed: " + toErrorMessage(error));
+      setErrorText("删除项目失败：" + toErrorMessage(error));
     }
   };
 
@@ -464,7 +449,7 @@ export function WorkbenchPage() {
       }, 600);
     } catch (error) {
       setTransientChat((prev) => (prev ? { ...prev, thinking: false } : prev));
-      setErrorText("Request failed: " + toErrorMessage(error));
+      setErrorText("请求失败：" + toErrorMessage(error));
       setWarningText("");
     } finally {
       setRequestInFlight(false);
@@ -482,7 +467,7 @@ export function WorkbenchPage() {
     setTransientChat({
       agentKey: currentView.id,
       phase: model.phase,
-      userText: `[ACTION] ${actionId}`,
+      userText: `[操作] ${actionId}`,
       thinking: true,
     });
 
@@ -503,7 +488,7 @@ export function WorkbenchPage() {
       }, 600);
     } catch (error) {
       setTransientChat((prev) => (prev ? { ...prev, thinking: false } : prev));
-      setErrorText("Action failed: " + toErrorMessage(error));
+      setErrorText("执行操作失败：" + toErrorMessage(error));
       setWarningText("");
     } finally {
       setRequestInFlight(false);
@@ -512,7 +497,7 @@ export function WorkbenchPage() {
 
   const resetProject = async () => {
     const yes = window.confirm(
-      `Reset ${projectName}?\n\nThis clears the current project's state, artifacts, and images.`,
+      `要重置 ${projectName} 吗？\n\n这会清空当前项目的状态、工件和图片。`,
     );
     if (!yes) {
       return;
@@ -528,7 +513,7 @@ export function WorkbenchPage() {
 
   useEffect(() => {
     void hardRefresh().catch((error) => {
-      setErrorText("Load failed: " + toErrorMessage(error));
+      setErrorText("加载失败：" + toErrorMessage(error));
     });
   }, []);
 
@@ -571,8 +556,8 @@ export function WorkbenchPage() {
       : model.files.find((item) => item.id === currentView.id)?.name || currentView.id;
   const subtitle =
     currentView.type === "agent"
-      ? `Current project: ${projectName} · Active agent: ${agentName(model.current_agent)}`
-      : `Viewing artifact inside ${projectName}`;
+      ? `当前项目：${projectName} · 当前 Agent：${agentName(model.current_agent)}`
+      : `正在查看 ${projectName} 内的工件`;
 
   return (
     <div className="app">
@@ -619,7 +604,7 @@ export function WorkbenchPage() {
         currentAgent={model.current_agent}
         projectName={projectName}
         phaseLabel={PHASE_LABEL[model.phase] || model.phase || "-"}
-        modeBadge={currentView.type === "agent" ? "Agent Chat" : "File Viewer"}
+        modeBadge={currentView.type === "agent" ? "Agent 对话" : "文件查看"}
         readOnly={readOnly}
         subtitle={subtitle}
         title={title}
@@ -650,7 +635,7 @@ export function WorkbenchPage() {
         phaseLabel={PHASE_LABEL[model.phase] || model.phase || "-"}
         iterationCount={model.iteration_count || 0}
         filesCount={model.files.length}
-        modeLabel={readOnly ? "Read-only view" : "Writable"}
+        modeLabel={readOnly ? "只读" : "可写"}
         statusUpdated={projectUpdated(activeProject)}
         statusLastPhase={activeProject?.last_phase || "-"}
         statusNote={statusNote}

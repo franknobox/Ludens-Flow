@@ -1,21 +1,19 @@
-import logging
-from typing import Optional, Dict, Any
 import json
+import logging
+import re
+from typing import Optional
 
-from ludens_flow.agents.base import BaseAgent, AgentResult, CommitSpec
+from ludens_flow.agents.base import AgentResult, BaseAgent, CommitSpec
+from ludens_flow.app.artifacts import read_artifact
 from ludens_flow.schemas import DISCUSS_RESPONSE_SCHEMA_TEXT, parse_discuss_payload
 from ludens_flow.state import LudensState
-from ludens_flow.app.artifacts import read_artifact
 from llm.provider import LLMConfig
 
 logger = logging.getLogger(__name__)
 
 
-import re
-
-
 class PMAgent(BaseAgent):
-    """负责项目计划阶段的讨论、范围收敛和定稿。"""
+    """Handles project planning discussion, scope shaping, and PM commits."""
 
     name = "PMAgent"
 
@@ -25,27 +23,51 @@ class PMAgent(BaseAgent):
         user_input: str,
         cfg: Optional[LLMConfig] = None,
         user_persona: Optional[str] = None,
+        stream_handler=None,
     ) -> AgentResult:
-        # 回流修改时，把现有 PROJECT_PLAN 一起带入讨论。
         gdd_content = read_artifact("GDD", project_id=state.project_id)
         existing_pm = read_artifact("PROJECT_PLAN", project_id=state.project_id)
 
         pm_context = ""
         if existing_pm.strip():
-            pm_context = f"**当前已有的 PROJECT_PLAN 文档内容**（如果是回流修改阶段，请在此基础上修订）：\n{existing_pm}\n\n"
+            pm_context = (
+                "**Current PROJECT_PLAN content** "
+                "(if this is a revision pass, continue from this version):\n"
+                f"{existing_pm}\n\n"
+            )
 
-        # discuss 负责排期、范围和 MVP 收敛，不直接落盘正式计划。
-        prompt_text = (
-            f"已有 GDD：\n{gdd_content}\n\n"
+        base_prompt_text = (
+            f"Existing GDD:\n{gdd_content}\n\n"
             f"{pm_context}"
-            "请执行以下操作：\n"
-            "1. 以独立游戏 PM 的视角，向用户确认或探讨关键排期信息：大致工期（以天/周为单位）、参与人数（默认 1-3 人小团队）。\n"
-            "2. 结合 GDD 中的功能，主动帮用户识别哪些功能是核心体验不可缺少的，哪些可以在 Game Jam 或 MVP 阶段果断砍掉。\n"
-            "3. 所有建议以 Unity PC Standalone（Editor 可以 Play Mode 验收）为默认交付目标，不主动引入跨平台或多人联网议题。\n"
-            "4. 以自然语言流畅地回复用户，不带任何特殊格式标签。\n"
-            f"\n\n{DISCUSS_RESPONSE_SCHEMA_TEXT}"
+            "Please do the following:\n"
+            "1. As the project partner Pax, help the user confirm the most important schedule inputs, such as rough timeline and team size.\n"
+            "2. Based on the GDD, identify which features are core to the experience and which ones should be cut for a jam or MVP scope.\n"
+            "3. Assume Unity PC standalone is the main target. Do not drift into multiplayer or cross-platform planning unless the user asks for it.\n"
+            "4. Reply in clear, natural language with practical scope guidance.\n"
         )
-        prompt = self._compose_user_prompt(prompt_text, user_input, input_label="用户意图")
+
+        if stream_handler:
+            prompt = self._compose_user_prompt(
+                base_prompt_text
+                + "5. Reply in plain natural language only. Do not output JSON, code fences, or any structured protocol.\n",
+                user_input,
+                input_label="User intent",
+            )
+            reply = self._call(
+                prompt,
+                cfg,
+                history=state.chat_history,
+                user_persona=user_persona,
+                project_id=state.project_id,
+                stream_handler=stream_handler,
+            )
+            return AgentResult(assistant_message=reply.strip(), state_updates={})
+
+        prompt = self._compose_user_prompt(
+            f"{base_prompt_text}\n{DISCUSS_RESPONSE_SCHEMA_TEXT}",
+            user_input,
+            input_label="User intent",
+        )
         raw = self._call(
             prompt,
             cfg,
@@ -62,9 +84,7 @@ class PMAgent(BaseAgent):
                 profile_updates=payload.profile_updates,
             )
 
-        reply = raw or ""
-        updates = {}
-        return AgentResult(assistant_message=reply.strip(), state_updates=updates)
+        return AgentResult(assistant_message=(raw or "").strip(), state_updates={})
 
     def commit(
         self,
@@ -73,28 +93,31 @@ class PMAgent(BaseAgent):
         cfg: Optional[LLMConfig] = None,
         user_persona: Optional[str] = None,
     ) -> AgentResult:
-        # commit 输出最终 PROJECT_PLAN，并解析附带的变更请求。
         gdd_content = read_artifact("GDD", project_id=state.project_id)
 
         prompt_text = (
-            f"已有 GDD：\n{gdd_content}\n\n"
-            "请基于我们之前的完整讨论记录，输出一份适合独立游戏或 Game Jam 项目的 PROJECT_PLAN.md，要求：\n"
-            "1. **Milestones**：以 M0/M1/M2 划分，每个 Milestone 的验收标准必须是 Unity Editor Play Mode 可测试的具体状态（例如：M0 = 可在 Play Mode 中进入主场景并完成一次完整的游戏主循环）。\n"
-            "2. **Task Breakdown**：按 Unity 工程模块拆分任务，例如 Scripts / Prefabs / SceneSetup / Animations / Audio。每项任务应细化到「在 Unity 里要做什么」的程度，方便单人或小团队直接上手。\n"
-            "3. **Unity 目录结构建议**：输出一份适合本项目的 Assets/ 目录树，遵循 Unity 独立游戏项目惯例（如 _Scripts / _Prefabs / _Scenes / _Audio / _Art 等）。\n"
-            "4. **风险与缓解**：聚焦技术风险和 scope 蔓延风险，给出务实的应对建议。不涉及多人协作流程或商业发布计划。\n"
-            "5. 如果你发现 GDD 存在严重缺项导致无法顺利排期，请在回复正文最后附加 ChangeRequest JSON 块：\n"
-            "格式：\n"
+            f"Existing GDD:\n{gdd_content}\n\n"
+            "Produce a PROJECT_PLAN.md suitable for an indie game or game-jam project.\n"
+            "Requirements:\n"
+            "1. Milestones: split into M0 / M1 / M2, and make each milestone verifiable inside Unity Editor Play Mode.\n"
+            "2. Task Breakdown: group work by Unity project modules, for example Scripts / Prefabs / SceneSetup / Animations / Audio.\n"
+            "3. Unity folder structure suggestion: propose a practical Assets/ layout.\n"
+            "4. Risks and mitigation: focus on technical and scope risks, not business release planning.\n"
+            "5. If the GDD is still missing critical information, append a ChangeRequest JSON block in this exact format:\n"
             "<<CHANGE_REQUEST_JSON>>\n"
             "{\n"
             '  "change_requests": [\n'
-            '    {"target": "GDD", "rationale": "缺少对核心循环结束条件的描述", "suggested_changes": "要求补充通关机制或无尽模式声明", "severity": "High"}\n'
+            '    {"target": "GDD", "rationale": "missing ending condition", "suggested_changes": "clarify win or fail loop", "severity": "High"}\n'
             "  ]\n"
             "}\n"
             "<<END_CHANGE_REQUEST_JSON>>\n"
-            "如果没有缺项，可以不输出此 JSON。你的 Markdown 正文不应被代码块包裹，请直接以 Markdown 标题起手。"
+            "If there is no missing information, omit that JSON block. The main body should be plain Markdown."
         )
-        prompt = self._compose_user_prompt(prompt_text, user_input, input_label="本轮补充输入")
+        prompt = self._compose_user_prompt(
+            prompt_text,
+            user_input,
+            input_label="Current extra input",
+        )
         final_pm_output = self._call(
             prompt,
             cfg,
@@ -115,24 +138,27 @@ class PMAgent(BaseAgent):
             try:
                 cr_data = json.loads(cr_match.group(1))
                 if "change_requests" in cr_data:
-                    # 这里只回传本轮新请求，具体合并由 Graph 统一处理。
                     updates["change_requests"] = cr_data["change_requests"]
                     logger.info(
-                        f"[PMAgent] Detected and appended {len(cr_data['change_requests'])} ChangeRequest(s)."
+                        "[PMAgent] Detected and appended %s ChangeRequest(s).",
+                        len(cr_data["change_requests"]),
                     )
                 final_pm = (
                     final_pm_output[: cr_match.start()].strip()
                     + final_pm_output[cr_match.end() :].strip()
                 )
-            except Exception as e:
-                logger.warning(f"Failed to parse PM ChangeRequest JSON: {e}")
+            except Exception as exc:
+                logger.warning("Failed to parse PM ChangeRequest JSON: %s", exc)
 
         updates["decisions"] = ["PM committed"]
-
         logger.info("[PMAgent] Commit generated.")
 
         return AgentResult(
-            assistant_message="项目管理规划书 (PROJECT_PLAN) 已定稿。\n\n**系统即将自动流转至技术(ENG)阶段。**\n\n*输入任意内容进入下一阶段*",
+            assistant_message=(
+                "PROJECT_PLAN finalized.\n\n"
+                "**The system will now move into the engineering phase automatically.**\n\n"
+                "*Send any message to continue.*"
+            ),
             state_updates=updates,
             commit=CommitSpec(
                 artifact_name="PROJECT_PLAN",

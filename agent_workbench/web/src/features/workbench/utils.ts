@@ -40,7 +40,7 @@ export function agentName(key: AgentKey): string {
 export function projectUpdated(project: ProjectMeta | undefined): string {
   return project?.updated_at
     ? String(project.updated_at).replace("T", " ").replace("Z", "")
-    : "No activity";
+    : "暂无活动";
 }
 
 export function transientMessageText(

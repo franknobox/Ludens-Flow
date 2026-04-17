@@ -1,4 +1,4 @@
-import { memo, useMemo, useRef, useState } from "react";
+﻿import { memo, useMemo, useRef, useState } from "react";
 import type {
   ChangeEvent,
   ClipboardEvent,
@@ -167,11 +167,11 @@ async function collectAttachments(files: File[]): Promise<AttachmentCollectionRe
   const warnings: string[] = [];
   for (const file of files.slice(0, MAX_PENDING_ATTACHMENTS)) {
     if (!isSupportedAttachment(file)) {
-      warnings.push(`${file.name}: unsupported file type.`);
+      warnings.push(`${file.name}：不支持的文件类型。`);
       continue;
     }
     if (file.size > MAX_ATTACHMENT_BYTES) {
-      warnings.push(`${file.name}: file is larger than 5 MB.`);
+      warnings.push(`${file.name}：文件超过 5 MB。`);
       continue;
     }
     try {
@@ -179,10 +179,10 @@ async function collectAttachments(files: File[]): Promise<AttachmentCollectionRe
       if (attachment) {
         attachments.push(attachment);
       } else {
-        warnings.push(`${file.name}: unsupported file type.`);
+        warnings.push(`${file.name}：不支持的文件类型。`);
       }
     } catch {
-      warnings.push(`${file.name}: failed to read attachment.`);
+      warnings.push(`${file.name}：读取附件失败。`);
     }
   }
   return { attachments, warnings };
@@ -190,13 +190,13 @@ async function collectAttachments(files: File[]): Promise<AttachmentCollectionRe
 
 function attachmentMeta(attachment: ComposerAttachment): string {
   const sizeKb = Math.max(1, Math.round(attachment.size / 1024));
-  const kindLabel = attachment.kind === "image" ? "Image" : "File";
+  const kindLabel = attachment.kind === "image" ? "图片" : "文件";
   return `${kindLabel} · ${sizeKb} KB`;
 }
 
 function renderMessageRow(agentKey: AgentKey, item: RenderMessage, index: number) {
   const user = item.role === "user";
-  const sender = user ? "You" : agentName(agentKey);
+  const sender = user ? "你" : agentName(agentKey);
   const avatar = user ? "ME" : sender.slice(0, 1).toUpperCase();
 
   return (
@@ -208,7 +208,7 @@ function renderMessageRow(agentKey: AgentKey, item: RenderMessage, index: number
         </div>
         {item.thinking ? (
           <div className="bubble thinking">
-            <span>Thinking</span>
+            <span>思考中</span>
             <span className="thinking-dots">
               <span></span>
               <span></span>
@@ -235,7 +235,7 @@ function renderFileView(
 
   const file = fileItems.find((item) => item.id === currentView.id);
   const content = fileCache[`${currentProjectId}::${currentView.id}`];
-  const showContent = typeof content === "string" ? content || "(empty)" : "Loading...";
+  const showContent = typeof content === "string" ? content || "（空）" : "加载中...";
 
   return (
     <div className="file-panel">
@@ -308,20 +308,20 @@ const AgentMessages = memo(function AgentMessages(props: AgentMessagesProps) {
         <>
           {hiddenCount > 0 ? (
             <div className="history-hint">
-              已折叠较早消息 {hiddenCount} 条（仅渲染最近 {MAX_RENDER_MESSAGES} 条）。
+              较早的消息已折叠：隐藏 {hiddenCount} 条（当前展示最近 {MAX_RENDER_MESSAGES} 条）。
             </div>
           ) : null}
           {visibleRows.map((item, index) => renderMessageRow(agentKey, item, index))}
         </>
       ) : (
         <div className="empty">
-          No conversation yet for {agentName(agentKey)} in this project.
+          当前项目里还没有 {agentName(agentKey)} 的对话记录。
         </div>
       )}
 
       {shouldRenderActions ? (
         <div className="message-actions">
-          <p className="title">流程选项</p>
+          <p className="title">流程操作</p>
           <div className="row">
             {actions.map((action) => (
               <button
@@ -394,11 +394,11 @@ export function MainPanel(props: MainPanelProps) {
     );
     if (options?.alertOnOverflow && files.length > availableSlots) {
       window.alert(
-        `You can attach up to ${MAX_PENDING_ATTACHMENTS} items at a time.`,
+        `一次最多只能附加 ${MAX_PENDING_ATTACHMENTS} 个项目。`,
       );
     }
     if (!availableSlots) {
-      setLocalWarningText(`You can attach up to ${MAX_PENDING_ATTACHMENTS} items at a time.`);
+      setLocalWarningText(`一次最多只能附加 ${MAX_PENDING_ATTACHMENTS} 个项目。`);
       return;
     }
 
@@ -482,7 +482,7 @@ export function MainPanel(props: MainPanelProps) {
     <main className="main">
       <header className="main-header">
         <div>
-          <div className="hero-kicker">Multi-Project Workspace</div>
+          <div className="hero-kicker">多项目工作台</div>
           <h1 className="hero-title">{title}</h1>
           <div className="hero-sub">{subtitle}</div>
         </div>
@@ -491,7 +491,7 @@ export function MainPanel(props: MainPanelProps) {
           <span className="badge phase">{phaseLabel}</span>
           <span className="badge mode">{modeBadge}</span>
           {readOnly && currentView.type === "agent" ? (
-            <span className="badge readonly">Read Only · {agentName(currentAgent)}</span>
+            <span className="badge readonly">只读 · {agentName(currentAgent)}</span>
           ) : null}
         </div>
       </header>
@@ -537,7 +537,7 @@ export function MainPanel(props: MainPanelProps) {
                       <img src={attachment.previewUrl} alt="" />
                     </div>
                   ) : (
-                    <div className="attachment-icon">FILE</div>
+                    <div className="attachment-icon">文件</div>
                   )}
                   <div className="attachment-copy">
                     <div className="attachment-name">{attachment.name}</div>
@@ -571,8 +571,8 @@ export function MainPanel(props: MainPanelProps) {
               }}
               placeholder={
                 readOnly
-                  ? `Read-only history. Current active agent is ${agentName(currentAgent)}.`
-                  : `Talk to ${agentName(currentView.id)} inside ${projectName}...`
+                  ? `当前是只读历史记录。当前活跃 Agent 为 ${agentName(currentAgent)}。`
+                  : `在 ${projectName} 中与 ${agentName(currentView.id)} 对话...`
               }
             />
             <input
@@ -591,7 +591,7 @@ export function MainPanel(props: MainPanelProps) {
               disabled={readOnly || requestInFlight}
               onClick={() => fileInputRef.current?.click()}
             >
-              Attach
+              附件
             </button>
             <button
               className="btn"
@@ -601,7 +601,7 @@ export function MainPanel(props: MainPanelProps) {
                 void handleSend();
               }}
             >
-              Send
+              发送
             </button>
           </div>
 
@@ -612,3 +612,6 @@ export function MainPanel(props: MainPanelProps) {
     </main>
   );
 }
+
+
+

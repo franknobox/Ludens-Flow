@@ -1,8 +1,7 @@
 import logging
-from typing import Optional, Dict, Any
-import json
+from typing import Optional
 
-from ludens_flow.agents.base import BaseAgent, AgentResult, CommitSpec
+from ludens_flow.agents.base import AgentResult, BaseAgent, CommitSpec
 from ludens_flow.schemas import DISCUSS_RESPONSE_SCHEMA_TEXT, parse_discuss_payload
 from ludens_flow.state import LudensState
 from llm.provider import LLMConfig
@@ -11,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class DesignAgent(BaseAgent):
-    """负责 GDD 阶段的讨论和定稿。"""
+    """Handles GDD discussion and finalization."""
 
     name = "DesignAgent"
 
@@ -21,28 +20,53 @@ class DesignAgent(BaseAgent):
         user_input: str,
         cfg: Optional[LLMConfig] = None,
         user_persona: Optional[str] = None,
+        stream_handler=None,
     ) -> AgentResult:
-        # 回流修改时，把当前 GDD 一并带入讨论上下文。
         from ludens_flow.app.artifacts import read_artifact
 
         existing_gdd = read_artifact("GDD", project_id=state.project_id)
 
         gdd_context = ""
         if existing_gdd.strip():
-            gdd_context = f"**当前已有的 GDD 文档内容**（如果是回流修改阶段，请在此基础上修订而非从零开始）：\n{existing_gdd}\n\n"
+            gdd_context = (
+                "**Current GDD content** "
+                "(if this is a revision pass, continue from this draft instead of restarting):\n"
+                f"{existing_gdd}\n\n"
+            )
 
-        # discuss 只收敛需求和玩法方向，不直接生成最终工件。
-        prompt_text = (
+        base_prompt_text = (
             f"{gdd_context}"
-            "请执行以下操作：\n"
-            "1. 作为策划 Dam，与用户热情地交流本次的想法，探讨和提炼关键信息（核心玩法机制、游戏感受、大致开发规模）。\n"
-            "2. 从 Unity 独立开发的视角出发，适时评估玩法机制的实现可行性——例如某个机制在 Unity 里是否容易实现，或者有没有更聪明的替代方案。\n"
-            "3. 鼓励创意冒险，聚焦于能在有限时间内跑通的最小核心体验（类似 Game Jam 思维）。\n"
-            "4. 如果有模糊地带，用友好的反问牵引思考；如果用户给的方向清晰，热烈肯定并发散脑洞。\n"
-            "5. 保持轻松、活泼、富有创造力的对话节奏。\n"
-            f"\n\n{DISCUSS_RESPONSE_SCHEMA_TEXT}"
+            "Please do the following:\n"
+            "1. As the design partner Dam, discuss the user's current game idea warmly and help surface the key points "
+            "(core loop, player feeling, and likely development scope).\n"
+            "2. From a Unity indie-dev perspective, comment on implementation feasibility where helpful, including smarter alternatives.\n"
+            "3. Encourage creative exploration, but keep the discussion anchored to the smallest core experience that can actually ship.\n"
+            "4. If parts are still vague, ask focused follow-up questions. If the direction is already clear, affirm it and expand it.\n"
+            "5. Keep the tone lively, collaborative, and idea-forward.\n"
         )
-        prompt = self._compose_user_prompt(prompt_text, user_input, input_label="用户的需求/反馈")
+
+        if stream_handler:
+            prompt = self._compose_user_prompt(
+                base_prompt_text
+                + "6. Reply in plain natural language only. Do not output JSON, code fences, or any structured protocol.\n",
+                user_input,
+                input_label="用户的需求/反馈",
+            )
+            reply = self._call(
+                prompt,
+                cfg,
+                history=state.chat_history,
+                user_persona=user_persona,
+                project_id=state.project_id,
+                stream_handler=stream_handler,
+            )
+            return AgentResult(assistant_message=reply.strip(), state_updates={})
+
+        prompt = self._compose_user_prompt(
+            f"{base_prompt_text}\n{DISCUSS_RESPONSE_SCHEMA_TEXT}",
+            user_input,
+            input_label="用户的需求/反馈",
+        )
 
         raw = self._call(
             prompt,
@@ -52,7 +76,6 @@ class DesignAgent(BaseAgent):
             project_id=state.project_id,
         )
 
-        # 尝试解析结构化 JSON 响应。
         payload, _ = parse_discuss_payload(raw)
         if payload:
             return AgentResult(
@@ -62,9 +85,7 @@ class DesignAgent(BaseAgent):
                 profile_updates=payload.profile_updates,
             )
 
-        # 无JSON
-        reply = raw or ""
-        return AgentResult(assistant_message=reply.strip(), state_updates={})
+        return AgentResult(assistant_message=(raw or "").strip(), state_updates={})
 
     def commit(
         self,
@@ -73,22 +94,28 @@ class DesignAgent(BaseAgent):
         cfg: Optional[LLMConfig] = None,
         user_persona: Optional[str] = None,
     ) -> AgentResult:
-        # commit 直接输出可落盘的最终版 GDD。
         prompt_text = (
-            "请基于我们之前的完整讨论记录，将其中已经明确的信息整合为一份规范化 GDD (Game Design Document) Markdown 文档。\n"
-            "面向使用 Unity 引擎的独立开发者或小型 Game Jam 团队。\n\n"
-            "要求：\n"
-            "1. 包含以下版块：概述（题材/核心体验/目标玩家）、核心循环、关键系统、关卡/内容结构、美术风格与氛围、MVP 边界。\n"
-            "2. **关键系统** 版块中，每个系统必须附注 Unity 实现可行性备注，例如使用 CharacterController / Tilemap / Rigidbody2D / NavMesh / Animator 等具体手段。\n"
-            "3. **MVP 边界** 版块需明确「哪些功能是核心体验必须有」「哪些是 nice-to-have 可以留到后续」，以 Game Jam 标准控制范围。\n"
-            "4. **严禁擅自编造未确定内容**：如果讨论中确实没有提及某个版块的细节，该部分必须严格留白标注为 `[待定：补充说明...]`。但凡讨论中提到过的内容，必须如实填入。\n"
-            "5. 排版风格：仅在各章节主标题前加少量 Emoji 点缀，正文严谨冷峻。\n"
-            "6. 尾部增设两部分：\n"
-            "   - 【⚠️ 技术风险】：基于 Unity 开发经验，分析 2-3 个实现上的技术痛点（如物理碰撞、动画状态机、场景管理等）。\n"
-            "   - 【💡 创意变体】：用简洁的 1-2 句话提供 2 种玩法衍生变体方向，激发后续迭代灵感。\n"
-            "重要：你的整篇输出将会被原封不动保存。除 Markdown 正文外，**不要**输出多余的解释首尾语。"
+            "Based on the full discussion so far, produce a clean GDD (Game Design Document) in Markdown.\n"
+            "It should be written for a Unity indie developer or a small game-jam team.\n\n"
+            "Requirements:\n"
+            "1. Include these sections: Overview (theme / core experience / target player), Core Loop, Key Systems, "
+            "Level / Content Structure, Visual Style & Atmosphere, MVP Boundary.\n"
+            "2. In the Key Systems section, each system should include a short Unity implementation note, for example using "
+            "CharacterController, Tilemap, Rigidbody2D, NavMesh, Animator, and so on.\n"
+            "3. In the MVP Boundary section, clearly separate must-have core experience from nice-to-have ideas that can wait.\n"
+            "4. Do not invent unresolved details. If something truly was not decided in the discussion, mark it as "
+            "[TODO: clarify ...]. But anything that was discussed should be carried through faithfully.\n"
+            "5. Keep the Markdown clean and readable. A small amount of emphasis is fine, but avoid extra framing text.\n"
+            "6. Add two short ending sections:\n"
+            "   - Technical Risks: name 2-3 likely Unity implementation risks.\n"
+            "   - Creative Variants: provide 2 concise gameplay variation directions.\n"
+            "Important: this output will be saved directly. Do not add extra preface or closing remarks outside the Markdown body."
         )
-        prompt = self._compose_user_prompt(prompt_text, user_input, input_label="本轮补充输入")
+        prompt = self._compose_user_prompt(
+            prompt_text,
+            user_input,
+            input_label="Current extra input",
+        )
         final_gdd = self._call(
             prompt,
             cfg,
@@ -98,11 +125,13 @@ class DesignAgent(BaseAgent):
         )
         logger.info("[DesignAgent] Commit generated.")
 
-        decisions = ["GDD committed"]
-
         return AgentResult(
-            assistant_message="GDD 已定稿出炉，正交付总控归档。\n\n**系统即将自动流转至项目管理(PM)阶段。**\n\n*输入任意内容进入下一阶段*",
-            state_updates={"decisions": decisions},
+            assistant_message=(
+                "GDD finalized.\n\n"
+                "**The system will now move into the PM phase automatically.**\n\n"
+                "*Send any message to continue.*"
+            ),
+            state_updates={"decisions": ["GDD committed"]},
             commit=CommitSpec(
                 artifact_name="GDD",
                 content=final_gdd,

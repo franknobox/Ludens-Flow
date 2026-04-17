@@ -2,7 +2,7 @@ import logging
 import re
 from typing import Callable, Optional
 
-from ludens_flow.agents.base import BaseAgent, AgentResult, CommitSpec
+from ludens_flow.agents.base import AgentResult, BaseAgent, CommitSpec
 from ludens_flow.app.artifacts import read_artifact
 from ludens_flow.schemas import DISCUSS_RESPONSE_SCHEMA_TEXT, parse_discuss_payload
 from ludens_flow.state import LudensState
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class EngineeringAgent(BaseAgent):
-    """负责工程预设讨论、实施计划定稿和冻结后的开发辅导。"""
+    """Handles engineering preset discussion, implementation planning, and coaching."""
 
     name = "EngineeringAgent"
 
@@ -22,6 +22,7 @@ class EngineeringAgent(BaseAgent):
         user_input: str,
         cfg: Optional[LLMConfig] = None,
         user_persona: Optional[str] = None,
+        stream_handler: Optional[Callable[[str], None]] = None,
     ) -> AgentResult:
         raise NotImplementedError(
             "EngineeringAgent uses plan_discuss and coach instead of discuss"
@@ -37,7 +38,6 @@ class EngineeringAgent(BaseAgent):
         raise NotImplementedError("EngineeringAgent uses plan_commit instead of commit")
 
     def _extract_style_preset(self, text: str) -> Optional[str]:
-        """从用户表达里识别 A / B / C 工程预设。"""
         if not text:
             return None
 
@@ -95,7 +95,6 @@ class EngineeringAgent(BaseAgent):
     def _resolve_style_preset(
         self, state: LudensState, user_input: str = ""
     ) -> Optional[str]:
-        """优先读本轮输入，其次读持久化状态，最后回看最近用户对话。"""
         detected = self._extract_style_preset(user_input)
         if detected:
             return detected
@@ -118,8 +117,8 @@ class EngineeringAgent(BaseAgent):
         user_input: str,
         cfg: Optional[LLMConfig] = None,
         user_persona: Optional[str] = None,
+        stream_handler: Optional[Callable[[str], None]] = None,
     ) -> AgentResult:
-        # 工程讨论依赖前置的 GDD / PROJECT_PLAN，必要时也带上当前 IMPLEMENTATION_PLAN。
         gdd = read_artifact("GDD", project_id=state.project_id)
         pm = read_artifact("PROJECT_PLAN", project_id=state.project_id)
         impl_plan = read_artifact("IMPLEMENTATION_PLAN", project_id=state.project_id)
@@ -128,24 +127,47 @@ class EngineeringAgent(BaseAgent):
         style = detected_style or state.style_preset or "None"
         dev_mode_context = ""
         if getattr(state, "artifact_frozen", False) and impl_plan.strip():
-            dev_mode_context = f"\n当前实际生效的实施计划：\n{impl_plan}\n"
+            dev_mode_context = f"\nCurrent effective implementation plan:\n{impl_plan}\n"
 
-        # 讨论态负责解释预设、收敛方案，并在用户明确选择时持久化 preset。
-        prompt_text = (
-            f"已有 GDD：\n{gdd}\n\n"
-            f"项目计划：\n{pm}\n"
+        base_prompt_text = (
+            f"Existing GDD:\n{gdd}\n\n"
+            f"Project plan:\n{pm}\n"
             f"{dev_mode_context}"
-            f"当前已确认的工程预设：{style}\n\n"
-            "请完成以下任务：\n"
-            "1. 向用户解释 A/B/C 三种工程预设风格，并结合当前项目给出建议。\n"
-            "2. 如果用户已经明确选择了某个预设，请围绕该预设继续讨论，不要重新发散。\n"
-            "3. 讨论应聚焦 Unity 项目的可执行性、目录结构、模块边界和调试成本。\n"
-            "4. 语气专业、清晰、友好，用自然语言回答。\n"
-            f"\n\n{DISCUSS_RESPONSE_SCHEMA_TEXT}"
+            f"Confirmed engineering preset so far: {style}\n\n"
+            "Please do the following:\n"
+            "1. Explain the A / B / C engineering preset options and recommend the best fit for the current project.\n"
+            "2. If the user already chose a preset, continue the discussion inside that preset instead of restarting from scratch.\n"
+            "3. Keep the conversation focused on engineering structure, implementation path, folder structure, module boundaries, risk, and debugging cost.\n"
+            "4. In this discussion stage, do not give class-by-class implementation instructions, file skeletons, exact script breakdowns, or step-by-step Unity editor operations.\n"
+            "5. Do not proactively suggest concrete file names, code scaffolds, or direct build instructions unless the user explicitly asks to enter a later execution-oriented stage.\n"
+            "6. Keep the tone practical, clear, and supportive.\n"
         )
-        prompt = self._compose_user_prompt(prompt_text, user_input, input_label="用户意图")
 
-        updates = {}
+        if stream_handler:
+            prompt = self._compose_user_prompt(
+                base_prompt_text
+                + "5. Reply in plain natural language only. Do not output JSON, code fences, or any structured protocol.\n",
+                user_input,
+                input_label="User intent",
+            )
+            reply = self._call(
+                prompt,
+                cfg,
+                history=state.chat_history,
+                user_persona=user_persona,
+                project_id=state.project_id,
+                stream_handler=stream_handler,
+            )
+            updates = {}
+            if detected_style and detected_style != state.style_preset:
+                updates["style_preset"] = detected_style
+            return AgentResult(assistant_message=reply.strip(), state_updates=updates)
+
+        prompt = self._compose_user_prompt(
+            f"{base_prompt_text}\n{DISCUSS_RESPONSE_SCHEMA_TEXT}",
+            user_input,
+            input_label="User intent",
+        )
 
         raw = self._call(
             prompt,
@@ -166,10 +188,10 @@ class EngineeringAgent(BaseAgent):
                 profile_updates=payload.profile_updates,
             )
 
-        reply = raw or ""
+        updates = {}
         if detected_style and detected_style != state.style_preset:
             updates["style_preset"] = detected_style
-        return AgentResult(assistant_message=reply.strip(), state_updates=updates)
+        return AgentResult(assistant_message=(raw or "").strip(), state_updates=updates)
 
     def plan_commit(
         self,
@@ -178,28 +200,27 @@ class EngineeringAgent(BaseAgent):
         cfg: Optional[LLMConfig] = None,
         user_persona: Optional[str] = None,
     ) -> AgentResult:
-        # 定稿态把已确认 preset 固化到 IMPLEMENTATION_PLAN。
         gdd = read_artifact("GDD", project_id=state.project_id)
         pm = read_artifact("PROJECT_PLAN", project_id=state.project_id)
         resolved_style = self._resolve_style_preset(state, user_input)
-        style = (
-            resolved_style
-            or getattr(state, "style_preset", None)
-            or "由本次对话记录决定"
-        )
+        style = resolved_style or getattr(state, "style_preset", None) or "Use the current discussion context"
 
         prompt_text = (
-            f"依照用户最终确认的工程预设：{style}\n\n"
-            f"GDD 内容：\n{gdd}\n\n"
-            f"Project Plan 内容：\n{pm}\n\n"
-            "请直接输出一份给 Unity 独立游戏开发者使用的 IMPLEMENTATION_PLAN.md。\n"
-            "必须包含以下部分：\n"
-            "1. Unity 工程结构：给出完整的 Assets 目录建议。\n"
-            "2. 系统级任务清单：明确脚本、挂载对象、关键组件和实现顺序。\n"
-            "3. 关键风险与替代方案：列出 2-3 个实现风险及 Plan B。\n"
-            "请直接输出 Markdown 正文，不要加额外前后缀。\n"
+            f"Use the confirmed engineering preset: {style}\n\n"
+            f"GDD:\n{gdd}\n\n"
+            f"Project Plan:\n{pm}\n\n"
+            "Produce an IMPLEMENTATION_PLAN.md for a Unity indie game developer.\n"
+            "It must include:\n"
+            "1. Unity project structure: a complete Assets directory suggestion.\n"
+            "2. System-level task breakdown: scripts, mounted objects, key components, and implementation order.\n"
+            "3. Key risks and fallback plans: list 2-3 realistic implementation risks and Plan B options.\n"
+            "Output plain Markdown only, with no extra wrapper text."
         )
-        prompt = self._compose_user_prompt(prompt_text, user_input, input_label="本轮补充输入")
+        prompt = self._compose_user_prompt(
+            prompt_text,
+            user_input,
+            input_label="Current extra input",
+        )
         final_eng = self._call(
             prompt,
             cfg,
@@ -214,7 +235,11 @@ class EngineeringAgent(BaseAgent):
             updates["style_preset"] = resolved_style
 
         return AgentResult(
-            assistant_message="工程架构蓝图已准备完毕。\n\n**系统即将自动流转至内部评审(REVIEW)阶段。**\n\n*输入任意内容进入下一阶段*",
+            assistant_message=(
+                "Implementation plan finalized.\n\n"
+                "**The system will now move into internal review automatically.**\n\n"
+                "*Send any message to continue.*"
+            ),
             state_updates=updates,
             commit=CommitSpec(
                 artifact_name="IMPLEMENTATION_PLAN",
@@ -232,23 +257,26 @@ class EngineeringAgent(BaseAgent):
         user_persona: Optional[str] = None,
         stream_handler: Optional[Callable[[str], None]] = None,
     ) -> AgentResult:
-        # DEV_COACHING 只做辅导，不改主工件。
         impl_plan = read_artifact("IMPLEMENTATION_PLAN", project_id=state.project_id)
         resolved_style = self._resolve_style_preset(state, user_input)
         style = resolved_style or state.style_preset or "常规"
 
         prompt_text = (
-            "你现在处于 DEV_COACHING 阶段，只做开发辅导，不修改主工件。\n"
-            f"工程风格：{style}\n"
-            f"实施计划：\n{impl_plan}\n\n"
-            "请按下面结构回答：\n"
-            "1. 用 2-3 句确认你对问题的理解。\n"
-            "2. 给出最推荐的实现路径。\n"
-            "3. 提供轻量级 Unity 实施步骤。\n"
-            "4. 提醒 1-2 个最容易踩的坑。\n"
-            "5. 最后询问用户是否需要更详细的 Unity 操作步骤或发给 Coding Agent 的完整代码指令。\n"
+            "You are in DEV_COACHING mode. Only guide implementation work; do not modify the canonical plan.\n"
+            f"Engineering style: {style}\n"
+            f"Implementation plan:\n{impl_plan}\n\n"
+            "Reply using this structure:\n"
+            "1. Confirm your understanding of the user's problem in 2-3 sentences.\n"
+            "2. Give the most recommended implementation path.\n"
+            "3. Provide a lightweight Unity execution guide.\n"
+            "4. Warn about 1-2 likely pitfalls.\n"
+            "5. End by asking whether the user wants a more detailed Unity step-by-step guide or a complete coding-agent prompt.\n"
         )
-        prompt = self._compose_user_prompt(prompt_text, user_input, input_label="用户当前问题")
+        prompt = self._compose_user_prompt(
+            prompt_text,
+            user_input,
+            input_label="User's current problem",
+        )
 
         reply = self._call(
             prompt,

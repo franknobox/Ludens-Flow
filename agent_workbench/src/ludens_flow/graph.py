@@ -241,7 +241,10 @@ def run_agent_step(
 
             if mode == "DISCUSS":
                 result: AgentResult = agent.discuss(
-                    agent_state_snapshot, user_input, user_persona=user_persona_block
+                    agent_state_snapshot,
+                    user_input,
+                    user_persona=user_persona_block,
+                    stream_handler=stream_handler,
                 )
             elif mode == "COMMIT":
                 result: AgentResult = agent.commit(
@@ -253,6 +256,7 @@ def run_agent_step(
                     user_input,
                     None,
                     user_persona=user_persona_block,
+                    stream_handler=stream_handler,
                 )
             elif mode == "PLAN_COMMIT":
                 result: AgentResult = getattr(agent, "plan_commit")(
@@ -593,7 +597,13 @@ class GDDNode:
         self, state: LudensState, user_input: str, stream_handler=None
     ) -> LudensState:
         mode = "COMMIT" if state.phase == Phase.GDD_COMMIT.value else "DISCUSS"
-        return run_agent_step(_gdd_agent, mode, state, user_input)
+        return run_agent_step(
+            _gdd_agent,
+            mode,
+            state,
+            user_input,
+            stream_handler=stream_handler if mode == "DISCUSS" else None,
+        )
 
 
 class PMNode:
@@ -601,7 +611,13 @@ class PMNode:
         self, state: LudensState, user_input: str, stream_handler=None
     ) -> LudensState:
         mode = "COMMIT" if state.phase == Phase.PM_COMMIT.value else "DISCUSS"
-        return run_agent_step(_pm_agent, mode, state, user_input)
+        return run_agent_step(
+            _pm_agent,
+            mode,
+            state,
+            user_input,
+            stream_handler=stream_handler if mode == "DISCUSS" else None,
+        )
 
 
 class ENGNode:
@@ -620,7 +636,7 @@ class ENGNode:
             mode,
             state,
             user_input,
-            stream_handler=stream_handler if mode == "COACH" else None,
+            stream_handler=stream_handler if mode in {"COACH", "PLAN_DISCUSS"} else None,
         )
 
 

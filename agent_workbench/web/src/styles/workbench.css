@@ -39,13 +39,129 @@ body {
     var(--bg);
 }
 
-.app {
+.app-shell {
   position: fixed;
   inset: 0;
-  padding: 12px;
+  padding: 10px 12px 12px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 10px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 14px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 14px 28px rgba(20, 30, 45, 0.06);
+}
+
+.topbar-brand {
+  min-width: 0;
+}
+
+.topbar-title {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #253244;
+}
+
+.topbar-subtitle {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.topbar-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(239, 243, 248, 0.92);
+  border: 1px solid rgba(215, 224, 234, 0.9);
+}
+
+.topbar-tab {
+  height: 36px;
+  min-width: 112px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: #5e6d81;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.topbar-tab:hover {
+  color: #243041;
+}
+
+.topbar-tab.is-active {
+  background: #fff;
+  color: #1f2b3c;
+  box-shadow: 0 6px 16px rgba(20, 30, 45, 0.08);
+}
+
+.app-stage {
+  min-height: 0;
+}
+
+.app {
+  position: relative;
+  height: 100%;
+  padding: 0;
   gap: 12px;
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr) 320px;
+}
+
+.settings-shell {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 8px;
+}
+
+.settings-shell-card {
+  width: min(880px, 100%);
+  padding: 30px 32px;
+  border-radius: 26px;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: var(--shadow);
+}
+
+.settings-shell-kicker {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.settings-shell-title {
+  margin: 10px 0 8px;
+  font-size: 32px;
+  line-height: 1.08;
+  color: #1d2734;
+}
+
+.settings-shell-text {
+  max-width: 700px;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #5e6d81;
 }
 
 .shell,
@@ -917,9 +1033,28 @@ input[type="file"] {
 }
 
 @media (max-width: 840px) {
+  .app-shell {
+    padding: 8px;
+    gap: 8px;
+  }
+
+  .topbar {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 10px 12px;
+  }
+
+  .topbar-tabs {
+    width: 100%;
+  }
+
+  .topbar-tab {
+    flex: 1;
+    min-width: 0;
+  }
+
   .app {
     grid-template-columns: 1fr;
-    padding: 8px;
   }
 
   .shell.left {

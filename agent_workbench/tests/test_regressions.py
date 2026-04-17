@@ -483,5 +483,50 @@ class RegressionTests(unittest.TestCase):
         )
 
 
+    def test_design_discuss_streaming_uses_plain_reply_path(self):
+        agent = DesignAgent()
+        captured = {}
+
+        def fake_call(user_prompt, *args, **kwargs):
+            captured["user_prompt"] = user_prompt
+            captured["stream_handler"] = kwargs.get("stream_handler")
+            return "streamed design reply"
+
+        agent._call = fake_call
+        result = agent.discuss(
+            init_state(),
+            "Help me shape the core loop",
+            stream_handler=lambda _chunk: None,
+        )
+
+        self.assertEqual(result.assistant_message, "streamed design reply")
+        self.assertEqual(result.state_updates, {})
+        self.assertIsNotNone(captured["stream_handler"])
+        self.assertIn("Do not output JSON", captured["user_prompt"])
+
+    def test_engineering_plan_discuss_streaming_keeps_style_preset_update(self):
+        agent = EngineeringAgent()
+        captured = {}
+
+        def fake_call(user_prompt, *args, **kwargs):
+            captured["user_prompt"] = user_prompt
+            captured["stream_handler"] = kwargs.get("stream_handler")
+            return "streamed engineering reply"
+
+        agent._call = fake_call
+        state = init_state()
+
+        result = agent.plan_discuss(
+            state,
+            "I choose preset B for this project",
+            stream_handler=lambda _chunk: None,
+        )
+
+        self.assertEqual(result.assistant_message, "streamed engineering reply")
+        self.assertEqual(result.state_updates.get("style_preset"), "B")
+        self.assertIsNotNone(captured["stream_handler"])
+        self.assertIn("Do not output JSON", captured["user_prompt"])
+
+
 if __name__ == "__main__":
     unittest.main()
