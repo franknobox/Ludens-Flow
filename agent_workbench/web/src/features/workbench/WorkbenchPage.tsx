@@ -15,9 +15,11 @@ import {
 } from "./utils";
 import type {
   ChatResponse,
+  ComposerAttachment,
   StateResponse,
   TransientChat,
   ViewState,
+  WorkbenchEvent,
   WorkbenchStateModel,
 } from "./types";
 
@@ -68,6 +70,26 @@ function mergeChatResponse(
   };
 }
 
+function applyStateSnapshot(
+  prev: WorkbenchStateModel,
+  state: StateResponse,
+  projects?: WorkbenchStateModel["projects"],
+  activeProjects?: WorkbenchStateModel["active_projects"],
+  archivedProjects?: WorkbenchStateModel["archived_projects"],
+): WorkbenchStateModel {
+  return {
+    ...toModelState(state),
+    projects: projects || prev.projects,
+    active_projects: activeProjects || prev.active_projects,
+    archived_projects: archivedProjects || prev.archived_projects,
+    files: prev.files,
+  };
+}
+
+function fileCacheKey(projectId: string, fileId: string): string {
+  return `${projectId}::${fileId}`;
+}
+
 export function WorkbenchPage() {
   const [model, setModel] = useState<WorkbenchStateModel>(INITIAL_MODEL);
   const [currentView, setCurrentView] = useState<ViewState>({ type: "agent", id: "design" });
@@ -76,8 +98,10 @@ export function WorkbenchPage() {
   const [requestInFlight, setRequestInFlight] = useState(false);
   const [transientChat, setTransientChat] = useState<TransientChat | null>(null);
   const [errorText, setErrorText] = useState("");
+  const [warningText, setWarningText] = useState("");
 
   const contentAreaRef = useRef<HTMLElement>(null);
+  const lastEventAtRef = useRef(0);
 
   const historyByAgent = useMemo(() => buildHistoryByAgent(model), [model]);
   const activeProject = useMemo(
@@ -138,21 +162,137 @@ export function WorkbenchPage() {
       archived_projects: projects.archived_projects || [],
       files: files.files || [],
     }));
-    setFileCache((prev) => {
-      const validIds = new Set((files.files || []).map((item) => item.id));
-      const next: Record<string, string> = {};
-      Object.keys(prev).forEach((key) => {
-        if (validIds.has(key)) {
-          next[key] = prev[key];
-        }
-      });
-      return next;
-    });
-
     setCurrentView({
       type: "agent",
       id: state.current_agent || phaseToAgent(state.phase),
     });
+  };
+
+  const handleWorkbenchEvent = (event: WorkbenchEvent) => {
+    lastEventAtRef.current = Date.now();
+
+    if (event.type === "projects_updated") {
+      setModel((prev) => ({
+        ...prev,
+        projects: event.projects || prev.projects,
+        active_projects: event.active_projects || event.projects || prev.active_projects,
+        archived_projects: event.archived_projects || prev.archived_projects,
+      }));
+      return;
+    }
+
+    if (event.type === "run_started") {
+      setRequestInFlight(true);
+      setTransientChat((prev) =>
+        prev
+          ? prev
+          : {
+              agentKey:
+                event.current_agent || phaseToAgent(event.phase || ""),
+              phase: event.phase || "",
+              userText: event.message || "[Processing]",
+              thinking: true,
+              assistantText: "",
+            },
+      );
+      return;
+    }
+
+    if (event.type === "assistant_stream_started") {
+      setTransientChat((prev) =>
+        prev
+          ? {
+              ...prev,
+              thinking: true,
+              assistantText: prev.assistantText || "",
+            }
+          : {
+              agentKey:
+                event.current_agent || phaseToAgent(event.phase || ""),
+              phase: event.phase || "",
+              userText: "[Processing]",
+              thinking: true,
+              assistantText: "",
+            },
+      );
+      return;
+    }
+
+    if (event.type === "assistant_delta") {
+      setTransientChat((prev) =>
+        prev
+          ? {
+              ...prev,
+              thinking: false,
+              assistantText: `${prev.assistantText || ""}${event.delta || ""}`,
+            }
+          : {
+              agentKey:
+                event.current_agent || phaseToAgent(event.phase || ""),
+              phase: event.phase || "",
+              userText: "[Processing]",
+              thinking: false,
+              assistantText: event.delta || "",
+            },
+      );
+      return;
+    }
+
+    if (event.type === "assistant_stream_completed") {
+      setTransientChat((prev) =>
+        prev
+          ? {
+              ...prev,
+              thinking: false,
+            }
+          : prev,
+      );
+      return;
+    }
+
+    if (event.type === "state_updated" || event.type === "connected") {
+      if (event.state) {
+        setModel((prev) =>
+          applyStateSnapshot(
+            prev,
+            event.state as StateResponse,
+            event.projects,
+            event.active_projects || event.projects,
+            event.archived_projects,
+          ),
+        );
+        setCurrentView((prev) =>
+          prev.type === "agent"
+            ? {
+                type: "agent",
+                id: event.state?.current_agent || phaseToAgent(event.state?.phase || ""),
+              }
+            : prev,
+        );
+      }
+      setTransientChat(null);
+      setRequestInFlight(false);
+      return;
+    }
+
+    if (event.type === "run_failed") {
+      if (event.state) {
+        setModel((prev) =>
+          applyStateSnapshot(
+            prev,
+            event.state as StateResponse,
+            event.projects,
+            event.active_projects || event.projects,
+            event.archived_projects,
+          ),
+        );
+      }
+      setTransientChat(null);
+      setRequestInFlight(false);
+      setErrorText(event.error || "Request failed.");
+      setWarningText("");
+      return;
+    }
   };
 
   const openProject = async (projectId: string) => {
@@ -163,6 +303,7 @@ export function WorkbenchPage() {
     }
 
     setErrorText("");
+    setWarningText("");
     try {
       await workbenchApi.selectProject(projectId);
       await hardRefresh();
@@ -173,16 +314,20 @@ export function WorkbenchPage() {
 
   const openFile = async (fileId: string) => {
     setCurrentView({ type: "file", id: fileId });
+    const cacheKey = fileCacheKey(model.project_id, fileId);
 
-    if (Object.prototype.hasOwnProperty.call(fileCache, fileId)) {
+    if (Object.prototype.hasOwnProperty.call(fileCache, cacheKey)) {
       return;
     }
 
     try {
       const data = await workbenchApi.getWorkspaceFileContent(fileId);
-      setFileCache((prev) => ({ ...prev, [fileId]: data.content || "" }));
+      setFileCache((prev) => ({ ...prev, [cacheKey]: data.content || "" }));
     } catch (error) {
-      setFileCache((prev) => ({ ...prev, [fileId]: `Load failed: ${toErrorMessage(error)}` }));
+      setFileCache((prev) => ({
+        ...prev,
+        [cacheKey]: `Load failed: ${toErrorMessage(error)}`,
+      }));
     }
   };
 
@@ -278,40 +423,49 @@ export function WorkbenchPage() {
     }
   };
 
-  const sendMessage = async (text: string, images: string[]) => {
-    if (!text && !images.length) {
+  const sendMessage = async (text: string, attachments: ComposerAttachment[]) => {
+    if (!text && !attachments.length) {
       return;
     }
 
     setErrorText("");
+    setWarningText("");
     setRequestInFlight(true);
     setTransientChat({
       agentKey: model.current_agent,
       phase: model.phase,
-      userText: transientMessageText(text, images.length),
+      userText: transientMessageText(text, attachments),
       thinking: true,
     });
 
     try {
       const response = await workbenchApi.postChat({
         message: text,
-        images: images.length ? images : undefined,
+        attachments: attachments.map((item) => ({
+          kind: item.kind,
+          name: item.name,
+          mime_type: item.mimeType,
+          data_url: item.dataUrl,
+          size: item.size,
+        })),
       });
       if (response.error) {
         setErrorText(response.error);
       }
+      setWarningText((response.attachment_warnings || []).join("\n"));
       setModel((prev) => mergeChatResponse(prev, response));
-      setTransientChat(null);
       setFileCache({});
-      const nextState = await syncStateOnly();
-      setCurrentView({
-        type: "agent",
-        id: nextState.current_agent || phaseToAgent(nextState.phase),
-      });
-      void syncProjectsOnly();
+      window.setTimeout(() => {
+        if (Date.now() - lastEventAtRef.current > 800) {
+          void syncStateOnly();
+          void syncProjectsOnly();
+          setTransientChat(null);
+        }
+      }, 600);
     } catch (error) {
       setTransientChat((prev) => (prev ? { ...prev, thinking: false } : prev));
       setErrorText("Request failed: " + toErrorMessage(error));
+      setWarningText("");
     } finally {
       setRequestInFlight(false);
     }
@@ -323,6 +477,7 @@ export function WorkbenchPage() {
     }
 
     setErrorText("");
+    setWarningText("");
     setRequestInFlight(true);
     setTransientChat({
       agentKey: currentView.id,
@@ -336,18 +491,20 @@ export function WorkbenchPage() {
       if (response.error) {
         setErrorText(response.error);
       }
+      setWarningText("");
       setModel((prev) => mergeChatResponse(prev, response));
-      setTransientChat(null);
       setFileCache({});
-      const nextState = await syncStateOnly();
-      setCurrentView({
-        type: "agent",
-        id: nextState.current_agent || phaseToAgent(nextState.phase),
-      });
-      void syncProjectsOnly();
+      window.setTimeout(() => {
+        if (Date.now() - lastEventAtRef.current > 800) {
+          void syncStateOnly();
+          void syncProjectsOnly();
+          setTransientChat(null);
+        }
+      }, 600);
     } catch (error) {
       setTransientChat((prev) => (prev ? { ...prev, thinking: false } : prev));
       setErrorText("Action failed: " + toErrorMessage(error));
+      setWarningText("");
     } finally {
       setRequestInFlight(false);
     }
@@ -365,6 +522,7 @@ export function WorkbenchPage() {
     setTransientChat(null);
     setFileCache({});
     setErrorText("");
+    setWarningText("");
     await hardRefresh();
   };
 
@@ -373,6 +531,17 @@ export function WorkbenchPage() {
       setErrorText("Load failed: " + toErrorMessage(error));
     });
   }, []);
+
+  useEffect(() => {
+    if (!model.project_id) {
+      return;
+    }
+
+    const source = workbenchApi.openProjectEvents(model.project_id, handleWorkbenchEvent);
+    return () => {
+      source.close();
+    };
+  }, [model.project_id]);
 
   useEffect(() => {
     if (currentView.type !== "agent") {
@@ -446,6 +615,7 @@ export function WorkbenchPage() {
 
       <MainPanel
         currentView={currentView}
+        currentProjectId={model.project_id}
         currentAgent={model.current_agent}
         projectName={projectName}
         phaseLabel={PHASE_LABEL[model.phase] || model.phase || "-"}
@@ -460,12 +630,13 @@ export function WorkbenchPage() {
         fileItems={model.files}
         fileCache={fileCache}
         errorText={errorText}
+        warningText={warningText}
         contentAreaRef={contentAreaRef}
-        onSend={async (message, images) => {
+        onSend={async (message, attachments) => {
           if (currentView.type !== "agent" || readOnly || requestInFlight) {
             return;
           }
-          await sendMessage(message, images);
+          await sendMessage(message, attachments);
         }}
         onAction={(actionId) => {
           void sendAction(actionId);

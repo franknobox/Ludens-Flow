@@ -53,6 +53,7 @@ class ReviewAgent(BaseAgent):
             f"2. {REVIEW_GATE_SCHEMA_TEXT}\n\n"
             "判断标准：存在致命的逻辑或技术死结时使用 BLOCK；存在影响开发的重要瑕疵时使用 REQUEST_CHANGES；整体健康时使用 PASS。"
         )
+        prompt = self._compose_user_prompt(prompt, user_input, input_label="本轮补充输入")
 
         final_report = self._call(
             prompt,

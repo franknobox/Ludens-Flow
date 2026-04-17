@@ -32,9 +32,8 @@ class DesignAgent(BaseAgent):
             gdd_context = f"**当前已有的 GDD 文档内容**（如果是回流修改阶段，请在此基础上修订而非从零开始）：\n{existing_gdd}\n\n"
 
         # discuss 只收敛需求和玩法方向，不直接生成最终工件。
-        prompt = (
+        prompt_text = (
             f"{gdd_context}"
-            f"用户的需求/反馈: {user_input}\n\n"
             "请执行以下操作：\n"
             "1. 作为策划 Dam，与用户热情地交流本次的想法，探讨和提炼关键信息（核心玩法机制、游戏感受、大致开发规模）。\n"
             "2. 从 Unity 独立开发的视角出发，适时评估玩法机制的实现可行性——例如某个机制在 Unity 里是否容易实现，或者有没有更聪明的替代方案。\n"
@@ -43,6 +42,7 @@ class DesignAgent(BaseAgent):
             "5. 保持轻松、活泼、富有创造力的对话节奏。\n"
             f"\n\n{DISCUSS_RESPONSE_SCHEMA_TEXT}"
         )
+        prompt = self._compose_user_prompt(prompt_text, user_input, input_label="用户的需求/反馈")
 
         raw = self._call(
             prompt,
@@ -74,7 +74,7 @@ class DesignAgent(BaseAgent):
         user_persona: Optional[str] = None,
     ) -> AgentResult:
         # commit 直接输出可落盘的最终版 GDD。
-        prompt = (
+        prompt_text = (
             "请基于我们之前的完整讨论记录，将其中已经明确的信息整合为一份规范化 GDD (Game Design Document) Markdown 文档。\n"
             "面向使用 Unity 引擎的独立开发者或小型 Game Jam 团队。\n\n"
             "要求：\n"
@@ -88,6 +88,7 @@ class DesignAgent(BaseAgent):
             "   - 【💡 创意变体】：用简洁的 1-2 句话提供 2 种玩法衍生变体方向，激发后续迭代灵感。\n"
             "重要：你的整篇输出将会被原封不动保存。除 Markdown 正文外，**不要**输出多余的解释首尾语。"
         )
+        prompt = self._compose_user_prompt(prompt_text, user_input, input_label="本轮补充输入")
         final_gdd = self._call(
             prompt,
             cfg,

@@ -1,6 +1,6 @@
 import logging
 import re
-from typing import Optional
+from typing import Callable, Optional
 
 from ludens_flow.agents.base import BaseAgent, AgentResult, CommitSpec
 from ludens_flow.app.artifacts import read_artifact
@@ -131,11 +131,10 @@ class EngineeringAgent(BaseAgent):
             dev_mode_context = f"\n当前实际生效的实施计划：\n{impl_plan}\n"
 
         # 讨论态负责解释预设、收敛方案，并在用户明确选择时持久化 preset。
-        prompt = (
+        prompt_text = (
             f"已有 GDD：\n{gdd}\n\n"
             f"项目计划：\n{pm}\n"
             f"{dev_mode_context}"
-            f"用户意图：{user_input}\n\n"
             f"当前已确认的工程预设：{style}\n\n"
             "请完成以下任务：\n"
             "1. 向用户解释 A/B/C 三种工程预设风格，并结合当前项目给出建议。\n"
@@ -144,6 +143,7 @@ class EngineeringAgent(BaseAgent):
             "4. 语气专业、清晰、友好，用自然语言回答。\n"
             f"\n\n{DISCUSS_RESPONSE_SCHEMA_TEXT}"
         )
+        prompt = self._compose_user_prompt(prompt_text, user_input, input_label="用户意图")
 
         updates = {}
 
@@ -188,7 +188,7 @@ class EngineeringAgent(BaseAgent):
             or "由本次对话记录决定"
         )
 
-        prompt = (
+        prompt_text = (
             f"依照用户最终确认的工程预设：{style}\n\n"
             f"GDD 内容：\n{gdd}\n\n"
             f"Project Plan 内容：\n{pm}\n\n"
@@ -199,6 +199,7 @@ class EngineeringAgent(BaseAgent):
             "3. 关键风险与替代方案：列出 2-3 个实现风险及 Plan B。\n"
             "请直接输出 Markdown 正文，不要加额外前后缀。\n"
         )
+        prompt = self._compose_user_prompt(prompt_text, user_input, input_label="本轮补充输入")
         final_eng = self._call(
             prompt,
             cfg,
@@ -224,18 +225,22 @@ class EngineeringAgent(BaseAgent):
         )
 
     def coach(
-        self, state: LudensState, user_input: str, cfg: Optional[LLMConfig] = None
+        self,
+        state: LudensState,
+        user_input: str,
+        cfg: Optional[LLMConfig] = None,
+        user_persona: Optional[str] = None,
+        stream_handler: Optional[Callable[[str], None]] = None,
     ) -> AgentResult:
         # DEV_COACHING 只做辅导，不改主工件。
         impl_plan = read_artifact("IMPLEMENTATION_PLAN", project_id=state.project_id)
         resolved_style = self._resolve_style_preset(state, user_input)
         style = resolved_style or state.style_preset or "常规"
 
-        prompt = (
+        prompt_text = (
             "你现在处于 DEV_COACHING 阶段，只做开发辅导，不修改主工件。\n"
             f"工程风格：{style}\n"
             f"实施计划：\n{impl_plan}\n\n"
-            f"用户当前问题：\n{user_input}\n\n"
             "请按下面结构回答：\n"
             "1. 用 2-3 句确认你对问题的理解。\n"
             "2. 给出最推荐的实现路径。\n"
@@ -243,12 +248,15 @@ class EngineeringAgent(BaseAgent):
             "4. 提醒 1-2 个最容易踩的坑。\n"
             "5. 最后询问用户是否需要更详细的 Unity 操作步骤或发给 Coding Agent 的完整代码指令。\n"
         )
+        prompt = self._compose_user_prompt(prompt_text, user_input, input_label="用户当前问题")
 
         reply = self._call(
             prompt,
             cfg,
             history=state.chat_history,
+            user_persona=user_persona,
             project_id=state.project_id,
+            stream_handler=stream_handler,
         )
         logger.info("[EngineeringAgent] Coach instruction issued.")
 

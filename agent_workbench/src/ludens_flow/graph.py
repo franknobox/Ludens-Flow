@@ -49,18 +49,40 @@ def _user_input_to_text(user_input: Any) -> str:
     if isinstance(user_input, list):
         text_parts = []
         image_count = 0
+        attached_files: list[str] = []
         for item in user_input:
             if not isinstance(item, dict):
                 continue
             if item.get("type") == "text":
                 text_val = item.get("text", "")
                 if text_val:
-                    text_parts.append(str(text_val))
+                    text_str = str(text_val)
+                    if text_str.startswith("[Attached File]"):
+                        file_name = ""
+                        for line in text_str.splitlines():
+                            if line.lower().startswith("name:"):
+                                file_name = line.split(":", 1)[1].strip()
+                                break
+                        attached_files.append(file_name or "attachment")
+                        continue
+                    if text_str.startswith("[Attachment Context]"):
+                        continue
+                    if text_str.startswith("[Attachment Ingest Notes]"):
+                        continue
+                    text_parts.append(text_str)
             elif item.get("type") == "image_url":
                 image_count += 1
         text = " ".join(text_parts).strip()
+        attachment_parts = []
+        if attached_files:
+            names = ", ".join(attached_files[:3])
+            if len(attached_files) > 3:
+                names += f" +{len(attached_files) - 3} more"
+            attachment_parts.append(f"[files:{names}]")
         if image_count > 0:
-            return f"{text} [images:{image_count}]".strip()
+            attachment_parts.append(f"[images:{image_count}]")
+        if attachment_parts:
+            return f"{text} {' '.join(attachment_parts)}".strip()
         return text
     return str(user_input)
 
@@ -130,7 +152,11 @@ def _build_recovery_reply(node_name: str, category: str) -> str:
 
 
 def run_agent_step(
-    agent, mode: str, state: LudensState, user_input: Any
+    agent,
+    mode: str,
+    state: LudensState,
+    user_input: Any,
+    stream_handler=None,
 ) -> LudensState:
     """统一执行单个 Agent 节点，并处理状态、日志与落盘。"""
     node_name = agent.name
@@ -241,6 +267,7 @@ def run_agent_step(
                     user_input,
                     None,
                     user_persona=user_persona_block,
+                    stream_handler=stream_handler,
                 )
             else:
                 raise ValueError(f"Unknown agent mode: {mode}")
@@ -562,19 +589,25 @@ class RouterNode:
 
 
 class GDDNode:
-    def execute(self, state: LudensState, user_input: str) -> LudensState:
+    def execute(
+        self, state: LudensState, user_input: str, stream_handler=None
+    ) -> LudensState:
         mode = "COMMIT" if state.phase == Phase.GDD_COMMIT.value else "DISCUSS"
         return run_agent_step(_gdd_agent, mode, state, user_input)
 
 
 class PMNode:
-    def execute(self, state: LudensState, user_input: str) -> LudensState:
+    def execute(
+        self, state: LudensState, user_input: str, stream_handler=None
+    ) -> LudensState:
         mode = "COMMIT" if state.phase == Phase.PM_COMMIT.value else "DISCUSS"
         return run_agent_step(_pm_agent, mode, state, user_input)
 
 
 class ENGNode:
-    def execute(self, state: LudensState, user_input: str) -> LudensState:
+    def execute(
+        self, state: LudensState, user_input: str, stream_handler=None
+    ) -> LudensState:
         # 工程节点根据 phase 切到讨论、定稿或辅导模式。
         if state.phase == Phase.DEV_COACHING.value:
             mode = "COACH"
@@ -582,11 +615,19 @@ class ENGNode:
             mode = "PLAN_COMMIT"
         else:
             mode = "PLAN_DISCUSS"
-        return run_agent_step(_eng_agent, mode, state, user_input)
+        return run_agent_step(
+            _eng_agent,
+            mode,
+            state,
+            user_input,
+            stream_handler=stream_handler if mode == "COACH" else None,
+        )
 
 
 class REVIEWNode:
-    def execute(self, state: LudensState, user_input: str) -> LudensState:
+    def execute(
+        self, state: LudensState, user_input: str, stream_handler=None
+    ) -> LudensState:
         # Review 直接走正式评审输出。
         return run_agent_step(_review_agent, "COMMIT", state, user_input)
 
@@ -608,6 +649,7 @@ def graph_step(
     state: LudensState,
     user_input: str,
     explicit_action: Optional[str] = None,
+    stream_handler=None,
 ) -> LudensState:
     """执行一次最小图推进：先路由，再决定是否调用目标节点。"""
     old_phase = state.phase
@@ -647,7 +689,7 @@ def graph_step(
     active_node = PHASE_NODE_MAP.get(new_phase)
     logger.debug("graph_step -> active node=%s", active_node)
     if active_node:
-        state = active_node.execute(state, user_input)
+        state = active_node.execute(state, user_input, stream_handler=stream_handler)
     else:
         logger.warning(f"Unhandled phase in Graph: {new_phase}")
 

@@ -1,9 +1,16 @@
 import { memo, useMemo, useRef, useState } from "react";
-import type { ChangeEvent, KeyboardEvent, RefObject } from "react";
+import type {
+  ChangeEvent,
+  ClipboardEvent,
+  DragEvent,
+  KeyboardEvent,
+  RefObject,
+} from "react";
 
 import { agentName } from "../utils";
 import type {
   AgentKey,
+  ComposerAttachment,
   HistoryByAgent,
   RenderMessage,
   TransientChat,
@@ -14,6 +21,7 @@ import type {
 
 interface MainPanelProps {
   currentView: ViewState;
+  currentProjectId: string;
   currentAgent: AgentKey;
   projectName: string;
   phaseLabel: string;
@@ -28,18 +36,162 @@ interface MainPanelProps {
   fileItems: WorkspaceFileItem[];
   fileCache: Record<string, string>;
   errorText: string;
+  warningText: string;
   contentAreaRef: RefObject<HTMLElement>;
-  onSend: (message: string, images: string[]) => Promise<void>;
+  onSend: (message: string, attachments: ComposerAttachment[]) => Promise<void>;
   onAction: (actionId: string) => void;
 }
 
-function toDataUrl(file: File): Promise<string> {
+const MAX_PENDING_ATTACHMENTS = 6;
+const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+const IMAGE_MAX_DIMENSION = 1600;
+const IMAGE_OUTPUT_QUALITY = 0.82;
+const ATTACH_ACCEPT =
+  "image/png,image/jpeg,image/webp,image/jpg,.txt,.md,.json,.yaml,.yml,.csv,.cs,.js,.ts,.tsx,.py,.shader,.hlsl,.uxml,.uss,.asmdef,.meta,application/pdf,.pdf";
+const ATTACHMENT_EXTENSIONS = new Set([
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".webp",
+  ".txt",
+  ".md",
+  ".json",
+  ".yaml",
+  ".yml",
+  ".csv",
+  ".cs",
+  ".js",
+  ".ts",
+  ".tsx",
+  ".py",
+  ".shader",
+  ".hlsl",
+  ".uxml",
+  ".uss",
+  ".asmdef",
+  ".meta",
+  ".pdf",
+]);
+
+function readFileAsDataUrl(file: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result || ""));
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+}
+
+function loadImage(sourceUrl: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = reject;
+    image.src = sourceUrl;
+  });
+}
+
+async function normalizeImageFile(file: File): Promise<string> {
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await loadImage(objectUrl);
+    const maxDimension = Math.max(image.width, image.height);
+    const scale =
+      maxDimension > IMAGE_MAX_DIMENSION
+        ? IMAGE_MAX_DIMENSION / maxDimension
+        : 1;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(image.width * scale));
+    canvas.height = Math.max(1, Math.round(image.height * scale));
+
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return readFileAsDataUrl(file);
+    }
+
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, "image/jpeg", IMAGE_OUTPUT_QUALITY);
+    });
+
+    if (!blob) {
+      return readFileAsDataUrl(file);
+    }
+
+    return readFileAsDataUrl(blob);
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+function isSupportedAttachment(file: File): boolean {
+  const lowerName = file.name.toLowerCase();
+  if (file.type.startsWith("image/")) {
+    return true;
+  }
+  return Array.from(ATTACHMENT_EXTENSIONS).some((ext) => lowerName.endsWith(ext));
+}
+
+function attachmentKind(file: File): ComposerAttachment["kind"] {
+  return file.type.startsWith("image/") ? "image" : "file";
+}
+
+async function normalizeAttachment(file: File): Promise<ComposerAttachment | null> {
+  if (!isSupportedAttachment(file)) {
+    return null;
+  }
+
+  const kind = attachmentKind(file);
+  const dataUrl =
+    kind === "image" ? await normalizeImageFile(file) : await readFileAsDataUrl(file);
+
+  return {
+    id: `${file.name}-${file.size}-${file.lastModified}-${Math.random().toString(36).slice(2, 8)}`,
+    kind,
+    name: file.name,
+    mimeType: file.type || "application/octet-stream",
+    size: file.size,
+    dataUrl,
+    previewUrl: kind === "image" ? dataUrl : undefined,
+  };
+}
+
+interface AttachmentCollectionResult {
+  attachments: ComposerAttachment[];
+  warnings: string[];
+}
+
+async function collectAttachments(files: File[]): Promise<AttachmentCollectionResult> {
+  const attachments: ComposerAttachment[] = [];
+  const warnings: string[] = [];
+  for (const file of files.slice(0, MAX_PENDING_ATTACHMENTS)) {
+    if (!isSupportedAttachment(file)) {
+      warnings.push(`${file.name}: unsupported file type.`);
+      continue;
+    }
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      warnings.push(`${file.name}: file is larger than 5 MB.`);
+      continue;
+    }
+    try {
+      const attachment = await normalizeAttachment(file);
+      if (attachment) {
+        attachments.push(attachment);
+      } else {
+        warnings.push(`${file.name}: unsupported file type.`);
+      }
+    } catch {
+      warnings.push(`${file.name}: failed to read attachment.`);
+    }
+  }
+  return { attachments, warnings };
+}
+
+function attachmentMeta(attachment: ComposerAttachment): string {
+  const sizeKb = Math.max(1, Math.round(attachment.size / 1024));
+  const kindLabel = attachment.kind === "image" ? "Image" : "File";
+  return `${kindLabel} · ${sizeKb} KB`;
 }
 
 function renderMessageRow(agentKey: AgentKey, item: RenderMessage, index: number) {
@@ -73,6 +225,7 @@ function renderMessageRow(agentKey: AgentKey, item: RenderMessage, index: number
 
 function renderFileView(
   currentView: ViewState,
+  currentProjectId: string,
   fileItems: WorkspaceFileItem[],
   fileCache: Record<string, string>,
 ) {
@@ -81,7 +234,7 @@ function renderFileView(
   }
 
   const file = fileItems.find((item) => item.id === currentView.id);
-  const content = fileCache[currentView.id];
+  const content = fileCache[`${currentProjectId}::${currentView.id}`];
   const showContent = typeof content === "string" ? content || "(empty)" : "Loading...";
 
   return (
@@ -123,12 +276,12 @@ const AgentMessages = memo(function AgentMessages(props: AgentMessagesProps) {
         content: transientChat.userText,
         phase: transientChat.phase,
       });
-      if (transientChat.thinking) {
+      if (transientChat.assistantText || transientChat.thinking) {
         rows.push({
           role: "assistant",
-          content: "",
+          content: transientChat.assistantText || "",
           phase: transientChat.phase,
-          thinking: true,
+          thinking: transientChat.thinking && !transientChat.assistantText,
         });
       }
     }
@@ -190,6 +343,7 @@ const AgentMessages = memo(function AgentMessages(props: AgentMessagesProps) {
 export function MainPanel(props: MainPanelProps) {
   const {
     currentView,
+    currentProjectId,
     currentAgent,
     projectName,
     phaseLabel,
@@ -204,14 +358,54 @@ export function MainPanel(props: MainPanelProps) {
     fileItems,
     fileCache,
     errorText,
+    warningText,
     contentAreaRef,
     onSend,
     onAction,
   } = props;
 
   const [inputText, setInputText] = useState("");
-  const [pendingImages, setPendingImages] = useState<string[]>([]);
+  const [pendingAttachments, setPendingAttachments] = useState<ComposerAttachment[]>([]);
+  const [dragActive, setDragActive] = useState(false);
+  const [localWarningText, setLocalWarningText] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const combinedWarningText = [warningText, localWarningText].filter(Boolean).join("\n");
+
+  const appendPendingAttachments = (attachments: ComposerAttachment[]) => {
+    if (!attachments.length) {
+      return;
+    }
+    setPendingAttachments((prev) =>
+      [...prev, ...attachments].slice(0, MAX_PENDING_ATTACHMENTS),
+    );
+  };
+
+  const processIncomingAttachments = async (
+    files: File[],
+    options?: { alertOnOverflow?: boolean },
+  ) => {
+    if (!files.length) {
+      return;
+    }
+
+    const availableSlots = Math.max(
+      0,
+      MAX_PENDING_ATTACHMENTS - pendingAttachments.length,
+    );
+    if (options?.alertOnOverflow && files.length > availableSlots) {
+      window.alert(
+        `You can attach up to ${MAX_PENDING_ATTACHMENTS} items at a time.`,
+      );
+    }
+    if (!availableSlots) {
+      setLocalWarningText(`You can attach up to ${MAX_PENDING_ATTACHMENTS} items at a time.`);
+      return;
+    }
+
+    const { attachments, warnings } = await collectAttachments(files.slice(0, availableSlots));
+    appendPendingAttachments(attachments);
+    setLocalWarningText(warnings.join("\n"));
+  };
 
   const handleSend = async () => {
     if (readOnly || requestInFlight) {
@@ -219,14 +413,15 @@ export function MainPanel(props: MainPanelProps) {
     }
 
     const text = inputText.trim();
-    if (!text && !pendingImages.length) {
+    if (!text && !pendingAttachments.length) {
       return;
     }
 
-    const images = pendingImages.slice();
-    setPendingImages([]);
+    const attachments = pendingAttachments.slice();
+    setPendingAttachments([]);
     setInputText("");
-    await onSend(text, images);
+    setLocalWarningText("");
+    await onSend(text, attachments);
   };
 
   const handleInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -236,25 +431,51 @@ export function MainPanel(props: MainPanelProps) {
     }
   };
 
-  const handleImageChange = async (event: ChangeEvent<HTMLInputElement>) => {
+  const handleAttachmentChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
     event.target.value = "";
+    await processIncomingAttachments(files);
+  };
 
-    const urls: string[] = [];
-    for (const file of files) {
-      if (!file.type.startsWith("image/")) {
-        continue;
-      }
-      try {
-        urls.push(await toDataUrl(file));
-      } catch {
-        // no-op
-      }
+  const handleInputPaste = async (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const clipboardItems = Array.from(event.clipboardData?.items || []);
+    const imageFiles = clipboardItems
+      .filter((item) => item.type.startsWith("image/"))
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => Boolean(file));
+
+    if (!imageFiles.length) {
+      return;
     }
 
-    if (urls.length) {
-      setPendingImages((prev) => [...prev, ...urls]);
+    event.preventDefault();
+    await processIncomingAttachments(imageFiles, { alertOnOverflow: true });
+  };
+
+  const handleComposerDragOver = (event: DragEvent<HTMLElement>) => {
+    const files = Array.from(event.dataTransfer?.files || []);
+    if (!files.some((file) => isSupportedAttachment(file))) {
+      return;
     }
+    event.preventDefault();
+    setDragActive(true);
+  };
+
+  const handleComposerDragLeave = (event: DragEvent<HTMLElement>) => {
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      return;
+    }
+    setDragActive(false);
+  };
+
+  const handleComposerDrop = async (event: DragEvent<HTMLElement>) => {
+    const files = Array.from(event.dataTransfer?.files || []);
+    setDragActive(false);
+    if (!files.length) {
+      return;
+    }
+    event.preventDefault();
+    await processIncomingAttachments(files);
   };
 
   return (
@@ -288,12 +509,56 @@ export function MainPanel(props: MainPanelProps) {
             onAction={onAction}
           />
         ) : (
-          renderFileView(currentView, fileItems, fileCache)
+          renderFileView(currentView, currentProjectId, fileItems, fileCache)
         )}
       </section>
 
       {currentView.type === "agent" ? (
-        <section className="composer">
+        <section
+          className={`composer${dragActive ? " drag-active" : ""}`}
+          onDragOver={handleComposerDragOver}
+          onDragLeave={handleComposerDragLeave}
+          onDrop={(event) => {
+            void handleComposerDrop(event);
+          }}
+        >
+          <div
+            className="attachments"
+            style={{ display: pendingAttachments.length ? "flex" : "none" }}
+          >
+            <div className="attachment-list">
+              {pendingAttachments.map((attachment, index) => (
+                <div
+                  className={`attachment-chip attachment-chip-${attachment.kind}`}
+                  key={attachment.id}
+                >
+                  {attachment.kind === "image" ? (
+                    <div className="thumb">
+                      <img src={attachment.previewUrl} alt="" />
+                    </div>
+                  ) : (
+                    <div className="attachment-icon">FILE</div>
+                  )}
+                  <div className="attachment-copy">
+                    <div className="attachment-name">{attachment.name}</div>
+                    <div className="attachment-meta">{attachmentMeta(attachment)}</div>
+                  </div>
+                  <button
+                    className="remove"
+                    type="button"
+                    onClick={() =>
+                      setPendingAttachments((prev) =>
+                        prev.filter((_, i) => i !== index),
+                      )
+                    }
+                  >
+                    x
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <div className="input-row">
             <textarea
               rows={1}
@@ -301,6 +566,9 @@ export function MainPanel(props: MainPanelProps) {
               disabled={readOnly || requestInFlight}
               onChange={(event) => setInputText(event.target.value)}
               onKeyDown={handleInputKeyDown}
+              onPaste={(event) => {
+                void handleInputPaste(event);
+              }}
               placeholder={
                 readOnly
                   ? `Read-only history. Current active agent is ${agentName(currentAgent)}.`
@@ -310,10 +578,11 @@ export function MainPanel(props: MainPanelProps) {
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/png,image/jpeg,image/webp,image/jpg"
+              accept={ATTACH_ACCEPT}
               multiple
+              style={{ display: "none" }}
               onChange={(event) => {
-                void handleImageChange(event);
+                void handleAttachmentChange(event);
               }}
             />
             <button
@@ -322,7 +591,7 @@ export function MainPanel(props: MainPanelProps) {
               disabled={readOnly || requestInFlight}
               onClick={() => fileInputRef.current?.click()}
             >
-              Image
+              Attach
             </button>
             <button
               className="btn"
@@ -336,24 +605,7 @@ export function MainPanel(props: MainPanelProps) {
             </button>
           </div>
 
-          <div className="attachments" style={{ display: pendingImages.length ? "flex" : "none" }}>
-            <span className="attachments-label">Images:</span>
-            <div className="thumbs">
-              {pendingImages.map((dataUrl, index) => (
-                <div className="thumb" key={`${dataUrl.slice(0, 24)}-${index}`}>
-                  <img src={dataUrl} alt="" />
-                  <button
-                    className="remove"
-                    type="button"
-                    onClick={() => setPendingImages((prev) => prev.filter((_, i) => i !== index))}
-                  >
-                    x
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-
+          <div className="warning">{combinedWarningText || ""}</div>
           <div className="error">{errorText || ""}</div>
         </section>
       ) : null}

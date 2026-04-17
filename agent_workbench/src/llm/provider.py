@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterator, List, Optional
 
 
 @dataclass
@@ -84,5 +84,61 @@ def generate(
             return message
 
         return (message.content or "").strip()
+
+    raise RuntimeError(f"Unsupported LLM_PROVIDER: {cfg.provider}")
+
+
+def generate_stream(
+    system: str,
+    user: str | list,
+    cfg: LLMConfig,
+    history: Optional[list] = None,
+) -> Iterator[str]:
+    """
+    Streaming text entrypoint for plain assistant replies.
+    Tool-calling is intentionally excluded from this minimal streaming path.
+    """
+    if cfg.provider == "openai":
+        from openai import OpenAI
+
+        client = OpenAI(api_key=cfg.api_key, base_url=cfg.base_url, timeout=120.0)
+
+        messages: List[Dict[str, Any]] = [{"role": "system", "content": system}]
+        if history:
+            messages.extend(history)
+
+        messages.append({"role": "user", "content": user})
+
+        kwargs = {
+            "model": cfg.model,
+            "messages": messages,
+            "stream": True,
+        }
+
+        if cfg.temperature is not None and not any(
+            marker in cfg.model.lower() for marker in ["k2.5", "o1", "o3", "reasoning"]
+        ):
+            kwargs["temperature"] = cfg.temperature
+
+        try:
+            stream = client.chat.completions.create(**kwargs)
+        except Exception as e:
+            err_msg = str(e).lower()
+            if "temperature" in err_msg or "top_p" in err_msg:
+                kwargs.pop("temperature", None)
+                kwargs.pop("top_p", None)
+                stream = client.chat.completions.create(**kwargs)
+            else:
+                raise e
+
+        for chunk in stream:
+            choices = getattr(chunk, "choices", None) or []
+            if not choices:
+                continue
+            delta = getattr(choices[0], "delta", None)
+            text = getattr(delta, "content", None)
+            if text:
+                yield text
+        return
 
     raise RuntimeError(f"Unsupported LLM_PROVIDER: {cfg.provider}")

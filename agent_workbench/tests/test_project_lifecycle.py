@@ -3,6 +3,7 @@ import os
 import shutil
 import sys
 import unittest
+import base64
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -301,6 +302,184 @@ class ProjectLifecycleTests(unittest.TestCase):
 
         project_lookup = {item["id"]: item for item in renamed["projects"]}
         self.assertEqual(project_lookup["alpha"]["display_name"], "Alpha Prime")
+
+    def test_chat_emits_started_and_state_updated_events(self):
+        state = st.load_state()
+        project_id = state.project_id
+        subscriber = api._subscribe_project_events(project_id)
+        original_graph_step = api.graph_step
+
+        def fake_graph_step(current_state, _user_input, **_kwargs):
+            current_state.phase = "PM_DISCUSS"
+            current_state.last_assistant_message = "synthetic reply"
+            return current_state
+
+        api.graph_step = fake_graph_step
+        try:
+            response = api.post_chat(api.ChatRequest(message="hello"))
+            self.assertEqual(response["reply"], "synthetic reply")
+
+            started = subscriber.get_nowait()
+            updated = subscriber.get_nowait()
+
+            self.assertEqual(started["type"], "run_started")
+            self.assertEqual(started["project_id"], project_id)
+            self.assertEqual(updated["type"], "state_updated")
+            self.assertEqual(updated["project_id"], project_id)
+            self.assertEqual(updated["state"]["phase"], "PM_DISCUSS")
+        finally:
+            api.graph_step = original_graph_step
+            api._unsubscribe_project_events(project_id, subscriber)
+
+    def test_chat_emits_streaming_events_when_graph_pushes_deltas(self):
+        state = st.load_state()
+        project_id = state.project_id
+        subscriber = api._subscribe_project_events(project_id)
+        original_graph_step = api.graph_step
+
+        def fake_graph_step(current_state, _user_input, **kwargs):
+            stream_handler = kwargs.get("stream_handler")
+            if stream_handler:
+                stream_handler("第一段。")
+                stream_handler("第二段。")
+            current_state.phase = "DEV_COACHING"
+            current_state.last_assistant_message = "第一段。第二段。"
+            return current_state
+
+        api.graph_step = fake_graph_step
+        try:
+            response = api.post_chat(api.ChatRequest(message="hello"))
+            self.assertEqual(response["reply"], "第一段。第二段。")
+
+            event_types = []
+            while not subscriber.empty():
+                event_types.append(subscriber.get_nowait()["type"])
+
+            self.assertEqual(
+                event_types,
+                [
+                    "run_started",
+                    "assistant_stream_started",
+                    "assistant_delta",
+                    "assistant_delta",
+                    "assistant_stream_completed",
+                    "state_updated",
+                ],
+            )
+        finally:
+            api.graph_step = original_graph_step
+            api._unsubscribe_project_events(project_id, subscriber)
+
+    def test_chat_passes_text_attachment_into_graph_input(self):
+        captured = {}
+        original_graph_step = api.graph_step
+
+        attachment_text = "speed = 5\njump = true"
+        attachment_b64 = base64.b64encode(attachment_text.encode("utf-8")).decode("ascii")
+
+        def fake_graph_step(current_state, user_input, **_kwargs):
+            captured["user_input"] = user_input
+            current_state.phase = "DEV_COACHING"
+            current_state.last_assistant_message = "attachment ok"
+            return current_state
+
+        api.graph_step = fake_graph_step
+        try:
+            response = api.post_chat(
+                api.ChatRequest(
+                    message="please inspect the attached config",
+                    attachments=[
+                        {
+                            "kind": "file",
+                            "name": "config.txt",
+                            "mime_type": "text/plain",
+                            "data_url": f"data:text/plain;base64,{attachment_b64}",
+                            "size": len(attachment_text),
+                        }
+                    ],
+                )
+            )
+            self.assertEqual(response["reply"], "attachment ok")
+            self.assertIsInstance(captured["user_input"], list)
+            flattened = "\n".join(
+                item.get("text", "")
+                for item in captured["user_input"]
+                if isinstance(item, dict) and item.get("type") == "text"
+            )
+            self.assertIn("please inspect the attached config", flattened)
+            self.assertIn("config.txt", flattened)
+            self.assertIn("speed = 5", flattened)
+        finally:
+            api.graph_step = original_graph_step
+
+    def test_chat_returns_attachment_warnings_in_response(self):
+        original_graph_step = api.graph_step
+
+        def fake_graph_step(current_state, user_input, **_kwargs):
+            current_state.phase = "DEV_COACHING"
+            current_state.last_assistant_message = "warning ok"
+            return current_state
+
+        api.graph_step = fake_graph_step
+        try:
+            response = api.post_chat(
+                api.ChatRequest(
+                    message="check this",
+                    attachments=[
+                        {
+                            "kind": "file",
+                            "name": "archive.zip",
+                            "mime_type": "application/zip",
+                            "data_url": "data:application/zip;base64,UEsDBA==",
+                            "size": 6,
+                        }
+                    ],
+                )
+            )
+            self.assertEqual(response["reply"], "warning ok")
+            self.assertIn("attachment_warnings", response)
+            self.assertTrue(response["attachment_warnings"])
+            self.assertIn("unsupported file type", response["attachment_warnings"][0])
+        finally:
+            api.graph_step = original_graph_step
+
+    def test_chat_image_attachment_uses_main_attachment_chain(self):
+        captured = {}
+        original_graph_step = api.graph_step
+
+        def fake_graph_step(current_state, user_input, **_kwargs):
+            captured["user_input"] = user_input
+            current_state.phase = "DEV_COACHING"
+            current_state.last_assistant_message = "image ok"
+            return current_state
+
+        api.graph_step = fake_graph_step
+        try:
+            response = api.post_chat(
+                api.ChatRequest(
+                    message="look at this image",
+                    attachments=[
+                        {
+                            "kind": "image",
+                            "name": "shot.png",
+                            "mime_type": "image/png",
+                            "data_url": "data:image/png;base64,AAAA",
+                            "size": 4,
+                        }
+                    ],
+                )
+            )
+            self.assertEqual(response["reply"], "image ok")
+            self.assertIsInstance(captured["user_input"], list)
+            self.assertTrue(
+                any(
+                    isinstance(item, dict) and item.get("type") == "image_url"
+                    for item in captured["user_input"]
+                )
+            )
+            self.assertEqual(response.get("attachment_warnings"), [])
+        finally:
+            api.graph_step = original_graph_step
 
 
 if __name__ == "__main__":

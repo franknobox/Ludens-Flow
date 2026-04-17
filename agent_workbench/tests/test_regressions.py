@@ -20,6 +20,7 @@ os.environ.setdefault(
     ),
 )
 
+from llm.provider import LLMConfig
 from ludens_flow.agents.base import AgentResult
 from ludens_flow.agents.design_agent import DesignAgent
 from ludens_flow.agents.engineering_agent import EngineeringAgent
@@ -33,7 +34,7 @@ from ludens_flow.context.user_profile import (
     migrate_profile_file,
     migrate_profile_text_to_current_template,
 )
-from ludens_flow.graph import _merge_state_updates, run_agent_step
+from ludens_flow.graph import _merge_state_updates, _user_input_to_text, run_agent_step
 from ludens_flow.schemas import parse_discuss_payload, parse_review_gate_payload
 from ludens_flow.state import init_state, init_workspace, load_state
 
@@ -179,6 +180,49 @@ class RegressionTests(unittest.TestCase):
         self.assertEqual(payload.reply, "tag ok")
         self.assertEqual(payload.state_updates, {"choice": {"preset": "B"}})
         self.assertEqual(payload.events, ["TAGGED"])
+
+    def test_compose_user_prompt_adds_attachment_rules_for_file_inputs(self):
+        agent = DesignAgent()
+        prompt = agent._compose_user_prompt(
+            "Please help the user.",
+            [
+                {"type": "text", "text": "这个文件里写了什么？"},
+                {
+                    "type": "text",
+                    "text": "[Attached File]\nname: notes.md\nmime_type: text/markdown\ncontent:\nHello world",
+                },
+            ],
+        )
+
+        self.assertIsInstance(prompt, list)
+        self.assertIn(
+            "Do not say you cannot see the file",
+            prompt[0]["text"],
+        )
+        self.assertIn(
+            "If exactly one file is attached",
+            prompt[0]["text"],
+        )
+
+    def test_user_input_to_text_keeps_attachment_summary_in_transcript(self):
+        summary = _user_input_to_text(
+            [
+                {"type": "text", "text": "我这个附件内容是什么"},
+                {
+                    "type": "text",
+                    "text": "[Attachment Context]\nAttached files for this turn:\n- notes.md (text/markdown)",
+                },
+                {
+                    "type": "text",
+                    "text": "[Attached File]\nname: notes.md\nmime_type: text/markdown\ncontent:\nHello world",
+                },
+                {"type": "image_url", "image_url": {"url": "data:image/png;base64,aaa"}},
+            ]
+        )
+
+        self.assertIn("我这个附件内容是什么", summary)
+        self.assertIn("[files:notes.md]", summary)
+        self.assertIn("[images:1]", summary)
 
     def test_review_gate_schema_parses_tagged_nested_json(self):
         payload, remaining = parse_review_gate_payload(
@@ -373,6 +417,70 @@ class RegressionTests(unittest.TestCase):
 
         mocked_load.assert_called_once_with(max_chars=2000, project_id="alpha")
         self.assertEqual(agent.system_prompt, original_prompt)
+
+    def test_design_agent_preserves_multimodal_user_input(self):
+        agent = DesignAgent()
+        captured = {}
+
+        def fake_call(user_prompt, *args, **kwargs):
+            captured["user_prompt"] = user_prompt
+            return '{"reply":"ok","state_updates":{},"profile_updates":[],"events":[]}'
+
+        agent._call = fake_call
+        state = init_state()
+
+        multimodal_input = [
+            {"type": "text", "text": "请参考这张图"},
+            {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
+        ]
+
+        result = agent.discuss(state, multimodal_input)
+
+        self.assertEqual(result.assistant_message, "ok")
+        self.assertIsInstance(captured["user_prompt"], list)
+        self.assertEqual(captured["user_prompt"][0]["type"], "text")
+        self.assertIn("用户的需求/反馈", captured["user_prompt"][0]["text"])
+        self.assertEqual(captured["user_prompt"][1]["type"], "text")
+        self.assertEqual(captured["user_prompt"][2]["type"], "image_url")
+
+    def test_base_agent_streaming_emits_sentence_sized_chunks(self):
+        agent = DesignAgent()
+        streamed = []
+        cfg = LLMConfig(
+            provider="openai",
+            model="gpt-4o-mini",
+            api_key="test-key",
+        )
+
+        with patch("ludens_flow.agents.base.merge_tool_schemas", return_value=[]), patch(
+            "ludens_flow.agents.base.generate_stream",
+            return_value=iter(
+                [
+                    "第一句。第二",
+                    "句，补充一点，",
+                    "再来一点。最后一段\n\n新段落。",
+                ]
+            ),
+        ):
+            final_text = agent._call(
+                "hello",
+                cfg=cfg,
+                stream_handler=streamed.append,
+            )
+
+        self.assertEqual(
+            streamed,
+            [
+                "第一句。",
+                "第二句，补充一点，再来一点。",
+                "最后一段\n\n",
+                "新段落。",
+            ],
+        )
+        self.assertEqual(
+            final_text,
+            "第一句。第二句，补充一点，再来一点。最后一段\n\n新段落。",
+        )
 
 
 if __name__ == "__main__":

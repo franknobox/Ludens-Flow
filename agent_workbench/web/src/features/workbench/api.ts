@@ -1,7 +1,9 @@
 import type {
   ChatResponse,
+  ComposerAttachment,
   ProjectsResponse,
   StateResponse,
+  WorkbenchEvent,
   WorkspaceFileContent,
   WorkspaceFilesResponse,
 } from "./types";
@@ -34,7 +36,16 @@ export const workbenchApi = {
     );
   },
 
-  postChat(body: { message: string; images?: string[] }) {
+  postChat(body: {
+    message: string;
+    attachments?: Array<{
+      kind: ComposerAttachment["kind"];
+      name: string;
+      mime_type: string;
+      data_url: string;
+      size: number;
+    }>;
+  }) {
     return fetchJson<ChatResponse>("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -113,5 +124,31 @@ export const workbenchApi = {
     }>(`/api/projects/${encodeURIComponent(projectId)}`, {
       method: "DELETE",
     });
+  },
+
+  openProjectEvents(
+    projectId: string,
+    onEvent: (event: WorkbenchEvent) => void,
+    onError?: () => void,
+  ) {
+    const source = new EventSource(
+      `/api/projects/${encodeURIComponent(projectId)}/events`,
+    );
+
+    source.onmessage = (event) => {
+      try {
+        onEvent(JSON.parse(event.data) as WorkbenchEvent);
+      } catch {
+        // ignore malformed payloads
+      }
+    };
+
+    source.onerror = () => {
+      if (onError) {
+        onError();
+      }
+    };
+
+    return source;
   },
 };

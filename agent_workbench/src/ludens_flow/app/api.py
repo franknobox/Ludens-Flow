@@ -3,19 +3,23 @@ Ludens-Flow frontend API: provides state/chat/reset endpoints for Web workbench.
 """
 
 import argparse
+import asyncio
+import json
 import logging
+import queue
 import threading
+from datetime import datetime, timezone
 from pathlib import Path
 
 import ludens_flow.state as st
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from ludens_flow.app.attachment_ingest import build_attachment_user_input
 from ludens_flow.app.artifacts import read_artifact
 from ludens_flow.app.env import load_env_if_available
 from ludens_flow.graph import graph_step
-from ludens_flow.app.input_parser import parse_user_input
 from ludens_flow.paths import (
     archive_project,
     clear_project_unity_root,
@@ -46,6 +50,8 @@ app.add_middleware(
 
 _PROJECT_LOCKS: dict[str, threading.Lock] = {}
 _PROJECT_LOCKS_GUARD = threading.Lock()
+_EVENT_SUBSCRIBERS: dict[str, list[queue.Queue[dict]]] = {}
+_EVENT_SUBSCRIBERS_GUARD = threading.Lock()
 
 WORKBENCH_ROOT = Path(__file__).resolve().parents[3]
 WEB_DIST_DIR = WORKBENCH_ROOT / "web" / "dist"
@@ -57,7 +63,7 @@ if STATIC_DIR.exists():
 
 class ChatRequest(BaseModel):
     message: str
-    images: list[str] | None = None
+    attachments: list[dict] | None = None
 
 
 class ProjectRequest(BaseModel):
@@ -135,6 +141,116 @@ def _get_project_lock(project_id: str) -> threading.Lock:
         return lock
 
 
+def _projects_payload() -> dict:
+    return {
+        "active_project": resolve_project_id(),
+        "projects": list_projects(),
+        "active_projects": list_active_projects(),
+        "archived_projects": list_archived_projects(),
+    }
+
+
+def _subscribe_project_events(project_id: str) -> queue.Queue[dict]:
+    subscriber: queue.Queue[dict] = queue.Queue()
+    with _EVENT_SUBSCRIBERS_GUARD:
+        _EVENT_SUBSCRIBERS.setdefault(project_id, []).append(subscriber)
+    return subscriber
+
+
+def _unsubscribe_project_events(project_id: str, subscriber: queue.Queue[dict]) -> None:
+    with _EVENT_SUBSCRIBERS_GUARD:
+        subscribers = _EVENT_SUBSCRIBERS.get(project_id)
+        if not subscribers:
+            return
+        _EVENT_SUBSCRIBERS[project_id] = [
+            existing for existing in subscribers if existing is not subscriber
+        ]
+        if not _EVENT_SUBSCRIBERS[project_id]:
+            _EVENT_SUBSCRIBERS.pop(project_id, None)
+
+
+def _publish_project_event(project_id: str, payload: dict) -> None:
+    with _EVENT_SUBSCRIBERS_GUARD:
+        subscribers = list(_EVENT_SUBSCRIBERS.get(project_id, []))
+    for subscriber in subscribers:
+        subscriber.put(payload)
+
+
+def _publish_all_projects_event(payload: dict) -> None:
+    with _EVENT_SUBSCRIBERS_GUARD:
+        subscribers = {
+            id(subscriber): subscriber
+            for items in _EVENT_SUBSCRIBERS.values()
+            for subscriber in items
+        }.values()
+    for subscriber in subscribers:
+        subscriber.put(payload)
+
+
+def _event_payload(
+    event_type: str,
+    *,
+    project_id: str | None = None,
+    state=None,
+    error: str | None = None,
+    message: str | None = None,
+    include_projects: bool = False,
+) -> dict:
+    payload = {
+        "type": event_type,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    if project_id is not None:
+        payload["project_id"] = project_id
+    if state is not None:
+        payload["state"] = _state_to_json(state)
+        payload["phase"] = getattr(state, "phase", "")
+        payload["current_agent"] = _phase_to_agent_key(getattr(state, "phase", ""))
+    if error:
+        payload["error"] = error
+    if message:
+        payload["message"] = message
+    if include_projects:
+        payload.update(_projects_payload())
+    return payload
+
+
+def _format_sse(payload: dict) -> str:
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+def _build_stream_handler(project_id: str, state) -> callable:
+    started = False
+
+    def emit(delta: str) -> None:
+        nonlocal started
+        if not delta:
+            return
+        if not started:
+            started = True
+            _publish_project_event(
+                project_id,
+                _event_payload(
+                    "assistant_stream_started",
+                    project_id=project_id,
+                    state=state,
+                ),
+            )
+        _publish_project_event(
+            project_id,
+            _event_payload(
+                "assistant_delta",
+                project_id=project_id,
+                state=state,
+                message=None,
+            )
+            | {"delta": delta},
+        )
+
+    emit.has_started = lambda: started  # type: ignore[attr-defined]
+    return emit
+
+
 @app.on_event("startup")
 def startup() -> None:
     st.init_workspace()
@@ -146,17 +262,57 @@ def get_state():
     return _state_to_json(state)
 
 
-def _build_user_input(message: str, images: list[str] | None):
-    """Text + uploaded data URI images -> multimodal payload or plain text."""
-    if images:
-        payload = []
-        if message.strip():
-            payload.append({"type": "text", "text": message.strip()})
-        for url in images:
-            if url.startswith("data:"):
-                payload.append({"type": "image_url", "image_url": {"url": url}})
-        return payload if payload else (message.strip() or "")
-    return parse_user_input(message)
+@app.get("/api/projects/{project_id}/events")
+async def stream_project_events(project_id: str):
+    resolved_project_id = resolve_project_id(project_id)
+    if not resolved_project_id:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    subscriber = _subscribe_project_events(resolved_project_id)
+
+    async def event_stream():
+        try:
+            initial_state = st.load_state(project_id=resolved_project_id)
+            yield _format_sse(
+                _event_payload(
+                    "connected",
+                    project_id=resolved_project_id,
+                    state=initial_state,
+                    include_projects=True,
+                )
+            )
+
+            while True:
+                try:
+                    payload = await asyncio.to_thread(subscriber.get, True, 15)
+                except queue.Empty:
+                    yield ": keep-alive\n\n"
+                    continue
+                yield _format_sse(payload)
+        finally:
+            _unsubscribe_project_events(resolved_project_id, subscriber)
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+def _build_user_input_payload(
+    message: str,
+    attachments: list[dict] | None = None,
+):
+    """Build multimodal/text chat payload from attachments."""
+    return build_attachment_user_input(
+        message,
+        attachments=attachments,
+        fallback_parser=None,
+    )
 
 
 @app.post("/api/chat")
@@ -201,7 +357,8 @@ def post_chat(req: ChatRequest):
                 "actions": get_available_actions(state),
             }
 
-        user_input = _build_user_input(user_message, req.images)
+        payload = _build_user_input_payload(user_message, req.attachments)
+        user_input = payload.user_input
         if not (isinstance(user_input, str) and user_input) and not (
             isinstance(user_input, list) and user_input
         ):
@@ -209,20 +366,50 @@ def post_chat(req: ChatRequest):
                 "reply": "",
                 "phase": state.phase,
                 "error": "输入不能为空",
+                "attachment_warnings": payload.warnings,
                 "needs_decision": bool(get_available_actions(state)),
                 "actions": get_available_actions(state),
             }
 
         try:
-            state = graph_step(state, user_input)
+            stream_handler = _build_stream_handler(project_id, state)
+            _publish_project_event(
+                project_id,
+                _event_payload(
+                    "run_started",
+                    project_id=project_id,
+                    state=state,
+                    message=user_message or "[multimodal input]",
+                ),
+            )
+            state = graph_step(state, user_input, stream_handler=stream_handler)
             reply = getattr(state, "last_assistant_message", "") or ""
             state.last_assistant_message = None
             st.save_state(state, project_id=project_id)
             actions = get_available_actions(state)
+            if getattr(stream_handler, "has_started", lambda: False)():
+                _publish_project_event(
+                    project_id,
+                    _event_payload(
+                        "assistant_stream_completed",
+                        project_id=project_id,
+                        state=state,
+                    ),
+                )
+            _publish_project_event(
+                project_id,
+                _event_payload(
+                    "state_updated",
+                    project_id=project_id,
+                    state=state,
+                    include_projects=True,
+                ),
+            )
             return {
                 "reply": reply,
                 "phase": state.phase,
                 "error": getattr(state, "last_error"),
+                "attachment_warnings": payload.warnings,
                 "needs_decision": bool(actions),
                 "review_gate": state.review_gate,
                 "actions": actions,
@@ -232,10 +419,21 @@ def post_chat(req: ChatRequest):
             state.last_error = str(e)
             st.save_state(state, project_id=project_id)
             actions = get_available_actions(state)
+            _publish_project_event(
+                project_id,
+                _event_payload(
+                    "run_failed",
+                    project_id=project_id,
+                    state=state,
+                    error=str(e),
+                    include_projects=True,
+                ),
+            )
             return {
                 "reply": "",
                 "phase": state.phase,
                 "error": str(e),
+                "attachment_warnings": payload.warnings,
                 "needs_decision": bool(actions),
                 "actions": actions,
             }
@@ -263,12 +461,45 @@ def post_action(req: ActionRequest):
             }
 
         try:
+            stream_handler = _build_stream_handler(project_id, state)
+            _publish_project_event(
+                project_id,
+                _event_payload(
+                    "run_started",
+                    project_id=project_id,
+                    state=state,
+                    message=f"[ACTION] {action_id}",
+                ),
+            )
             synthetic_input = action_user_input(action_id)
-            state = graph_step(state, synthetic_input, explicit_action=action_id)
+            state = graph_step(
+                state,
+                synthetic_input,
+                explicit_action=action_id,
+                stream_handler=stream_handler,
+            )
             reply = getattr(state, "last_assistant_message", "") or ""
             state.last_assistant_message = None
             st.save_state(state, project_id=project_id)
             next_actions = get_available_actions(state)
+            if getattr(stream_handler, "has_started", lambda: False)():
+                _publish_project_event(
+                    project_id,
+                    _event_payload(
+                        "assistant_stream_completed",
+                        project_id=project_id,
+                        state=state,
+                    ),
+                )
+            _publish_project_event(
+                project_id,
+                _event_payload(
+                    "state_updated",
+                    project_id=project_id,
+                    state=state,
+                    include_projects=True,
+                ),
+            )
             return {
                 "reply": reply,
                 "phase": state.phase,
@@ -282,6 +513,16 @@ def post_action(req: ActionRequest):
             state.last_error = str(e)
             st.save_state(state, project_id=project_id)
             actions = get_available_actions(state)
+            _publish_project_event(
+                project_id,
+                _event_payload(
+                    "run_failed",
+                    project_id=project_id,
+                    state=state,
+                    error=str(e),
+                    include_projects=True,
+                ),
+            )
             return {
                 "reply": "",
                 "phase": state.phase,
@@ -297,6 +538,15 @@ def post_reset_current_project():
     state = st.load_state()
     state = st.reset_current_project_state(
         clear_images=True, project_id=getattr(state, "project_id", None)
+    )
+    _publish_project_event(
+        getattr(state, "project_id", ""),
+        _event_payload(
+            "state_updated",
+            project_id=getattr(state, "project_id", None),
+            state=state,
+            include_projects=True,
+        ),
     )
     return _state_to_json(state)
 
@@ -361,6 +611,18 @@ def post_project(req: ProjectRequest):
     )
     st.init_workspace(project_id=meta["id"])
     state = st.load_state(project_id=meta["id"])
+    _publish_all_projects_event(
+        _event_payload("projects_updated", include_projects=True)
+    )
+    _publish_project_event(
+        meta["id"],
+        _event_payload(
+            "state_updated",
+            project_id=meta["id"],
+            state=state,
+            include_projects=True,
+        ),
+    )
     return {
         "project": meta,
         "state": _state_to_json(state),
@@ -372,6 +634,9 @@ def select_project(project_id: str):
     active_project = set_active_project_id(project_id)
     st.init_workspace(project_id=active_project)
     state = st.load_state(project_id=active_project)
+    _publish_all_projects_event(
+        _event_payload("projects_updated", include_projects=True)
+    )
     return {
         "active_project": active_project,
         "state": _state_to_json(state),
@@ -383,6 +648,18 @@ def post_archive_project(project_id: str):
     archived = archive_project(project_id)
     active_project = resolve_project_id()
     state = st.load_state(project_id=active_project)
+    _publish_all_projects_event(
+        _event_payload("projects_updated", include_projects=True)
+    )
+    _publish_project_event(
+        active_project,
+        _event_payload(
+            "state_updated",
+            project_id=active_project,
+            state=state,
+            include_projects=True,
+        ),
+    )
     return {
         "project": archived,
         "active_project": active_project,
@@ -398,6 +675,18 @@ def post_rename_project(project_id: str, req: ProjectRenameRequest):
     renamed = rename_project(project_id, req.display_name)
     active_project = resolve_project_id()
     state = st.load_state(project_id=active_project)
+    _publish_all_projects_event(
+        _event_payload("projects_updated", include_projects=True)
+    )
+    _publish_project_event(
+        active_project,
+        _event_payload(
+            "state_updated",
+            project_id=active_project,
+            state=state,
+            include_projects=True,
+        ),
+    )
     return {
         "project": renamed,
         "active_project": active_project,
@@ -414,6 +703,18 @@ def post_restore_project(project_id: str, req: ProjectRestoreRequest | None = No
     restored = restore_project(project_id, set_active=restore_req.set_active)
     active_project = resolve_project_id()
     state = st.load_state(project_id=active_project)
+    _publish_all_projects_event(
+        _event_payload("projects_updated", include_projects=True)
+    )
+    _publish_project_event(
+        active_project,
+        _event_payload(
+            "state_updated",
+            project_id=active_project,
+            state=state,
+            include_projects=True,
+        ),
+    )
     return {
         "project": restored,
         "active_project": active_project,
@@ -427,6 +728,9 @@ def post_restore_project(project_id: str, req: ProjectRestoreRequest | None = No
 @app.delete("/api/projects/{project_id}")
 def delete_archived_project(project_id: str):
     deleted_project = delete_project(project_id)
+    _publish_all_projects_event(
+        _event_payload("projects_updated", include_projects=True)
+    )
     return {
         "deleted_project": deleted_project,
         "active_project": resolve_project_id(),

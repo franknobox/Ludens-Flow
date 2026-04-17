@@ -35,10 +35,9 @@ class PMAgent(BaseAgent):
             pm_context = f"**当前已有的 PROJECT_PLAN 文档内容**（如果是回流修改阶段，请在此基础上修订）：\n{existing_pm}\n\n"
 
         # discuss 负责排期、范围和 MVP 收敛，不直接落盘正式计划。
-        prompt = (
+        prompt_text = (
             f"已有 GDD：\n{gdd_content}\n\n"
             f"{pm_context}"
-            f"用户意图：{user_input}\n\n"
             "请执行以下操作：\n"
             "1. 以独立游戏 PM 的视角，向用户确认或探讨关键排期信息：大致工期（以天/周为单位）、参与人数（默认 1-3 人小团队）。\n"
             "2. 结合 GDD 中的功能，主动帮用户识别哪些功能是核心体验不可缺少的，哪些可以在 Game Jam 或 MVP 阶段果断砍掉。\n"
@@ -46,6 +45,7 @@ class PMAgent(BaseAgent):
             "4. 以自然语言流畅地回复用户，不带任何特殊格式标签。\n"
             f"\n\n{DISCUSS_RESPONSE_SCHEMA_TEXT}"
         )
+        prompt = self._compose_user_prompt(prompt_text, user_input, input_label="用户意图")
         raw = self._call(
             prompt,
             cfg,
@@ -76,7 +76,7 @@ class PMAgent(BaseAgent):
         # commit 输出最终 PROJECT_PLAN，并解析附带的变更请求。
         gdd_content = read_artifact("GDD", project_id=state.project_id)
 
-        prompt = (
+        prompt_text = (
             f"已有 GDD：\n{gdd_content}\n\n"
             "请基于我们之前的完整讨论记录，输出一份适合独立游戏或 Game Jam 项目的 PROJECT_PLAN.md，要求：\n"
             "1. **Milestones**：以 M0/M1/M2 划分，每个 Milestone 的验收标准必须是 Unity Editor Play Mode 可测试的具体状态（例如：M0 = 可在 Play Mode 中进入主场景并完成一次完整的游戏主循环）。\n"
@@ -94,6 +94,7 @@ class PMAgent(BaseAgent):
             "<<END_CHANGE_REQUEST_JSON>>\n"
             "如果没有缺项，可以不输出此 JSON。你的 Markdown 正文不应被代码块包裹，请直接以 Markdown 标题起手。"
         )
+        prompt = self._compose_user_prompt(prompt_text, user_input, input_label="本轮补充输入")
         final_pm_output = self._call(
             prompt,
             cfg,

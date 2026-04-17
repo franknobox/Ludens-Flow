@@ -35,6 +35,18 @@ export interface WorkspaceFileContent {
   content: string;
 }
 
+export type ComposerAttachmentKind = "image" | "file";
+
+export interface ComposerAttachment {
+  id: string;
+  kind: ComposerAttachmentKind;
+  name: string;
+  mimeType: string;
+  size: number;
+  dataUrl: string;
+  previewUrl?: string;
+}
+
 export interface HistoryEntry {
   role: string;
   content: string;
@@ -60,9 +72,34 @@ export interface ChatResponse {
   reply: string;
   phase: string;
   error?: string | null;
+  attachment_warnings?: string[];
   needs_decision?: boolean;
   review_gate?: Record<string, unknown> | null;
   actions?: WorkflowAction[];
+}
+
+export interface WorkbenchEvent {
+  type:
+    | "connected"
+    | "run_started"
+    | "assistant_stream_started"
+    | "assistant_delta"
+    | "assistant_stream_completed"
+    | "state_updated"
+    | "run_failed"
+    | "projects_updated";
+  timestamp?: string;
+  project_id?: string;
+  state?: StateResponse;
+  active_project?: string;
+  projects?: ProjectMeta[];
+  active_projects?: ProjectMeta[];
+  archived_projects?: ProjectMeta[];
+  phase?: string;
+  current_agent?: AgentKey;
+  message?: string;
+  delta?: string;
+  error?: string;
 }
 
 export interface ProjectsResponse {
@@ -100,6 +137,7 @@ export interface TransientChat {
   phase: string;
   userText: string;
   thinking: boolean;
+  assistantText?: string;
 }
 
 export interface WorkbenchStateModel {

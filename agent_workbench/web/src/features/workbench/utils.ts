@@ -1,6 +1,7 @@
 import { AGENTS } from "./constants";
 import type {
   AgentKey,
+  ComposerAttachment,
   HistoryByAgent,
   HistoryEntry,
   ProjectMeta,
@@ -42,11 +43,25 @@ export function projectUpdated(project: ProjectMeta | undefined): string {
     : "No activity";
 }
 
-export function transientMessageText(text: string, imageCount: number): string {
+export function transientMessageText(
+  text: string,
+  attachments: ComposerAttachment[],
+): string {
   const clean = text.trim();
-  if (clean && imageCount) return `${clean}\n[${imageCount} image${imageCount > 1 ? "s" : ""}]`;
+  const imageCount = attachments.filter((item) => item.kind === "image").length;
+  const fileCount = attachments.filter((item) => item.kind === "file").length;
+  const parts: string[] = [];
+  if (imageCount) {
+    parts.push(`${imageCount} image${imageCount > 1 ? "s" : ""}`);
+  }
+  if (fileCount) {
+    parts.push(`${fileCount} file${fileCount > 1 ? "s" : ""}`);
+  }
+  const attachmentSummary = parts.length ? `[${parts.join(" + ")}]` : "";
+
+  if (clean && attachmentSummary) return `${clean}\n${attachmentSummary}`;
   if (clean) return clean;
-  if (imageCount) return `[${imageCount} image${imageCount > 1 ? "s" : ""}]`;
+  if (attachmentSummary) return attachmentSummary;
   return "";
 }
 
