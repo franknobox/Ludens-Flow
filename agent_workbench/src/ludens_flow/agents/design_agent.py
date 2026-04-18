@@ -21,6 +21,7 @@ class DesignAgent(BaseAgent):
         cfg: Optional[LLMConfig] = None,
         user_persona: Optional[str] = None,
         stream_handler=None,
+        tool_event_handler=None,
     ) -> AgentResult:
         from ludens_flow.app.artifacts import read_artifact
 
@@ -59,6 +60,7 @@ class DesignAgent(BaseAgent):
                 user_persona=user_persona,
                 project_id=state.project_id,
                 stream_handler=stream_handler,
+                tool_event_handler=tool_event_handler,
             )
             return AgentResult(assistant_message=reply.strip(), state_updates={})
 
@@ -74,6 +76,7 @@ class DesignAgent(BaseAgent):
             history=state.chat_history,
             user_persona=user_persona,
             project_id=state.project_id,
+            tool_event_handler=tool_event_handler,
         )
 
         payload, _ = parse_discuss_payload(raw)
@@ -93,6 +96,7 @@ class DesignAgent(BaseAgent):
         user_input: str,
         cfg: Optional[LLMConfig] = None,
         user_persona: Optional[str] = None,
+        tool_event_handler=None,
     ) -> AgentResult:
         prompt_text = (
             "Based on the full discussion so far, produce a clean GDD (Game Design Document) in Markdown.\n"
@@ -122,6 +126,7 @@ class DesignAgent(BaseAgent):
             history=state.chat_history,
             user_persona=user_persona,
             project_id=state.project_id,
+            tool_event_handler=tool_event_handler,
         )
         logger.info("[DesignAgent] Commit generated.")
 

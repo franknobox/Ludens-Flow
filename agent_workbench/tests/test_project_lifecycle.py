@@ -14,6 +14,7 @@ os.chdir(_ROOT)
 
 import ludens_flow.state as st
 import ludens_flow.app.api as api
+from fastapi import HTTPException
 from ludens_flow.app.artifacts import read_artifact, write_artifact
 from ludens_flow.paths import (
     PROJECT_META_SCHEMA_VERSION,
@@ -290,6 +291,13 @@ class ProjectLifecycleTests(unittest.TestCase):
         self.assertIn("beta", {item["id"] for item in payload["active_projects"]})
         self.assertIn("alpha", {item["id"] for item in payload["archived_projects"]})
 
+    def test_api_can_create_project_without_explicit_id(self):
+        created = api.post_project(api.ProjectRequest(display_name="测试项目"))
+
+        self.assertTrue(created["project"]["id"].startswith("project-"))
+        self.assertEqual(created["project"]["display_name"], "测试项目")
+        self.assertEqual(created["state"]["project_id"], created["project"]["id"])
+
     def test_api_restore_and_delete_archived_project(self):
         api.post_project(api.ProjectRequest(project_id="alpha"))
         api.post_project(api.ProjectRequest(project_id="beta"))
@@ -336,6 +344,38 @@ class ProjectLifecycleTests(unittest.TestCase):
 
         deleted = api.delete_current_project_workspace("unity-alpha")
         self.assertEqual(deleted["workspaces"], [])
+
+    def test_api_workspace_create_returns_http_400_for_invalid_path(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+
+        with self.assertRaises(HTTPException) as ctx:
+            api.post_current_project_workspace(
+                api.ProjectWorkspaceRequest(
+                    root=str(self.workspace_root / "missing_workspace"),
+                    kind="generic",
+                    label="Missing Workspace",
+                )
+            )
+
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertIn("does not exist", str(ctx.exception.detail))
+
+    def test_api_workspace_create_returns_http_400_for_invalid_unity_root(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+        non_unity_root = (self.workspace_root / "plain_folder").resolve()
+        non_unity_root.mkdir(parents=True, exist_ok=True)
+
+        with self.assertRaises(HTTPException) as ctx:
+            api.post_current_project_workspace(
+                api.ProjectWorkspaceRequest(
+                    root=str(non_unity_root),
+                    kind="unity",
+                    label="Not Unity",
+                )
+            )
+
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertIn("ProjectSettings", str(ctx.exception.detail))
 
     def test_chat_emits_started_and_state_updated_events(self):
         state = st.load_state()
@@ -397,6 +437,57 @@ class ProjectLifecycleTests(unittest.TestCase):
                     "assistant_delta",
                     "assistant_delta",
                     "assistant_stream_completed",
+                    "state_updated",
+                ],
+            )
+        finally:
+            api.graph_step = original_graph_step
+            api._unsubscribe_project_events(project_id, subscriber)
+
+    def test_chat_emits_tool_events_when_graph_reports_tool_activity(self):
+        state = st.load_state()
+        project_id = state.project_id
+        subscriber = api._subscribe_project_events(project_id)
+        original_graph_step = api.graph_step
+
+        def fake_graph_step(current_state, _user_input, **kwargs):
+            tool_event_handler = kwargs.get("tool_event_handler")
+            if tool_event_handler:
+                tool_event_handler(
+                    {
+                        "type": "tool_started",
+                        "tool_name": "unity_find_files",
+                        "args": {"pattern": "*.cs", "relative_path": "Assets/Scripts"},
+                    }
+                )
+                tool_event_handler(
+                    {
+                        "type": "tool_completed",
+                        "tool_name": "unity_find_files",
+                        "args": {"pattern": "*.cs", "relative_path": "Assets/Scripts"},
+                        "result": "Player.cs\nEnemy.cs",
+                    }
+                )
+            current_state.phase = "DEV_COACHING"
+            current_state.last_assistant_message = "tool ok"
+            return current_state
+
+        api.graph_step = fake_graph_step
+        try:
+            response = api.post_chat(api.ChatRequest(message="find scripts"))
+            self.assertEqual(response["reply"], "tool ok")
+
+            event_types = []
+            while not subscriber.empty():
+                payload = subscriber.get_nowait()
+                event_types.append(payload["type"])
+
+            self.assertEqual(
+                event_types,
+                [
+                    "run_started",
+                    "tool_started",
+                    "tool_completed",
                     "state_updated",
                 ],
             )

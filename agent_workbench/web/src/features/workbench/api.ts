@@ -2,6 +2,7 @@ import type {
   ChatResponse,
   ComposerAttachment,
   ProjectsResponse,
+  ProjectWorkspacesResponse,
   StateResponse,
   WorkbenchEvent,
   WorkspaceFileContent,
@@ -10,10 +11,27 @@ import type {
 
 async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(path, options);
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.detail || data.error || `请求失败：${response.status}`);
+  const raw = await response.text();
+  let data: unknown = null;
+
+  if (raw) {
+    try {
+      data = JSON.parse(raw) as unknown;
+    } catch {
+      data = raw;
+    }
   }
+
+  if (!response.ok) {
+    if (data && typeof data === "object") {
+      const payload = data as Record<string, unknown>;
+      throw new Error(
+        String(payload.detail || payload.error || `请求失败：${response.status}`),
+      );
+    }
+    throw new Error(String(data || `请求失败：${response.status}`));
+  }
+
   return data as T;
 }
 
@@ -33,6 +51,33 @@ export const workbenchApi = {
   getWorkspaceFileContent(fileId: string) {
     return fetchJson<WorkspaceFileContent>(
       `/api/workspace/files/${encodeURIComponent(fileId)}/content`,
+    );
+  },
+
+  getCurrentWorkspaces() {
+    return fetchJson<ProjectWorkspacesResponse>("/api/projects/current/workspaces");
+  },
+
+  addCurrentWorkspace(body: {
+    root: string;
+    kind: string;
+    label?: string | null;
+    writable?: boolean;
+    enabled?: boolean;
+  }) {
+    return fetchJson<ProjectWorkspacesResponse>("/api/projects/current/workspaces", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  },
+
+  deleteCurrentWorkspace(workspaceId: string) {
+    return fetchJson<ProjectWorkspacesResponse>(
+      `/api/projects/current/workspaces/${encodeURIComponent(workspaceId)}`,
+      {
+        method: "DELETE",
+      },
     );
   },
 
@@ -61,7 +106,7 @@ export const workbenchApi = {
     });
   },
 
-  createProject(body: { project_id: string; display_name?: string | null }) {
+  createProject(body: { display_name?: string | null; title?: string | null }) {
     return fetchJson<{ project: { id: string } }>("/api/projects", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

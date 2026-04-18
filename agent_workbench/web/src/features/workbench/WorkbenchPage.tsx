@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
-import { PHASE_LABEL } from "./constants";
 import { workbenchApi } from "./api";
+import { PHASE_LABEL } from "./constants";
 import { LeftSidebar } from "./components/LeftSidebar";
 import { MainPanel } from "./components/MainPanel";
 import { RightSidebar } from "./components/RightSidebar";
@@ -18,6 +19,7 @@ import type {
   ComposerAttachment,
   StateResponse,
   TransientChat,
+  ToolProgressEvent,
   ViewState,
   WorkbenchEvent,
   WorkbenchStateModel,
@@ -39,6 +41,8 @@ const INITIAL_MODEL: WorkbenchStateModel = {
   actions: [],
 };
 
+const TRANSIENT_CHAT_STORAGE_KEY = "ludensflow.workbench.transientChat";
+
 function toModelState(state: StateResponse): WorkbenchStateModel {
   return {
     project_id: state.project_id || "",
@@ -57,7 +61,10 @@ function toModelState(state: StateResponse): WorkbenchStateModel {
   };
 }
 
-function mergeChatResponse(prev: WorkbenchStateModel, response: ChatResponse): WorkbenchStateModel {
+function mergeChatResponse(
+  prev: WorkbenchStateModel,
+  response: ChatResponse,
+): WorkbenchStateModel {
   return {
     ...prev,
     phase: response.phase || prev.phase,
@@ -87,40 +94,83 @@ function fileCacheKey(projectId: string, fileId: string): string {
   return `${projectId}::${fileId}`;
 }
 
-export function WorkbenchPage() {
+function loadStoredTransientChat(): {
+  projectId: string;
+  transientChat: TransientChat;
+  requestInFlight: boolean;
+} | null {
+  try {
+    const raw = window.sessionStorage.getItem(TRANSIENT_CHAT_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+    return JSON.parse(raw) as {
+      projectId: string;
+      transientChat: TransientChat;
+      requestInFlight: boolean;
+    };
+  } catch {
+    return null;
+  }
+}
+
+type WorkbenchPageProps = {
+  isActive?: boolean;
+};
+
+export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
   const [model, setModel] = useState<WorkbenchStateModel>(INITIAL_MODEL);
-  const [currentView, setCurrentView] = useState<ViewState>({ type: "agent", id: "design" });
-  const [sidebarMode, setSidebarMode] = useState<"projects" | "project" | "history">("projects");
+  const [currentView, setCurrentView] = useState<ViewState>({
+    type: "agent",
+    id: "design",
+  });
   const [fileCache, setFileCache] = useState<Record<string, string>>({});
   const [requestInFlight, setRequestInFlight] = useState(false);
   const [transientChat, setTransientChat] = useState<TransientChat | null>(null);
   const [errorText, setErrorText] = useState("");
   const [warningText, setWarningText] = useState("");
+  const [projectPanelOpen, setProjectPanelOpen] = useState(false);
+  const [projectCreateMode, setProjectCreateMode] = useState(false);
+  const [projectTitleDraft, setProjectTitleDraft] = useState("");
 
   const contentAreaRef = useRef<HTMLElement>(null);
   const lastEventAtRef = useRef(0);
+  const projectPanelRef = useRef<HTMLDivElement>(null);
+  const projectPanelButtonRef = useRef<HTMLButtonElement>(null);
+  const [topbarSlot, setTopbarSlot] = useState<HTMLElement | null>(null);
 
   const historyByAgent = useMemo(() => buildHistoryByAgent(model), [model]);
   const activeProject = useMemo(
     () => model.projects.find((project) => project.id === model.project_id),
     [model.project_id, model.projects],
   );
-  const projectName = activeProject?.display_name || model.project_id || "项目";
-
+  const activeProjects = model.active_projects.length ? model.active_projects : model.projects;
+  const projectName = activeProject?.display_name || model.project_id || "未选择项目";
   const readOnly = currentView.type !== "agent" || currentView.id !== model.current_agent;
 
   const statusNote = useMemo(() => {
     if (activeProject?.archived) {
-      return "当前项目已归档，你仍然可以查看它的本地状态和工件。";
+      return "当前项目已经归档，你仍然可以查看它的状态与工件。";
     }
     if (model.artifact_frozen) {
-      return "当前项目处于持续开发辅导阶段，主工件已冻结。";
+      return "当前项目处于持续开发辅导阶段，主工件已经冻结。";
     }
     if (activeProject?.last_message_preview) {
       return activeProject.last_message_preview;
     }
-    return "当前项目可写，状态、工件、画像和日志都会保留在这个项目内。";
+    return "当前项目的状态、工件、图片和日志都会保留在这个项目里。";
   }, [activeProject, model.artifact_frozen]);
+
+  const clearTransientChat = () => {
+    setTransientChat(null);
+    window.sessionStorage.removeItem(TRANSIENT_CHAT_STORAGE_KEY);
+  };
+
+  const closeProjectPanel = () => {
+    setProjectPanelOpen(false);
+    setProjectCreateMode(false);
+    setProjectTitleDraft("");
+  };
 
   const syncStateOnly = async (): Promise<StateResponse> => {
     const state = await workbenchApi.getState();
@@ -151,17 +201,21 @@ export function WorkbenchPage() {
       workbenchApi.getWorkspaceFiles(),
     ]);
 
-    setModel((prev) => ({
+    setModel({
       ...toModelState(state),
       projects: projects.projects || [],
       active_projects: projects.active_projects || projects.projects || [],
       archived_projects: projects.archived_projects || [],
       files: files.files || [],
-    }));
-    setCurrentView({
-      type: "agent",
-      id: state.current_agent || phaseToAgent(state.phase),
     });
+    setCurrentView((prev) =>
+      prev.type === "file"
+        ? prev
+        : {
+            type: "agent",
+            id: state.current_agent || phaseToAgent(state.phase),
+          },
+    );
   };
 
   const handleWorkbenchEvent = (event: WorkbenchEvent) => {
@@ -188,8 +242,44 @@ export function WorkbenchPage() {
               userText: event.message || "[处理中]",
               thinking: true,
               assistantText: "",
+              toolEvents: [],
             },
       );
+      return;
+    }
+
+    if (
+      event.type === "tool_started" ||
+      event.type === "tool_completed" ||
+      event.type === "tool_failed"
+    ) {
+      setTransientChat((prev) => {
+        const toolEventType = event.type as ToolProgressEvent["type"];
+        const nextEvent: ToolProgressEvent = {
+          id: `${Date.now()}-${event.type}-${event.tool_name || "tool"}`,
+          type: toolEventType,
+          tool_name: event.tool_name || "tool",
+          tool_summary: event.tool_summary || (event.tool_name || "工具调用"),
+          tool_result_summary: event.tool_result_summary,
+          error: event.error,
+        };
+
+        if (prev) {
+          return {
+            ...prev,
+            toolEvents: [...(prev.toolEvents || []), nextEvent],
+          };
+        }
+
+        return {
+          agentKey: event.current_agent || phaseToAgent(event.phase || ""),
+          phase: event.phase || "",
+          userText: "[处理中]",
+          thinking: true,
+          assistantText: "",
+          toolEvents: [nextEvent],
+        };
+      });
       return;
     }
 
@@ -207,6 +297,7 @@ export function WorkbenchPage() {
               userText: "[处理中]",
               thinking: true,
               assistantText: "",
+              toolEvents: [],
             },
       );
       return;
@@ -226,6 +317,7 @@ export function WorkbenchPage() {
               userText: "[处理中]",
               thinking: false,
               assistantText: event.delta || "",
+              toolEvents: [],
             },
       );
       return;
@@ -256,7 +348,7 @@ export function WorkbenchPage() {
             : prev,
         );
       }
-      setTransientChat(null);
+      clearTransientChat();
       setRequestInFlight(false);
       return;
     }
@@ -273,7 +365,7 @@ export function WorkbenchPage() {
           ),
         );
       }
-      setTransientChat(null);
+      clearTransientChat();
       setRequestInFlight(false);
       setErrorText(event.error || "请求失败。");
       setWarningText("");
@@ -282,8 +374,8 @@ export function WorkbenchPage() {
 
   const openProject = async (projectId: string) => {
     if (!projectId) return;
-    setSidebarMode("project");
     if (projectId === model.project_id) {
+      closeProjectPanel();
       return;
     }
 
@@ -291,7 +383,9 @@ export function WorkbenchPage() {
     setWarningText("");
     try {
       await workbenchApi.selectProject(projectId);
+      clearTransientChat();
       await hardRefresh();
+      closeProjectPanel();
     } catch (error) {
       setErrorText("切换项目失败：" + toErrorMessage(error));
     }
@@ -300,7 +394,6 @@ export function WorkbenchPage() {
   const openFile = async (fileId: string) => {
     setCurrentView({ type: "file", id: fileId });
     const cacheKey = fileCacheKey(model.project_id, fileId);
-
     if (Object.prototype.hasOwnProperty.call(fileCache, cacheKey)) {
       return;
     }
@@ -316,95 +409,26 @@ export function WorkbenchPage() {
     }
   };
 
-  const createProject = async (projectId: string, title: string): Promise<boolean> => {
-    if (!projectId) {
-      setErrorText("项目 ID 不能为空。");
+  const createProject = async (title: string): Promise<boolean> => {
+    const displayName = title.trim();
+    if (!displayName) {
+      setErrorText("请输入项目名称。");
       return false;
     }
 
     setErrorText("");
     try {
       await workbenchApi.createProject({
-        project_id: projectId,
-        display_name: title || null,
+        display_name: displayName,
+        title: displayName,
       });
-      setSidebarMode("project");
+      clearTransientChat();
       await hardRefresh();
+      closeProjectPanel();
       return true;
     } catch (error) {
       setErrorText("创建项目失败：" + toErrorMessage(error));
       return false;
-    }
-  };
-
-  const renameProject = async (projectId: string, displayName: string): Promise<boolean> => {
-    setErrorText("");
-    try {
-      await workbenchApi.renameProject(projectId, displayName);
-      await hardRefresh();
-      return true;
-    } catch (error) {
-      setErrorText("重命名项目失败：" + toErrorMessage(error));
-      return false;
-    }
-  };
-
-  const archiveProject = async (projectId: string) => {
-    const target = model.projects.find((project) => project.id === projectId);
-    const yes = window.confirm(
-      `要归档 ${target?.display_name || projectId} 吗？\n\n项目会移动到“历史项目”，之后仍可恢复。`,
-    );
-    if (!yes) {
-      return;
-    }
-
-    setErrorText("");
-    try {
-      await workbenchApi.archiveProject(projectId);
-      setTransientChat(null);
-      setFileCache({});
-      if (projectId === model.project_id) {
-        setSidebarMode("projects");
-      }
-      await hardRefresh();
-    } catch (error) {
-      setErrorText("归档项目失败：" + toErrorMessage(error));
-    }
-  };
-
-  const restoreProject = async (projectId: string) => {
-    const target = model.archived_projects.find((project) => project.id === projectId);
-    const yes = window.confirm(
-      `要恢复 ${target?.display_name || projectId} 吗？\n\n项目会重新回到当前项目列表。`,
-    );
-    if (!yes) {
-      return;
-    }
-
-    setErrorText("");
-    try {
-      await workbenchApi.restoreProject(projectId, false);
-      await hardRefresh();
-    } catch (error) {
-      setErrorText("恢复项目失败：" + toErrorMessage(error));
-    }
-  };
-
-  const deleteProject = async (projectId: string) => {
-    const target = model.archived_projects.find((project) => project.id === projectId);
-    const yes = window.confirm(
-      `要永久删除 ${target?.display_name || projectId} 吗？\n\n这会删除已归档项目目录，而且无法撤销。`,
-    );
-    if (!yes) {
-      return;
-    }
-
-    setErrorText("");
-    try {
-      await workbenchApi.deleteProject(projectId);
-      await hardRefresh();
-    } catch (error) {
-      setErrorText("删除项目失败：" + toErrorMessage(error));
     }
   };
 
@@ -421,6 +445,7 @@ export function WorkbenchPage() {
       phase: model.phase,
       userText: transientMessageText(text, attachments),
       thinking: true,
+      toolEvents: [],
     });
 
     try {
@@ -444,7 +469,7 @@ export function WorkbenchPage() {
         if (Date.now() - lastEventAtRef.current > 800) {
           void syncStateOnly();
           void syncProjectsOnly();
-          setTransientChat(null);
+          clearTransientChat();
         }
       }, 600);
     } catch (error) {
@@ -469,6 +494,7 @@ export function WorkbenchPage() {
       phase: model.phase,
       userText: `[操作] ${actionId}`,
       thinking: true,
+      toolEvents: [],
     });
 
     try {
@@ -483,7 +509,7 @@ export function WorkbenchPage() {
         if (Date.now() - lastEventAtRef.current > 800) {
           void syncStateOnly();
           void syncProjectsOnly();
-          setTransientChat(null);
+          clearTransientChat();
         }
       }, 600);
     } catch (error) {
@@ -493,22 +519,6 @@ export function WorkbenchPage() {
     } finally {
       setRequestInFlight(false);
     }
-  };
-
-  const resetProject = async () => {
-    const yes = window.confirm(
-      `要重置 ${projectName} 吗？\n\n这会清空当前项目的状态、工件和图片。`,
-    );
-    if (!yes) {
-      return;
-    }
-
-    await workbenchApi.resetCurrentProject();
-    setTransientChat(null);
-    setFileCache({});
-    setErrorText("");
-    setWarningText("");
-    await hardRefresh();
   };
 
   useEffect(() => {
@@ -522,11 +532,68 @@ export function WorkbenchPage() {
       return;
     }
 
+    const stored = loadStoredTransientChat();
+    if (!stored || stored.projectId !== model.project_id || transientChat) {
+      return;
+    }
+    setTransientChat(stored.transientChat);
+    setRequestInFlight(Boolean(stored.requestInFlight));
+  }, [model.project_id, transientChat]);
+
+  useEffect(() => {
+    if (!model.project_id || !transientChat) {
+      window.sessionStorage.removeItem(TRANSIENT_CHAT_STORAGE_KEY);
+      return;
+    }
+    try {
+      window.sessionStorage.setItem(
+        TRANSIENT_CHAT_STORAGE_KEY,
+        JSON.stringify({
+          projectId: model.project_id,
+          transientChat,
+          requestInFlight,
+        }),
+      );
+    } catch {
+      // ignore storage failures
+    }
+  }, [model.project_id, transientChat, requestInFlight]);
+
+  useEffect(() => {
+    if (!model.project_id) {
+      return;
+    }
     const source = workbenchApi.openProjectEvents(model.project_id, handleWorkbenchEvent);
     return () => {
       source.close();
     };
   }, [model.project_id]);
+
+  useEffect(() => {
+    setTopbarSlot(document.getElementById("topbar-center-slot"));
+  }, []);
+
+  useEffect(() => {
+    if (!projectPanelOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (
+        projectPanelRef.current?.contains(target) ||
+        projectPanelButtonRef.current?.contains(target)
+      ) {
+        return;
+      }
+      closeProjectPanel();
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+    };
+  }, [projectPanelOpen]);
 
   useEffect(() => {
     if (currentView.type !== "agent") {
@@ -554,79 +621,168 @@ export function WorkbenchPage() {
     currentView.type === "agent"
       ? agentName(currentView.id)
       : model.files.find((item) => item.id === currentView.id)?.name || currentView.id;
+
   const subtitle =
     currentView.type === "agent"
       ? `当前项目：${projectName} · 当前 Agent：${agentName(model.current_agent)}`
       : `正在查看 ${projectName} 内的工件`;
 
+  const projectToolbar = (
+    <div className="project-toolbar">
+      <div className="project-toolbar-info">
+        <div className="project-toolbar-meta">
+          <span className="project-toolbar-label">项目名</span>
+          <strong>{projectName}</strong>
+        </div>
+        <div className="project-toolbar-meta">
+          <span className="project-toolbar-label">项目阶段</span>
+          <strong>{PHASE_LABEL[model.phase] || model.phase || "-"}</strong>
+        </div>
+        <div className="project-toolbar-meta">
+          <span className="project-toolbar-label">更新时间</span>
+          <strong>{projectUpdated(activeProject)}</strong>
+        </div>
+      </div>
+
+      <div className="project-toolbar-menu">
+        <button
+          ref={projectPanelButtonRef}
+          type="button"
+          className={`project-toolbar-toggle${projectPanelOpen ? " is-active" : ""}`}
+          onClick={() => {
+            if (projectPanelOpen) {
+              closeProjectPanel();
+              return;
+            }
+            setProjectPanelOpen(true);
+          }}
+        >
+          项目选单
+        </button>
+
+        {projectPanelOpen ? (
+          <div ref={projectPanelRef} className="project-toolbar-panel">
+            {!projectCreateMode ? (
+              <>
+                <div className="project-toolbar-panel-title">切换项目</div>
+                <div className="project-toolbar-list">
+                  {activeProjects.map((project) => (
+                    <button
+                      key={project.id}
+                      type="button"
+                      className={`project-toolbar-item${
+                        project.id === model.project_id ? " is-active" : ""
+                      }`}
+                      onClick={() => {
+                        void openProject(project.id);
+                      }}
+                    >
+                      <div className="project-toolbar-item-head">
+                        <strong>{project.display_name || project.id}</strong>
+                        {project.id === model.project_id ? (
+                          <span className="tag active">当前</span>
+                        ) : null}
+                      </div>
+                      <div className="project-toolbar-item-sub">
+                        {project.last_phase || "暂无阶段"} · {projectUpdated(project)}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className="project-toolbar-create-entry"
+                  onClick={() => {
+                    setProjectCreateMode(true);
+                    setProjectTitleDraft("");
+                  }}
+                >
+                  <span>新建项目</span>
+                  <span className="project-toolbar-create-plus">+</span>
+                </button>
+              </>
+            ) : (
+              <div className="project-toolbar-create">
+                <div className="project-toolbar-panel-title">新建项目</div>
+                <input
+                  value={projectTitleDraft}
+                  onChange={(event) => setProjectTitleDraft(event.target.value)}
+                  type="text"
+                  placeholder="输入项目名称"
+                  autoFocus
+                />
+                <div className="project-toolbar-create-actions">
+                  <button
+                    type="button"
+                    className="shell-btn primary"
+                    onClick={() => {
+                      void createProject(projectTitleDraft);
+                    }}
+                  >
+                    确认新建
+                  </button>
+                  <button
+                    type="button"
+                    className="shell-btn"
+                    onClick={() => {
+                      setProjectCreateMode(false);
+                      setProjectTitleDraft("");
+                    }}
+                  >
+                    取消
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+
   return (
     <div className="app">
       <LeftSidebar
-        sidebarMode={sidebarMode}
-        projectName={projectName}
-        activeProjectId={model.project_id}
-        projects={model.active_projects}
-        archivedProjects={model.archived_projects}
         files={model.files}
         currentView={currentView}
-        onBack={() => setSidebarMode("projects")}
-        onOpenHistory={() => setSidebarMode("history")}
-        onRefresh={() => {
-          void hardRefresh();
-        }}
-        onReset={() => {
-          void resetProject();
-        }}
-        onOpenProject={(projectId) => {
-          void openProject(projectId);
-        }}
         onOpenFile={(fileId) => {
           void openFile(fileId);
         }}
-        onCreateProject={createProject}
-        onRenameProject={(projectId, displayName) => {
-          void renameProject(projectId, displayName);
-        }}
-        onArchiveProject={(projectId) => {
-          void archiveProject(projectId);
-        }}
-        onRestoreProject={(projectId) => {
-          void restoreProject(projectId);
-        }}
-        onDeleteProject={(projectId) => {
-          void deleteProject(projectId);
-        }}
       />
 
-      <MainPanel
-        currentView={currentView}
-        currentProjectId={model.project_id}
-        currentAgent={model.current_agent}
-        projectName={projectName}
-        phaseLabel={PHASE_LABEL[model.phase] || model.phase || "-"}
-        modeBadge={currentView.type === "agent" ? "Agent 对话" : "文件查看"}
-        readOnly={readOnly}
-        subtitle={subtitle}
-        title={title}
-        historyByAgent={historyByAgent}
-        transientChat={transientChat}
-        actions={model.actions}
-        requestInFlight={requestInFlight}
-        fileItems={model.files}
-        fileCache={fileCache}
-        errorText={errorText}
-        warningText={warningText}
-        contentAreaRef={contentAreaRef}
-        onSend={async (message, attachments) => {
-          if (currentView.type !== "agent" || readOnly || requestInFlight) {
-            return;
-          }
-          await sendMessage(message, attachments);
-        }}
-        onAction={(actionId) => {
-          void sendAction(actionId);
-        }}
-      />
+      <div className="workspace-column">
+        {isActive && topbarSlot ? createPortal(projectToolbar, topbarSlot) : null}
+
+        <MainPanel
+          currentView={currentView}
+          currentProjectId={model.project_id}
+          currentAgent={model.current_agent}
+          projectName={projectName}
+          phaseLabel={PHASE_LABEL[model.phase] || model.phase || "-"}
+          modeBadge={currentView.type === "agent" ? "Agent 对话" : "文件查看"}
+          readOnly={readOnly}
+          subtitle={subtitle}
+          title={title}
+          historyByAgent={historyByAgent}
+          transientChat={transientChat}
+          actions={model.actions}
+          requestInFlight={requestInFlight}
+          fileItems={model.files}
+          fileCache={fileCache}
+          errorText={errorText}
+          warningText={warningText}
+          contentAreaRef={contentAreaRef}
+          onSend={async (message, attachments) => {
+            if (currentView.type !== "agent" || readOnly || requestInFlight) {
+              return;
+            }
+            await sendMessage(message, attachments);
+          }}
+          onAction={(actionId) => {
+            void sendAction(actionId);
+          }}
+        />
+      </div>
 
       <RightSidebar
         currentView={currentView}
@@ -639,10 +795,10 @@ export function WorkbenchPage() {
         statusUpdated={projectUpdated(activeProject)}
         statusLastPhase={activeProject?.last_phase || "-"}
         statusNote={statusNote}
+        activeProject={activeProject}
         onSelectAgent={(agent) => {
           setCurrentView({ type: "agent", id: agent });
         }}
-        activeProject={activeProject}
       />
     </div>
   );

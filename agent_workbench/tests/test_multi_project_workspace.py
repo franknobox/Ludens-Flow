@@ -315,6 +315,54 @@ class MultiProjectWorkspaceTests(unittest.TestCase):
             else:
                 os.environ["LUDENS_PROJECT_ID"] = previous_project
 
+    def test_clear_project_unity_root_preserves_user_managed_unity_workspaces(self):
+        previous_workspace = os.environ.get("LUDENS_WORKSPACE_DIR")
+        previous_project = os.environ.get("LUDENS_PROJECT_ID")
+        workspace_root = (_ROOT / "workspace_test_unity_clear").resolve()
+        unity_main_root = (_ROOT / "fake_unity_legacy").resolve()
+        unity_custom_root = (_ROOT / "fake_unity_custom").resolve()
+        shutil.rmtree(workspace_root, ignore_errors=True)
+        shutil.rmtree(unity_main_root, ignore_errors=True)
+        shutil.rmtree(unity_custom_root, ignore_errors=True)
+
+        try:
+            os.environ["LUDENS_WORKSPACE_DIR"] = str(workspace_root)
+            os.environ["LUDENS_PROJECT_ID"] = "alpha"
+            for root in (unity_main_root, unity_custom_root):
+                (root / "Assets").mkdir(parents=True, exist_ok=True)
+                (root / "ProjectSettings").mkdir(parents=True, exist_ok=True)
+
+            create_project("alpha", set_active=True)
+            set_project_unity_root(str(unity_main_root), project_id="alpha")
+            add_project_workspace(
+                str(unity_custom_root),
+                project_id="alpha",
+                kind="unity",
+                workspace_id="unity-workspace",
+                label="Custom Unity Workspace",
+                writable=True,
+            )
+
+            cleared_meta = clear_project_unity_root(project_id="alpha")
+
+            self.assertEqual(cleared_meta["unity_root"], str(unity_custom_root))
+            remaining_unity = list_project_workspaces(project_id="alpha", kind="unity")
+            self.assertEqual(len(remaining_unity), 1)
+            self.assertEqual(remaining_unity[0]["id"], "unity-workspace")
+            self.assertEqual(remaining_unity[0]["root"], str(unity_custom_root))
+        finally:
+            shutil.rmtree(workspace_root, ignore_errors=True)
+            shutil.rmtree(unity_main_root, ignore_errors=True)
+            shutil.rmtree(unity_custom_root, ignore_errors=True)
+            if previous_workspace is None:
+                os.environ.pop("LUDENS_WORKSPACE_DIR", None)
+            else:
+                os.environ["LUDENS_WORKSPACE_DIR"] = previous_workspace
+            if previous_project is None:
+                os.environ.pop("LUDENS_PROJECT_ID", None)
+            else:
+                os.environ["LUDENS_PROJECT_ID"] = previous_project
+
     def test_init_workspace_migrates_legacy_root_files_into_project_one(self):
         previous_workspace = os.environ.get("LUDENS_WORKSPACE_DIR")
         previous_project = os.environ.get("LUDENS_PROJECT_ID")

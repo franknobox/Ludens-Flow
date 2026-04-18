@@ -23,6 +23,7 @@ class ReviewAgent(BaseAgent):
         user_input: str,
         cfg: Optional[LLMConfig] = None,
         user_persona: Optional[str] = None,
+        tool_event_handler=None,
     ) -> AgentResult:
         """Review mostly runs in commit mode; discuss is only a lightweight fallback."""
         return AgentResult(
@@ -37,6 +38,7 @@ class ReviewAgent(BaseAgent):
         user_input: str,
         cfg: Optional[LLMConfig] = None,
         user_persona: Optional[str] = None,
+        tool_event_handler=None,
     ) -> AgentResult:
         gdd = read_artifact("GDD", project_id=state.project_id)
         pm = read_artifact("PROJECT_PLAN", project_id=state.project_id)
@@ -61,6 +63,7 @@ class ReviewAgent(BaseAgent):
             history=state.chat_history,
             user_persona=user_persona,
             project_id=state.project_id,
+            tool_event_handler=tool_event_handler,
         )
         gate_payload, final_report_md = self._parse_review_gate(final_report)
         gate_dict = gate_payload.to_dict()

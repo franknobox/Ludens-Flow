@@ -53,12 +53,6 @@ pip install -e ./agent_workbench
 ludensflow
 ```
 
-兼容命令（老入口）：
-
-```bash
-python agent_workbench/run_agents.py
-```
-
 常用命令：
 
 - `/projects`：列出当前工作区内的项目

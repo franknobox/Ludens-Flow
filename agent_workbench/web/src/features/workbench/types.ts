@@ -23,6 +23,16 @@ export interface ProjectMeta {
   unity_root?: string;
 }
 
+export interface ProjectWorkspace {
+  id: string;
+  label: string;
+  kind: string;
+  root: string;
+  writable: boolean;
+  enabled: boolean;
+  source?: string;
+}
+
 export interface WorkspaceFileItem {
   id: string;
   name: string;
@@ -78,10 +88,22 @@ export interface ChatResponse {
   actions?: WorkflowAction[];
 }
 
+export interface ToolProgressEvent {
+  id: string;
+  type: "tool_started" | "tool_completed" | "tool_failed";
+  tool_name: string;
+  tool_summary: string;
+  tool_result_summary?: string;
+  error?: string;
+}
+
 export interface WorkbenchEvent {
   type:
     | "connected"
     | "run_started"
+    | "tool_started"
+    | "tool_completed"
+    | "tool_failed"
     | "assistant_stream_started"
     | "assistant_delta"
     | "assistant_stream_completed"
@@ -100,6 +122,9 @@ export interface WorkbenchEvent {
   message?: string;
   delta?: string;
   error?: string;
+  tool_name?: string;
+  tool_summary?: string;
+  tool_result_summary?: string;
 }
 
 export interface ProjectsResponse {
@@ -107,6 +132,12 @@ export interface ProjectsResponse {
   projects: ProjectMeta[];
   active_projects: ProjectMeta[];
   archived_projects: ProjectMeta[];
+}
+
+export interface ProjectWorkspacesResponse {
+  project_id: string;
+  workspace?: ProjectWorkspace | null;
+  workspaces: ProjectWorkspace[];
 }
 
 export interface WorkspaceFilesResponse {
@@ -138,6 +169,7 @@ export interface TransientChat {
   userText: string;
   thinking: boolean;
   assistantText?: string;
+  toolEvents?: ToolProgressEvent[];
 }
 
 export interface WorkbenchStateModel {

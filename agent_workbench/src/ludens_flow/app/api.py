@@ -70,7 +70,7 @@ class ChatRequest(BaseModel):
 
 
 class ProjectRequest(BaseModel):
-    project_id: str
+    project_id: str | None = None
     display_name: str | None = None
     title: str | None = None
 
@@ -263,6 +263,60 @@ def _build_stream_handler(project_id: str, state) -> callable:
     return emit
 
 
+def _summarize_tool_call(tool_name: str, args: dict) -> str:
+    if tool_name == "unity_list_dir":
+        relative_path = str(args.get("relative_path", "") or "").strip() or "/"
+        return f"列出目录：{relative_path}"
+    if tool_name == "unity_read_file":
+        relative_path = str(args.get("relative_path", "") or "").strip() or "(未指定)"
+        return f"读取文件：{relative_path}"
+    if tool_name == "unity_find_files":
+        pattern = str(args.get("pattern", "*.cs") or "*.cs").strip()
+        relative_path = str(args.get("relative_path", "") or "").strip() or "/"
+        return f"查找文件：{relative_path} 内匹配 {pattern}"
+    if tool_name == "web_search":
+        query = str(args.get("query", "") or "").strip() or "(空查询)"
+        return f"搜索资料：{query}"
+    return tool_name
+
+
+def _summarize_tool_result(tool_name: str, result: str) -> str:
+    text = str(result or "").strip()
+    if not text:
+        return "已完成，没有额外输出。"
+    if tool_name in {"unity_list_dir", "unity_find_files"}:
+        lines = [line for line in text.splitlines() if line.strip()]
+        return f"已返回 {len(lines)} 条结果。"
+    return (text[:120] + "…") if len(text) > 120 else text
+
+
+def _build_tool_event_handler(project_id: str, state) -> callable:
+    def emit(event: dict) -> None:
+        event_type = str(event.get("type", "") or "").strip()
+        if not event_type:
+            return
+        tool_name = str(event.get("tool_name", "") or "").strip()
+        args = event.get("args", {})
+        payload = _event_payload(
+            event_type,
+            project_id=project_id,
+            state=state,
+        ) | {
+            "tool_name": tool_name,
+            "tool_summary": _summarize_tool_call(tool_name, args if isinstance(args, dict) else {}),
+        }
+        if event_type == "tool_completed":
+            payload["tool_result_summary"] = _summarize_tool_result(
+                tool_name,
+                str(event.get("result", "") or ""),
+            )
+        if event_type == "tool_failed":
+            payload["error"] = str(event.get("error", "") or "工具执行失败。")
+        _publish_project_event(project_id, payload)
+
+    return emit
+
+
 @app.on_event("startup")
 def startup() -> None:
     st.init_workspace()
@@ -385,6 +439,7 @@ def post_chat(req: ChatRequest):
 
         try:
             stream_handler = _build_stream_handler(project_id, state)
+            tool_event_handler = _build_tool_event_handler(project_id, state)
             _publish_project_event(
                 project_id,
                 _event_payload(
@@ -394,7 +449,12 @@ def post_chat(req: ChatRequest):
                     message=user_message or "[multimodal input]",
                 ),
             )
-            state = graph_step(state, user_input, stream_handler=stream_handler)
+            state = graph_step(
+                state,
+                user_input,
+                stream_handler=stream_handler,
+                tool_event_handler=tool_event_handler,
+            )
             reply = getattr(state, "last_assistant_message", "") or ""
             state.last_assistant_message = None
             st.save_state(state, project_id=project_id)
@@ -474,6 +534,7 @@ def post_action(req: ActionRequest):
 
         try:
             stream_handler = _build_stream_handler(project_id, state)
+            tool_event_handler = _build_tool_event_handler(project_id, state)
             _publish_project_event(
                 project_id,
                 _event_payload(
@@ -489,6 +550,7 @@ def post_action(req: ActionRequest):
                 synthetic_input,
                 explicit_action=action_id,
                 stream_handler=stream_handler,
+                tool_event_handler=tool_event_handler,
             )
             reply = getattr(state, "last_assistant_message", "") or ""
             state.last_assistant_message = None
@@ -614,15 +676,20 @@ def get_current_project_workspaces():
 @app.post("/api/projects/current/workspaces")
 def post_current_project_workspace(req: ProjectWorkspaceRequest):
     project_id = resolve_project_id()
-    meta = add_project_workspace(
-        req.root,
-        project_id=project_id,
-        kind=req.kind,
-        workspace_id=req.workspace_id,
-        label=req.label,
-        writable=req.writable,
-        enabled=req.enabled,
-    )
+    try:
+        meta = add_project_workspace(
+            req.root,
+            project_id=project_id,
+            kind=req.kind,
+            workspace_id=req.workspace_id,
+            label=req.label,
+            writable=req.writable,
+            enabled=req.enabled,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     workspaces = meta.get("workspaces", [])
     normalized_root = str(Path(req.root).expanduser().resolve())
     added_workspace = next(
@@ -643,7 +710,12 @@ def post_current_project_workspace(req: ProjectWorkspaceRequest):
 @app.delete("/api/projects/current/workspaces/{workspace_id}")
 def delete_current_project_workspace(workspace_id: str):
     project_id = resolve_project_id()
-    meta = remove_project_workspace(workspace_id, project_id=project_id)
+    try:
+        meta = remove_project_workspace(workspace_id, project_id=project_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     return {
         "project_id": project_id,
         "workspaces": meta.get("workspaces", []),

@@ -23,6 +23,7 @@ class EngineeringAgent(BaseAgent):
         cfg: Optional[LLMConfig] = None,
         user_persona: Optional[str] = None,
         stream_handler: Optional[Callable[[str], None]] = None,
+        tool_event_handler=None,
     ) -> AgentResult:
         raise NotImplementedError(
             "EngineeringAgent uses plan_discuss and coach instead of discuss"
@@ -34,6 +35,7 @@ class EngineeringAgent(BaseAgent):
         user_input: str,
         cfg: Optional[LLMConfig] = None,
         user_persona: Optional[str] = None,
+        tool_event_handler=None,
     ) -> AgentResult:
         raise NotImplementedError("EngineeringAgent uses plan_commit instead of commit")
 
@@ -118,6 +120,7 @@ class EngineeringAgent(BaseAgent):
         cfg: Optional[LLMConfig] = None,
         user_persona: Optional[str] = None,
         stream_handler: Optional[Callable[[str], None]] = None,
+        tool_event_handler=None,
     ) -> AgentResult:
         gdd = read_artifact("GDD", project_id=state.project_id)
         pm = read_artifact("PROJECT_PLAN", project_id=state.project_id)
@@ -157,6 +160,7 @@ class EngineeringAgent(BaseAgent):
                 user_persona=user_persona,
                 project_id=state.project_id,
                 stream_handler=stream_handler,
+                tool_event_handler=tool_event_handler,
             )
             updates = {}
             if detected_style and detected_style != state.style_preset:
@@ -175,6 +179,7 @@ class EngineeringAgent(BaseAgent):
             history=state.chat_history,
             user_persona=user_persona,
             project_id=state.project_id,
+            tool_event_handler=tool_event_handler,
         )
         payload, _ = parse_discuss_payload(raw)
         if payload:
@@ -199,6 +204,7 @@ class EngineeringAgent(BaseAgent):
         user_input: str,
         cfg: Optional[LLMConfig] = None,
         user_persona: Optional[str] = None,
+        tool_event_handler=None,
     ) -> AgentResult:
         gdd = read_artifact("GDD", project_id=state.project_id)
         pm = read_artifact("PROJECT_PLAN", project_id=state.project_id)
@@ -227,6 +233,7 @@ class EngineeringAgent(BaseAgent):
             history=state.chat_history,
             user_persona=user_persona,
             project_id=state.project_id,
+            tool_event_handler=tool_event_handler,
         )
 
         logger.info("[EngineeringAgent] Commit generated.")
@@ -236,9 +243,9 @@ class EngineeringAgent(BaseAgent):
 
         return AgentResult(
             assistant_message=(
-                "Implementation plan finalized.\n\n"
-                "**The system will now move into internal review automatically.**\n\n"
-                "*Send any message to continue.*"
+                "实施方案已定稿。\n\n"
+                "**系统将自动进入内部评审阶段。**\n\n"
+                "*发送任意消息即可继续。*"
             ),
             state_updates=updates,
             commit=CommitSpec(
@@ -256,6 +263,7 @@ class EngineeringAgent(BaseAgent):
         cfg: Optional[LLMConfig] = None,
         user_persona: Optional[str] = None,
         stream_handler: Optional[Callable[[str], None]] = None,
+        tool_event_handler=None,
     ) -> AgentResult:
         impl_plan = read_artifact("IMPLEMENTATION_PLAN", project_id=state.project_id)
         resolved_style = self._resolve_style_preset(state, user_input)
@@ -285,6 +293,7 @@ class EngineeringAgent(BaseAgent):
             user_persona=user_persona,
             project_id=state.project_id,
             stream_handler=stream_handler,
+            tool_event_handler=tool_event_handler,
         )
         logger.info("[EngineeringAgent] Coach instruction issued.")
 

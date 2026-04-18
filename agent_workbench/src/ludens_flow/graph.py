@@ -157,6 +157,7 @@ def run_agent_step(
     state: LudensState,
     user_input: Any,
     stream_handler=None,
+    tool_event_handler=None,
 ) -> LudensState:
     """统一执行单个 Agent 节点，并处理状态、日志与落盘。"""
     node_name = agent.name
@@ -245,10 +246,14 @@ def run_agent_step(
                     user_input,
                     user_persona=user_persona_block,
                     stream_handler=stream_handler,
+                    tool_event_handler=tool_event_handler,
                 )
             elif mode == "COMMIT":
                 result: AgentResult = agent.commit(
-                    agent_state_snapshot, user_input, user_persona=user_persona_block
+                    agent_state_snapshot,
+                    user_input,
+                    user_persona=user_persona_block,
+                    tool_event_handler=tool_event_handler,
                 )
             elif mode == "PLAN_DISCUSS":
                 result: AgentResult = getattr(agent, "plan_discuss")(
@@ -257,6 +262,7 @@ def run_agent_step(
                     None,
                     user_persona=user_persona_block,
                     stream_handler=stream_handler,
+                    tool_event_handler=tool_event_handler,
                 )
             elif mode == "PLAN_COMMIT":
                 result: AgentResult = getattr(agent, "plan_commit")(
@@ -264,6 +270,7 @@ def run_agent_step(
                     user_input,
                     None,
                     user_persona=user_persona_block,
+                    tool_event_handler=tool_event_handler,
                 )
             elif mode == "COACH":
                 result: AgentResult = getattr(agent, "coach")(
@@ -272,6 +279,7 @@ def run_agent_step(
                     None,
                     user_persona=user_persona_block,
                     stream_handler=stream_handler,
+                    tool_event_handler=tool_event_handler,
                 )
             else:
                 raise ValueError(f"Unknown agent mode: {mode}")
@@ -594,7 +602,7 @@ class RouterNode:
 
 class GDDNode:
     def execute(
-        self, state: LudensState, user_input: str, stream_handler=None
+        self, state: LudensState, user_input: str, stream_handler=None, tool_event_handler=None
     ) -> LudensState:
         mode = "COMMIT" if state.phase == Phase.GDD_COMMIT.value else "DISCUSS"
         return run_agent_step(
@@ -603,12 +611,13 @@ class GDDNode:
             state,
             user_input,
             stream_handler=stream_handler if mode == "DISCUSS" else None,
+            tool_event_handler=tool_event_handler,
         )
 
 
 class PMNode:
     def execute(
-        self, state: LudensState, user_input: str, stream_handler=None
+        self, state: LudensState, user_input: str, stream_handler=None, tool_event_handler=None
     ) -> LudensState:
         mode = "COMMIT" if state.phase == Phase.PM_COMMIT.value else "DISCUSS"
         return run_agent_step(
@@ -617,12 +626,13 @@ class PMNode:
             state,
             user_input,
             stream_handler=stream_handler if mode == "DISCUSS" else None,
+            tool_event_handler=tool_event_handler,
         )
 
 
 class ENGNode:
     def execute(
-        self, state: LudensState, user_input: str, stream_handler=None
+        self, state: LudensState, user_input: str, stream_handler=None, tool_event_handler=None
     ) -> LudensState:
         # 工程节点根据 phase 切到讨论、定稿或辅导模式。
         if state.phase == Phase.DEV_COACHING.value:
@@ -637,15 +647,22 @@ class ENGNode:
             state,
             user_input,
             stream_handler=stream_handler if mode in {"COACH", "PLAN_DISCUSS"} else None,
+            tool_event_handler=tool_event_handler,
         )
 
 
 class REVIEWNode:
     def execute(
-        self, state: LudensState, user_input: str, stream_handler=None
+        self, state: LudensState, user_input: str, stream_handler=None, tool_event_handler=None
     ) -> LudensState:
         # Review 直接走正式评审输出。
-        return run_agent_step(_review_agent, "COMMIT", state, user_input)
+        return run_agent_step(
+            _review_agent,
+            "COMMIT",
+            state,
+            user_input,
+            tool_event_handler=tool_event_handler,
+        )
 
 
 # 全局节点表映射机制
@@ -666,6 +683,7 @@ def graph_step(
     user_input: str,
     explicit_action: Optional[str] = None,
     stream_handler=None,
+    tool_event_handler=None,
 ) -> LudensState:
     """执行一次最小图推进：先路由，再决定是否调用目标节点。"""
     old_phase = state.phase
@@ -705,7 +723,12 @@ def graph_step(
     active_node = PHASE_NODE_MAP.get(new_phase)
     logger.debug("graph_step -> active node=%s", active_node)
     if active_node:
-        state = active_node.execute(state, user_input, stream_handler=stream_handler)
+        state = active_node.execute(
+            state,
+            user_input,
+            stream_handler=stream_handler,
+            tool_event_handler=tool_event_handler,
+        )
     else:
         logger.warning(f"Unhandled phase in Graph: {new_phase}")
 

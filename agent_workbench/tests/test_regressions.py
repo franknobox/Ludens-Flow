@@ -482,6 +482,45 @@ class RegressionTests(unittest.TestCase):
             "第一句。第二句，补充一点，再来一点。最后一段\n\n新段落。",
         )
 
+    def test_base_agent_emits_tool_events_for_tool_calls(self):
+        agent = DesignAgent()
+        tool_events = []
+
+        class _ToolCall:
+            id = "tool-1"
+            type = "function"
+
+            class function:
+                name = "unity_read_file"
+                arguments = '{"relative_path":"Assets/Scripts/Player.cs"}'
+
+        class _ToolResponse:
+            content = ""
+            tool_calls = [_ToolCall()]
+
+        with patch(
+            "ludens_flow.agents.base.merge_tool_schemas",
+            return_value=[{"function": {"name": "unity_read_file"}}],
+        ), patch(
+            "ludens_flow.agents.base.generate",
+            side_effect=[_ToolResponse(), "final answer"],
+        ), patch(
+            "ludens_flow.agents.base.dispatch_tool_call",
+            return_value="file body",
+        ):
+            final_text = agent._call(
+                "read the file",
+                tool_event_handler=tool_events.append,
+            )
+
+        self.assertEqual(final_text, "final answer")
+        self.assertEqual(
+            [event["type"] for event in tool_events],
+            ["tool_started", "tool_completed"],
+        )
+        self.assertEqual(tool_events[0]["tool_name"], "unity_read_file")
+        self.assertEqual(tool_events[1]["result"], "file body")
+
 
     def test_design_discuss_streaming_uses_plain_reply_path(self):
         agent = DesignAgent()

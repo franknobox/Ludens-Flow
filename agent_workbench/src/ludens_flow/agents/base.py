@@ -93,6 +93,7 @@ class BaseAgent(ABC):
         user_persona: Optional[str] = None,
         project_id: Optional[str] = None,
         stream_handler: Optional[Callable[[str], None]] = None,
+        tool_event_handler: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> str:
         """Shared LLM call entrypoint with optional tool-calling loop."""
         from llm.provider import load_config
@@ -167,12 +168,40 @@ class BaseAgent(ABC):
                 try:
                     args = json.loads(tool_args_str)
                     logger.info("Agent executing tool: %s", tool_name)
+                    if tool_event_handler:
+                        tool_event_handler(
+                            {
+                                "type": "tool_started",
+                                "tool_name": tool_name,
+                                "args": args,
+                            }
+                        )
                     tool_result = dispatch_tool_call(
                         tool_name,
                         args,
                         project_id=project_id,
                     )
+                    if tool_event_handler:
+                        tool_event_handler(
+                            {
+                                "type": "tool_completed",
+                                "tool_name": tool_name,
+                                "args": args,
+                                "result": str(tool_result),
+                            }
+                        )
                 except Exception as exc:
+                    if tool_event_handler:
+                        tool_event_handler(
+                            {
+                                "type": "tool_failed",
+                                "tool_name": tool_name,
+                                "args": (
+                                    args if "args" in locals() and isinstance(args, dict) else {}
+                                ),
+                                "error": str(exc),
+                            }
+                        )
                     tool_result = f"Error executing tool {tool_name}: {exc}"
 
                 history.append(
@@ -323,6 +352,7 @@ class BaseAgent(ABC):
         cfg: Optional[LLMConfig] = None,
         user_persona: Optional[str] = None,
         stream_handler: Optional[Callable[[str], None]] = None,
+        tool_event_handler: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> AgentResult:
         """Discussion-phase entrypoint."""
         ...
@@ -334,6 +364,7 @@ class BaseAgent(ABC):
         user_input: str,
         cfg: Optional[LLMConfig] = None,
         user_persona: Optional[str] = None,
+        tool_event_handler: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> AgentResult:
         """Commit-phase entrypoint."""
         ...

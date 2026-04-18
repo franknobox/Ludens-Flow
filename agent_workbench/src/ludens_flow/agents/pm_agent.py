@@ -24,6 +24,7 @@ class PMAgent(BaseAgent):
         cfg: Optional[LLMConfig] = None,
         user_persona: Optional[str] = None,
         stream_handler=None,
+        tool_event_handler=None,
     ) -> AgentResult:
         gdd_content = read_artifact("GDD", project_id=state.project_id)
         existing_pm = read_artifact("PROJECT_PLAN", project_id=state.project_id)
@@ -60,6 +61,7 @@ class PMAgent(BaseAgent):
                 user_persona=user_persona,
                 project_id=state.project_id,
                 stream_handler=stream_handler,
+                tool_event_handler=tool_event_handler,
             )
             return AgentResult(assistant_message=reply.strip(), state_updates={})
 
@@ -74,6 +76,7 @@ class PMAgent(BaseAgent):
             history=state.chat_history,
             user_persona=user_persona,
             project_id=state.project_id,
+            tool_event_handler=tool_event_handler,
         )
         payload, _ = parse_discuss_payload(raw)
         if payload:
@@ -92,6 +95,7 @@ class PMAgent(BaseAgent):
         user_input: str,
         cfg: Optional[LLMConfig] = None,
         user_persona: Optional[str] = None,
+        tool_event_handler=None,
     ) -> AgentResult:
         gdd_content = read_artifact("GDD", project_id=state.project_id)
 
@@ -124,6 +128,7 @@ class PMAgent(BaseAgent):
             history=state.chat_history,
             user_persona=user_persona,
             project_id=state.project_id,
+            tool_event_handler=tool_event_handler,
         )
 
         updates = {}
@@ -155,9 +160,9 @@ class PMAgent(BaseAgent):
 
         return AgentResult(
             assistant_message=(
-                "PROJECT_PLAN finalized.\n\n"
-                "**The system will now move into the engineering phase automatically.**\n\n"
-                "*Send any message to continue.*"
+                "项目计划已定稿。\n\n"
+                "**系统将自动进入工程阶段。**\n\n"
+                "*发送任意消息即可继续。*"
             ),
             state_updates=updates,
             commit=CommitSpec(

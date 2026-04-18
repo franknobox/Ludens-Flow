@@ -13,6 +13,7 @@ import type {
   ComposerAttachment,
   HistoryByAgent,
   RenderMessage,
+  ToolProgressEvent,
   TransientChat,
   ViewState,
   WorkflowAction,
@@ -223,6 +224,37 @@ function renderMessageRow(agentKey: AgentKey, item: RenderMessage, index: number
   );
 }
 
+function toolStatusLabel(type: ToolProgressEvent["type"]): string {
+  if (type === "tool_started") return "进行中";
+  if (type === "tool_completed") return "已完成";
+  return "失败";
+}
+
+function renderToolProcessCard(toolEvents: ToolProgressEvent[]) {
+  return (
+    <div className="tool-process-card">
+      <div className="tool-process-title">执行过程</div>
+      <div className="tool-process-list">
+        {toolEvents.map((event) => (
+          <div
+            key={event.id}
+            className={`tool-process-item is-${event.type.replace("tool_", "")}`}
+          >
+            <div className="tool-process-head">
+              <strong>{event.tool_summary}</strong>
+              <span>{toolStatusLabel(event.type)}</span>
+            </div>
+            {event.tool_result_summary ? (
+              <div className="tool-process-detail">{event.tool_result_summary}</div>
+            ) : null}
+            {event.error ? <div className="tool-process-detail error">{event.error}</div> : null}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function renderFileView(
   currentView: ViewState,
   currentProjectId: string,
@@ -312,6 +344,9 @@ const AgentMessages = memo(function AgentMessages(props: AgentMessagesProps) {
             </div>
           ) : null}
           {visibleRows.map((item, index) => renderMessageRow(agentKey, item, index))}
+          {transientChat && transientChat.agentKey === agentKey && transientChat.toolEvents?.length
+            ? renderToolProcessCard(transientChat.toolEvents)
+            : null}
         </>
       ) : (
         <div className="empty">

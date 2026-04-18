@@ -4,6 +4,7 @@ import json
 import os
 import re
 import shutil
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -67,6 +68,18 @@ def _normalize_project_id(project_id: Optional[str]) -> Optional[str]:
     return normalized
 
 
+def _slugify_project_name(name: Optional[str]) -> Optional[str]:
+    raw = str(name or "").strip()
+    if not raw:
+        return None
+
+    normalized = unicodedata.normalize("NFKD", raw)
+    ascii_only = normalized.encode("ascii", "ignore").decode("ascii")
+    if ascii_only.strip():
+        return _normalize_project_id(ascii_only)
+    return None
+
+
 def _normalize_workspace_kind(kind: Optional[str]) -> str:
     raw = str(kind or "generic").strip().lower()
     if raw not in SUPPORTED_WORKSPACE_KINDS:
@@ -93,6 +106,8 @@ def _default_workspace_label(kind: str) -> str:
 
 def _normalize_workspace_root(root: str, *, kind: str) -> str:
     raw = str(root or "").strip()
+    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in {'"', "'"}:
+        raw = raw[1:-1].strip()
     if not raw:
         raise ValueError("Workspace path is required.")
 
@@ -473,6 +488,21 @@ def _next_project_id() -> str:
         index += 1
 
 
+def next_project_id(display_name: Optional[str] = None) -> str:
+    candidate = _slugify_project_name(display_name)
+    if candidate:
+        existing = {item["id"] for item in list_projects(include_archived=True)}
+        if candidate not in existing:
+            return candidate
+
+        suffix = 2
+        while f"{candidate}-{suffix}" in existing:
+            suffix += 1
+        return f"{candidate}-{suffix}"
+
+    return _next_project_id()
+
+
 def ensure_active_project_id() -> str:
     """确保当前总有一个激活项目。"""
     active_project = get_active_project_id()
@@ -532,7 +562,7 @@ def get_workspace_dir(project_id: Optional[str] = None) -> Path:
 
 
 def create_project(
-    project_id: str,
+    project_id: Optional[str] = None,
     display_name: Optional[str] = None,
     title: Optional[str] = None,
     set_active: bool = False,
@@ -541,7 +571,7 @@ def create_project(
     workspaces: Any = _UNSET,
 ) -> Dict[str, Any]:
     """创建项目目录和基础元数据；已存在时刷新元数据。"""
-    normalized = _normalize_project_id(project_id)
+    normalized = _normalize_project_id(project_id) or next_project_id(display_name or title)
     if not normalized:
         raise ValueError("Project id is required.")
 
@@ -718,12 +748,35 @@ def set_project_unity_root(
 
 def clear_project_unity_root(project_id: Optional[str] = None) -> Dict[str, Any]:
     resolved = resolve_project_id(project_id)
+    existing = list_project_workspaces(resolved, include_disabled=True)
+    removed = [
+        workspace
+        for workspace in existing
+        if workspace.get("kind") == "unity"
+        and workspace.get("id") == DEFAULT_UNITY_WORKSPACE_ID
+    ]
     remaining = [
         workspace
-        for workspace in list_project_workspaces(resolved, include_disabled=True)
-        if workspace.get("kind") != "unity"
+        for workspace in existing
+        if not (
+            workspace.get("kind") == "unity"
+            and workspace.get("id") == DEFAULT_UNITY_WORKSPACE_ID
+        )
     ]
-    return touch_project(resolved, workspaces=remaining)
+    meta = touch_project(resolved, workspaces=remaining)
+    if removed:
+        from ludens_flow.state.state_logs import write_audit_log
+
+        write_audit_log(
+            event="PROJECT_WORKSPACE_REMOVED",
+            detail=(
+                "workspace_id="
+                f"{DEFAULT_UNITY_WORKSPACE_ID} kind=unity "
+                f"root={removed[0].get('root', '')}"
+            ),
+            project_id=resolved,
+        )
+    return meta
 
 
 def get_project_unity_root(project_id: Optional[str] = None) -> Optional[str]:
