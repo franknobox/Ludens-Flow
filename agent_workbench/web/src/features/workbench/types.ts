@@ -45,6 +45,10 @@ export interface WorkspaceFileContent {
   content: string;
 }
 
+export interface WorkspaceFileUpdateResponse extends WorkspaceFileContent {
+  state?: StateResponse;
+}
+
 export type ComposerAttachmentKind = "image" | "file";
 
 export interface ComposerAttachment {
@@ -132,6 +136,16 @@ export interface ProjectsResponse {
   projects: ProjectMeta[];
   active_projects: ProjectMeta[];
   archived_projects: ProjectMeta[];
+}
+
+export interface ProjectCreateResponse {
+  project: ProjectMeta;
+  state: StateResponse;
+}
+
+export interface ProjectSelectResponse {
+  active_project: string;
+  state: StateResponse;
 }
 
 export interface ProjectWorkspacesResponse {

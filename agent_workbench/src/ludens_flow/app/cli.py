@@ -3,11 +3,11 @@ import logging
 import os
 import sys
 
-import ludens_flow.state as st
+import ludens_flow.core.state as st
 from ludens_flow.app.env import load_env_if_available
-from ludens_flow.graph import graph_step
-from ludens_flow.app.input_parser import parse_user_input
-from ludens_flow.paths import (
+from ludens_flow.core.graph import graph_step
+from ludens_flow.capabilities.ingest.input_parser import parse_user_input
+from ludens_flow.core.paths import (
     clear_project_unity_root,
     create_project,
     get_project_unity_root,
@@ -16,7 +16,7 @@ from ludens_flow.paths import (
     set_active_project_id,
     set_project_unity_root,
 )
-from ludens_flow.router import action_user_input, get_available_actions
+from ludens_flow.core.router import action_user_input, get_available_actions
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)

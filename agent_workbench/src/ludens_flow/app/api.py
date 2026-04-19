@@ -11,16 +11,16 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
-import ludens_flow.state as st
+import ludens_flow.core.state as st
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from ludens_flow.app.attachment_ingest import build_attachment_user_input
-from ludens_flow.app.artifacts import read_artifact
+from ludens_flow.capabilities.ingest.attachment_ingest import build_attachment_user_input
+from ludens_flow.capabilities.artifacts.artifacts import read_artifact, write_artifact
 from ludens_flow.app.env import load_env_if_available
-from ludens_flow.graph import graph_step
-from ludens_flow.paths import (
+from ludens_flow.core.graph import graph_step
+from ludens_flow.core.paths import (
     add_project_workspace,
     archive_project,
     clear_project_unity_root,
@@ -38,7 +38,7 @@ from ludens_flow.paths import (
     set_active_project_id,
     set_project_unity_root,
 )
-from ludens_flow.router import action_user_input, get_available_actions
+from ludens_flow.core.router import action_user_input, get_available_actions
 from pydantic import BaseModel
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -90,6 +90,10 @@ class ProjectWorkspaceRequest(BaseModel):
 
 class ActionRequest(BaseModel):
     action: str
+
+
+class WorkspaceFileUpdateRequest(BaseModel):
+    content: str = ""
 
 
 class ProjectExportRequest(BaseModel):
@@ -264,30 +268,43 @@ def _build_stream_handler(project_id: str, state) -> callable:
 
 
 def _summarize_tool_call(tool_name: str, args: dict) -> str:
+    if tool_name == "workspace_read_files_batch":
+        paths = args.get("paths", []) if isinstance(args, dict) else []
+        count = len(paths) if isinstance(paths, list) else 0
+        workspace_id = (
+            str(args.get("workspace_id", "") or "").strip()
+            if isinstance(args, dict)
+            else ""
+        )
+        workspace_note = f" @{workspace_id}" if workspace_id else ""
+        return f"??????{workspace_note}?{count} ?"
+    if tool_name == "workspace_write_text_file":
+        target_path = str(args.get("path", "") or "").strip() or "(???)"
+        return f"?????{target_path}"
     if tool_name == "unity_list_dir":
         relative_path = str(args.get("relative_path", "") or "").strip() or "/"
-        return f"列出目录：{relative_path}"
+        return f"?????{relative_path}"
     if tool_name == "unity_read_file":
-        relative_path = str(args.get("relative_path", "") or "").strip() or "(未指定)"
-        return f"读取文件：{relative_path}"
+        relative_path = str(args.get("relative_path", "") or "").strip() or "(???)"
+        return f"?????{relative_path}"
     if tool_name == "unity_find_files":
         pattern = str(args.get("pattern", "*.cs") or "*.cs").strip()
         relative_path = str(args.get("relative_path", "") or "").strip() or "/"
-        return f"查找文件：{relative_path} 内匹配 {pattern}"
+        return f"?????{relative_path} ??? {pattern}"
     if tool_name == "web_search":
-        query = str(args.get("query", "") or "").strip() or "(空查询)"
-        return f"搜索资料：{query}"
+        query = str(args.get("query", "") or "").strip() or "(???)"
+        return f"?????{query}"
     return tool_name
 
 
 def _summarize_tool_result(tool_name: str, result: str) -> str:
     text = str(result or "").strip()
     if not text:
-        return "已完成，没有额外输出。"
-    if tool_name in {"unity_list_dir", "unity_find_files"}:
+        return "???????????"
+    if tool_name in {"unity_list_dir", "unity_find_files", "workspace_read_files_batch"}:
         lines = [line for line in text.splitlines() if line.strip()]
-        return f"已返回 {len(lines)} 条结果。"
-    return (text[:120] + "…") if len(text) > 120 else text
+        return f"??? {len(lines)} ????"
+    return (text[:120] + "?") if len(text) > 120 else text
 
 
 def _build_tool_event_handler(project_id: str, state) -> callable:
@@ -303,15 +320,24 @@ def _build_tool_event_handler(project_id: str, state) -> callable:
             state=state,
         ) | {
             "tool_name": tool_name,
-            "tool_summary": _summarize_tool_call(tool_name, args if isinstance(args, dict) else {}),
+            "tool_summary": _summarize_tool_call(
+                tool_name,
+                args if isinstance(args, dict) else {},
+            ),
         }
         if event_type == "tool_completed":
             payload["tool_result_summary"] = _summarize_tool_result(
                 tool_name,
                 str(event.get("result", "") or ""),
             )
+        if event_type == "tool_progress":
+            payload["message"] = str(event.get("message", "") or "")
+        if event_type == "file_changed":
+            payload["file_path"] = str(event.get("path", "") or "")
+            payload["change_type"] = str(event.get("change_type", "") or "")
+            payload["message"] = str(event.get("summary", "") or "")
         if event_type == "tool_failed":
-            payload["error"] = str(event.get("error", "") or "工具执行失败。")
+            payload["error"] = str(event.get("error", "") or "???????")
         _publish_project_event(project_id, payload)
 
     return emit
@@ -903,11 +929,26 @@ def post_import_project_bundle(req: ProjectImportRequest):
 
 
 WORKSPACE_FILES = [
-    {"id": "gdd", "name": "GDD.md", "artifact": "GDD"},
-    {"id": "pm", "name": "PROJECT_PLAN.md", "artifact": "PROJECT_PLAN"},
-    {"id": "eng", "name": "IMPLEMENTATION_PLAN.md", "artifact": "IMPLEMENTATION_PLAN"},
-    {"id": "review", "name": "REVIEW_REPORT.md", "artifact": "REVIEW_REPORT"},
-    {"id": "devlog", "name": "dev_notes/DEVLOG.md", "artifact": "DEVLOG"},
+    {"id": "gdd", "name": "GDD.md", "artifact": "GDD", "owner": "DesignAgent"},
+    {"id": "pm", "name": "PROJECT_PLAN.md", "artifact": "PROJECT_PLAN", "owner": "PMAgent"},
+    {
+        "id": "eng",
+        "name": "IMPLEMENTATION_PLAN.md",
+        "artifact": "IMPLEMENTATION_PLAN",
+        "owner": "EngineeringAgent",
+    },
+    {
+        "id": "review",
+        "name": "REVIEW_REPORT.md",
+        "artifact": "REVIEW_REPORT",
+        "owner": "ReviewAgent",
+    },
+    {
+        "id": "devlog",
+        "name": "dev_notes/DEVLOG.md",
+        "artifact": "DEVLOG",
+        "owner": "EngineeringAgent",
+    },
 ]
 
 
@@ -929,6 +970,55 @@ def get_workspace_file_content(file_id: str):
             except Exception as e:
                 logger.warning(f"Read artifact {file_id}: {e}")
                 return {"id": file_id, "name": f["name"], "content": ""}
+    raise HTTPException(status_code=404, detail="Not found")
+
+
+@app.put("/api/workspace/files/{file_id}/content")
+def put_workspace_file_content(file_id: str, req: WorkspaceFileUpdateRequest):
+    state = st.load_state()
+    project_id = resolve_project_id(getattr(state, "project_id", None))
+
+    for f in WORKSPACE_FILES:
+        if f["id"] != file_id:
+            continue
+
+        try:
+            write_artifact(
+                f["artifact"],
+                req.content,
+                reason="Manual edit from workbench",
+                actor=f["owner"],
+                state=state,
+                project_id=project_id,
+                ignore_frozen=True,
+            )
+            st.save_state(state, project_id=project_id)
+            updated_content = read_artifact(f["artifact"], project_id=project_id)
+        except PermissionError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except RuntimeError as e:
+            raise HTTPException(status_code=409, detail=str(e)) from e
+        except Exception as e:
+            logger.warning(f"Write artifact {file_id}: {e}")
+            raise HTTPException(status_code=500, detail="保存工件失败") from e
+
+        _publish_project_event(
+            project_id,
+            _event_payload(
+                "state_updated",
+                project_id=project_id,
+                state=state,
+                include_projects=True,
+            ),
+        )
+
+        return {
+            "id": file_id,
+            "name": f["name"],
+            "content": updated_content,
+            "state": _state_to_json(state),
+        }
+
     raise HTTPException(status_code=404, detail="Not found")
 
 

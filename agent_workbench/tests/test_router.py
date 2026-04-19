@@ -15,8 +15,8 @@ os.environ.setdefault(
     str((Path(tempfile.gettempdir()) / "ludens_flow_tests" / "test_router").resolve()),
 )
 
-from ludens_flow.router import Phase, route
-from ludens_flow.state import init_state
+from ludens_flow.core.router import Phase, route
+from ludens_flow.core.state import init_state
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)

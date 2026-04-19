@@ -194,6 +194,14 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
     }));
   };
 
+  const syncFilesOnly = async () => {
+    const files = await workbenchApi.getWorkspaceFiles();
+    setModel((prev) => ({
+      ...prev,
+      files: files.files || [],
+    }));
+  };
+
   const hardRefresh = async () => {
     const [state, projects, files] = await Promise.all([
       workbenchApi.getState(),
@@ -382,10 +390,29 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
     setErrorText("");
     setWarningText("");
     try {
-      await workbenchApi.selectProject(projectId);
+      const selected = await workbenchApi.selectProject(projectId);
       clearTransientChat();
-      await hardRefresh();
+      setFileCache({});
+      setModel((prev) =>
+        applyStateSnapshot(
+          prev,
+          selected.state,
+          prev.projects,
+          prev.active_projects,
+          prev.archived_projects,
+        ),
+      );
+      setCurrentView({
+        type: "agent",
+        id: selected.state.current_agent || phaseToAgent(selected.state.phase),
+      });
       closeProjectPanel();
+      void syncProjectsOnly().catch(() => {
+        // keep project switching responsive even if project list refresh is delayed
+      });
+      void syncFilesOnly().catch(() => {
+        // workspace files can refresh lazily
+      });
     } catch (error) {
       setErrorText("切换项目失败：" + toErrorMessage(error));
     }
@@ -409,6 +436,32 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
     }
   };
 
+  const saveWorkspaceFile = async (fileId: string, content: string) => {
+    try {
+      const data = await workbenchApi.updateWorkspaceFileContent(fileId, content);
+      const cacheKey = fileCacheKey(model.project_id, fileId);
+      setFileCache((prev) => ({ ...prev, [cacheKey]: data.content || "" }));
+
+      const updatedState = data.state;
+      if (updatedState) {
+        setModel((prev) =>
+          applyStateSnapshot(
+            prev,
+            updatedState,
+            prev.projects,
+            prev.active_projects,
+            prev.archived_projects,
+          ),
+        );
+      }
+      void syncProjectsOnly().catch(() => {
+        // do not block save completion on project metadata refresh
+      });
+    } catch (error) {
+      throw new Error(`保存失败：${toErrorMessage(error)}`);
+    }
+  };
+
   const createProject = async (title: string): Promise<boolean> => {
     const displayName = title.trim();
     if (!displayName) {
@@ -418,13 +471,43 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
 
     setErrorText("");
     try {
-      await workbenchApi.createProject({
+      const created = await workbenchApi.createProject({
         display_name: displayName,
         title: displayName,
       });
       clearTransientChat();
-      await hardRefresh();
+      setFileCache({});
+      setModel((prev) => {
+        const nextProjects = [
+          created.project,
+          ...prev.projects.filter((item) => item.id !== created.project.id),
+        ];
+        const nextActiveProjects = [
+          created.project,
+          ...prev.active_projects.filter((item) => item.id !== created.project.id),
+        ];
+        const nextArchivedProjects = prev.archived_projects.filter(
+          (item) => item.id !== created.project.id,
+        );
+        return applyStateSnapshot(
+          prev,
+          created.state,
+          nextProjects,
+          nextActiveProjects,
+          nextArchivedProjects,
+        );
+      });
+      setCurrentView({
+        type: "agent",
+        id: created.state.current_agent || phaseToAgent(created.state.phase),
+      });
       closeProjectPanel();
+      void syncProjectsOnly().catch(() => {
+        // background normalization refresh
+      });
+      void syncFilesOnly().catch(() => {
+        // workspace files can refresh lazily
+      });
       return true;
     } catch (error) {
       setErrorText("创建项目失败：" + toErrorMessage(error));
@@ -769,6 +852,7 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
           requestInFlight={requestInFlight}
           fileItems={model.files}
           fileCache={fileCache}
+          fileEditable={!activeProject?.archived}
           errorText={errorText}
           warningText={warningText}
           contentAreaRef={contentAreaRef}
@@ -780,6 +864,9 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
           }}
           onAction={(actionId) => {
             void sendAction(actionId);
+          }}
+          onSaveFile={async (fileId, content) => {
+            await saveWorkspaceFile(fileId, content);
           }}
         />
       </div>

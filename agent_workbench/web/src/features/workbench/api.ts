@@ -1,11 +1,14 @@
 import type {
   ChatResponse,
   ComposerAttachment,
+  ProjectCreateResponse,
+  ProjectSelectResponse,
   ProjectsResponse,
   ProjectWorkspacesResponse,
   StateResponse,
   WorkbenchEvent,
   WorkspaceFileContent,
+  WorkspaceFileUpdateResponse,
   WorkspaceFilesResponse,
 } from "./types";
 
@@ -51,6 +54,17 @@ export const workbenchApi = {
   getWorkspaceFileContent(fileId: string) {
     return fetchJson<WorkspaceFileContent>(
       `/api/workspace/files/${encodeURIComponent(fileId)}/content`,
+    );
+  },
+
+  updateWorkspaceFileContent(fileId: string, content: string) {
+    return fetchJson<WorkspaceFileUpdateResponse>(
+      `/api/workspace/files/${encodeURIComponent(fileId)}/content`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content }),
+      },
     );
   },
 
@@ -107,7 +121,7 @@ export const workbenchApi = {
   },
 
   createProject(body: { display_name?: string | null; title?: string | null }) {
-    return fetchJson<{ project: { id: string } }>("/api/projects", {
+    return fetchJson<ProjectCreateResponse>("/api/projects", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -115,7 +129,7 @@ export const workbenchApi = {
   },
 
   selectProject(projectId: string) {
-    return fetchJson<{ active_project: string }>(
+    return fetchJson<ProjectSelectResponse>(
       `/api/projects/${encodeURIComponent(projectId)}/select`,
       {
         method: "POST",

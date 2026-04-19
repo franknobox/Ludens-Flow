@@ -1,4 +1,4 @@
-﻿import { memo, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type {
   ChangeEvent,
   ClipboardEvent,
@@ -36,11 +36,13 @@ interface MainPanelProps {
   requestInFlight: boolean;
   fileItems: WorkspaceFileItem[];
   fileCache: Record<string, string>;
+  fileEditable: boolean;
   errorText: string;
   warningText: string;
   contentAreaRef: RefObject<HTMLElement>;
   onSend: (message: string, attachments: ComposerAttachment[]) => Promise<void>;
   onAction: (actionId: string) => void;
+  onSaveFile: (fileId: string, content: string) => Promise<void>;
 }
 
 const MAX_PENDING_ATTACHMENTS = 6;
@@ -260,6 +262,17 @@ function renderFileView(
   currentProjectId: string,
   fileItems: WorkspaceFileItem[],
   fileCache: Record<string, string>,
+  options: {
+    fileEditable: boolean;
+    isEditing: boolean;
+    fileDraftContent: string;
+    fileSaveInFlight: boolean;
+    fileSaveError: string;
+    onStartEdit: () => void;
+    onCancelEdit: () => void;
+    onSaveEdit: () => void;
+    onDraftChange: (value: string) => void;
+  },
 ) {
   if (currentView.type !== "file") {
     return null;
@@ -268,11 +281,58 @@ function renderFileView(
   const file = fileItems.find((item) => item.id === currentView.id);
   const content = fileCache[`${currentProjectId}::${currentView.id}`];
   const showContent = typeof content === "string" ? content || "（空）" : "加载中...";
+  const canStartEdit = options.fileEditable && typeof content === "string";
 
   return (
     <div className="file-panel">
-      <div className="file-title">{file?.name || currentView.id}</div>
-      <pre className="file-content">{showContent}</pre>
+      <div className="file-header">
+        <div className="file-title">{file?.name || currentView.id}</div>
+        <div className="file-actions">
+          {options.isEditing ? (
+            <>
+              <button
+                type="button"
+                className="btn-line btn-file"
+                disabled={options.fileSaveInFlight}
+                onClick={options.onCancelEdit}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                className="btn btn-file"
+                disabled={options.fileSaveInFlight}
+                onClick={options.onSaveEdit}
+              >
+                {options.fileSaveInFlight ? "保存中..." : "保存"}
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="btn-line btn-file btn-file-icon"
+              disabled={!canStartEdit}
+              onClick={options.onStartEdit}
+              title={canStartEdit ? "编辑工件" : "工件加载中，暂不可编辑"}
+            >
+              ✎ 编辑
+            </button>
+          )}
+        </div>
+      </div>
+
+      {options.isEditing ? (
+        <textarea
+          className="file-editor"
+          value={options.fileDraftContent}
+          disabled={options.fileSaveInFlight}
+          onChange={(event) => options.onDraftChange(event.target.value)}
+        />
+      ) : (
+        <pre className="file-content">{showContent}</pre>
+      )}
+
+      {options.fileSaveError ? <div className="file-error">{options.fileSaveError}</div> : null}
     </div>
   );
 }
@@ -392,19 +452,72 @@ export function MainPanel(props: MainPanelProps) {
     requestInFlight,
     fileItems,
     fileCache,
+    fileEditable,
     errorText,
     warningText,
     contentAreaRef,
     onSend,
     onAction,
+    onSaveFile,
   } = props;
 
   const [inputText, setInputText] = useState("");
   const [pendingAttachments, setPendingAttachments] = useState<ComposerAttachment[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const [localWarningText, setLocalWarningText] = useState("");
+  const [editingFileId, setEditingFileId] = useState<string | null>(null);
+  const [fileDraftContent, setFileDraftContent] = useState("");
+  const [fileSaveError, setFileSaveError] = useState("");
+  const [fileSaveInFlight, setFileSaveInFlight] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const combinedWarningText = [warningText, localWarningText].filter(Boolean).join("\n");
+
+  useEffect(() => {
+    if (currentView.type !== "file") {
+      setEditingFileId(null);
+      setFileSaveError("");
+      return;
+    }
+    if (editingFileId && editingFileId !== currentView.id) {
+      setEditingFileId(null);
+      setFileSaveError("");
+    }
+  }, [currentView, editingFileId]);
+
+  const startFileEdit = () => {
+    if (currentView.type !== "file") {
+      return;
+    }
+    const cacheKey = `${currentProjectId}::${currentView.id}`;
+    const content = fileCache[cacheKey];
+    if (typeof content !== "string") {
+      return;
+    }
+    setEditingFileId(currentView.id);
+    setFileDraftContent(content);
+    setFileSaveError("");
+  };
+
+  const cancelFileEdit = () => {
+    setEditingFileId(null);
+    setFileSaveError("");
+  };
+
+  const saveFileEdit = async () => {
+    if (currentView.type !== "file") {
+      return;
+    }
+    setFileSaveInFlight(true);
+    setFileSaveError("");
+    try {
+      await onSaveFile(currentView.id, fileDraftContent);
+      setEditingFileId(null);
+    } catch (error) {
+      setFileSaveError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setFileSaveInFlight(false);
+    }
+  };
 
   const appendPendingAttachments = (attachments: ComposerAttachment[]) => {
     if (!attachments.length) {
@@ -544,7 +657,19 @@ export function MainPanel(props: MainPanelProps) {
             onAction={onAction}
           />
         ) : (
-          renderFileView(currentView, currentProjectId, fileItems, fileCache)
+          renderFileView(currentView, currentProjectId, fileItems, fileCache, {
+            fileEditable,
+            isEditing: editingFileId === currentView.id,
+            fileDraftContent,
+            fileSaveInFlight,
+            fileSaveError,
+            onStartEdit: startFileEdit,
+            onCancelEdit: cancelFileEdit,
+            onSaveEdit: () => {
+              void saveFileEdit();
+            },
+            onDraftChange: setFileDraftContent,
+          })
         )}
       </section>
 

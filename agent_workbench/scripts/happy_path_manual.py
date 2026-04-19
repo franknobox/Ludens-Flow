@@ -49,11 +49,11 @@ if USE_MOCK:
 else:
     print("✓ 检测到 API Key，使用真实 LLM 模式运行。\n")
 
-from ludens_flow.agents.base import AgentResult, CommitSpec
-from ludens_flow.agents.design_agent import DesignAgent
-from ludens_flow.agents.pm_agent import PMAgent
-from ludens_flow.agents.engineering_agent import EngineeringAgent
-from ludens_flow.agents.review_agent import ReviewAgent
+from ludens_flow.core.agents.base import AgentResult, CommitSpec
+from ludens_flow.core.agents.design_agent import DesignAgent
+from ludens_flow.core.agents.pm_agent import PMAgent
+from ludens_flow.core.agents.engineering_agent import EngineeringAgent
+from ludens_flow.core.agents.review_agent import ReviewAgent
 
 if USE_MOCK:
 
@@ -140,10 +140,10 @@ if USE_MOCK:
     EngineeringAgent.coach = _mock_eng_coach
     ReviewAgent.commit = _mock_review_commit
 
-import ludens_flow.state as st
-from ludens_flow.app.artifacts import write_artifact
-from ludens_flow.graph import graph_step
-from ludens_flow.router import Phase
+import ludens_flow.core.state as st
+from ludens_flow.capabilities.artifacts.artifacts import write_artifact
+from ludens_flow.core.graph import graph_step
+from ludens_flow.core.router import Phase
 
 
 def go(state, user_input: str, label: str = ""):

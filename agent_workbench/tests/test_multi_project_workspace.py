@@ -10,8 +10,8 @@ sys.path.insert(0, str(_ROOT / "src"))
 
 os.chdir(_ROOT)
 
-from ludens_flow.app.artifacts import read_artifact, write_artifact
-from ludens_flow.paths import (
+from ludens_flow.capabilities.artifacts.artifacts import read_artifact, write_artifact
+from ludens_flow.core.paths import (
     add_project_workspace,
     clear_project_unity_root,
     create_project,
@@ -26,8 +26,12 @@ from ludens_flow.paths import (
     set_project_unity_root,
     set_active_project_id,
 )
-from ludens_flow.state import init_workspace, load_state, save_state
-from ludens_flow.context.user_profile import _profile_path, load_profile, update_profile
+from ludens_flow.core.state import init_workspace, load_state, save_state
+from ludens_flow.capabilities.context.user_profile import (
+    _profile_path,
+    load_profile,
+    update_profile,
+)
 
 
 class MultiProjectWorkspaceTests(unittest.TestCase):

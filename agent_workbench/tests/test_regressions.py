@@ -21,22 +21,22 @@ os.environ.setdefault(
 )
 
 from llm.provider import LLMConfig
-from ludens_flow.agents.base import AgentResult
-from ludens_flow.agents.design_agent import DesignAgent
-from ludens_flow.agents.engineering_agent import EngineeringAgent
-from ludens_flow.agents.pm_agent import PMAgent
-from ludens_flow.agents.review_agent import ReviewAgent
-from ludens_flow.app.artifacts import read_artifact, write_artifact
-from ludens_flow.context.prompt_templates import load_prompt_template
-from ludens_flow.context.user_profile import (
+from ludens_flow.core.agents.base import AgentResult
+from ludens_flow.core.agents.design_agent import DesignAgent
+from ludens_flow.core.agents.engineering_agent import EngineeringAgent
+from ludens_flow.core.agents.pm_agent import PMAgent
+from ludens_flow.core.agents.review_agent import ReviewAgent
+from ludens_flow.capabilities.artifacts.artifacts import read_artifact, write_artifact
+from ludens_flow.capabilities.context.prompt_templates import load_prompt_template
+from ludens_flow.capabilities.context.user_profile import (
     format_profile_for_prompt,
     load_profile,
     migrate_profile_file,
     migrate_profile_text_to_current_template,
 )
-from ludens_flow.graph import _merge_state_updates, _user_input_to_text, run_agent_step
-from ludens_flow.schemas import parse_discuss_payload, parse_review_gate_payload
-from ludens_flow.state import init_state, init_workspace, load_state
+from ludens_flow.core.graph import _merge_state_updates, _user_input_to_text, run_agent_step
+from ludens_flow.core.schemas import parse_discuss_payload, parse_review_gate_payload
+from ludens_flow.core.state import init_state, init_workspace, load_state
 
 
 class RegressionTests(unittest.TestCase):
@@ -390,7 +390,7 @@ class RegressionTests(unittest.TestCase):
         state.phase = "GDD_DISCUSS"
 
         with patch(
-            "ludens_flow.context.user_profile.load_profile",
+            "ludens_flow.capabilities.context.user_profile.load_profile",
             return_value="# User Profile\n\n## Basics\n- nickname: Alice\n- preferences: minimal UI",
         ):
             run_agent_step(agent, "DISCUSS", state, "hello")
@@ -410,7 +410,7 @@ class RegressionTests(unittest.TestCase):
         state.phase = "GDD_DISCUSS"
 
         with patch(
-            "ludens_flow.context.user_profile.load_profile",
+            "ludens_flow.capabilities.context.user_profile.load_profile",
             return_value="profile text",
         ) as mocked_load:
             run_agent_step(agent, "DISCUSS", state, "hello")
@@ -452,8 +452,8 @@ class RegressionTests(unittest.TestCase):
             api_key="test-key",
         )
 
-        with patch("ludens_flow.agents.base.merge_tool_schemas", return_value=[]), patch(
-            "ludens_flow.agents.base.generate_stream",
+        with patch("ludens_flow.core.agents.base.merge_tool_schemas", return_value=[]), patch(
+            "ludens_flow.core.agents.base.generate_stream",
             return_value=iter(
                 [
                     "第一句。第二",
@@ -499,13 +499,13 @@ class RegressionTests(unittest.TestCase):
             tool_calls = [_ToolCall()]
 
         with patch(
-            "ludens_flow.agents.base.merge_tool_schemas",
+            "ludens_flow.core.agents.base.merge_tool_schemas",
             return_value=[{"function": {"name": "unity_read_file"}}],
         ), patch(
-            "ludens_flow.agents.base.generate",
+            "ludens_flow.core.agents.base.generate",
             side_effect=[_ToolResponse(), "final answer"],
         ), patch(
-            "ludens_flow.agents.base.dispatch_tool_call",
+            "ludens_flow.core.agents.base.dispatch_tool_call",
             return_value="file body",
         ):
             final_text = agent._call(

@@ -12,11 +12,11 @@ sys.path.insert(0, str(_ROOT / "src"))
 
 os.chdir(_ROOT)
 
-import ludens_flow.state as st
+import ludens_flow.core.state as st
 import ludens_flow.app.api as api
 from fastapi import HTTPException
-from ludens_flow.app.artifacts import read_artifact, write_artifact
-from ludens_flow.paths import (
+from ludens_flow.capabilities.artifacts.artifacts import read_artifact, write_artifact
+from ludens_flow.core.paths import (
     PROJECT_META_SCHEMA_VERSION,
     add_project_workspace,
     archive_project,
@@ -33,7 +33,7 @@ from ludens_flow.paths import (
     rename_project,
     restore_project,
 )
-from ludens_flow.state import (
+from ludens_flow.core.state import (
     STATE_SCHEMA_VERSION,
     export_project_bundle,
     import_project_bundle,
@@ -171,6 +171,38 @@ class ProjectLifecycleTests(unittest.TestCase):
         payload = api.get_state()
         self.assertEqual(payload.get("schema_version"), STATE_SCHEMA_VERSION)
         self.assertTrue(payload.get("project_id"))
+
+    def test_api_can_update_workspace_artifact_content(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+
+        response = api.put_workspace_file_content(
+            "gdd",
+            api.WorkspaceFileUpdateRequest(content="# GDD\nEdited by user"),
+        )
+
+        self.assertEqual(response["id"], "gdd")
+        self.assertIn("Edited by user", response["content"])
+        self.assertEqual(
+            read_artifact("GDD", project_id="alpha"),
+            "# GDD\nEdited by user\n",
+        )
+
+    def test_api_allows_manual_workspace_edit_when_artifacts_are_frozen(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+        state = st.load_state(project_id="alpha")
+        state.phase = "DEV_COACHING"
+        state.artifact_frozen = True
+        st.save_state(state, project_id="alpha")
+
+        response = api.put_workspace_file_content(
+            "gdd",
+            api.WorkspaceFileUpdateRequest(content="manual change in frozen phase"),
+        )
+
+        self.assertEqual(response["id"], "gdd")
+        self.assertIn("manual change in frozen phase", response["content"])
+        persisted_state = st.load_state(project_id="alpha")
+        self.assertTrue(persisted_state.artifact_frozen)
 
     def test_api_export_import_endpoints_roundtrip(self):
         api.post_project(api.ProjectRequest(project_id="alpha"))
