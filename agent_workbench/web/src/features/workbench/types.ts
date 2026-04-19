@@ -33,6 +33,15 @@ export interface ProjectWorkspace {
   source?: string;
 }
 
+export interface ToolCatalogItem {
+  name: string;
+  description: string;
+  category: string;
+  workspace_kind?: string | null;
+  requires_workspace: boolean;
+  writes_files: boolean;
+}
+
 export interface WorkspaceFileItem {
   id: string;
   name: string;
@@ -152,6 +161,15 @@ export interface ProjectWorkspacesResponse {
   project_id: string;
   workspace?: ProjectWorkspace | null;
   workspaces: ProjectWorkspace[];
+}
+
+export interface ProjectSettingsResponse {
+  project_id: string;
+  agent_file_write_enabled: boolean;
+}
+
+export interface ToolsResponse {
+  tools: ToolCatalogItem[];
 }
 
 export interface WorkspaceFilesResponse {

@@ -1,9 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { workbenchApi } from "../workbench/api";
 import { PHASE_LABEL } from "../workbench/constants";
 import { projectUpdated, toErrorMessage } from "../workbench/utils";
-import type { ProjectMeta, ProjectWorkspace, StateResponse } from "../workbench/types";
+import type {
+  ProjectMeta,
+  ProjectSettingsResponse,
+  ProjectWorkspace,
+  StateResponse,
+  ToolCatalogItem,
+} from "../workbench/types";
 
 const WORKSPACE_KIND_OPTIONS = [
   { value: "unity", label: "Unity" },
@@ -12,24 +19,18 @@ const WORKSPACE_KIND_OPTIONS = [
 ];
 
 const SETTINGS_SECTIONS = [
-  {
-    id: "overview",
-    label: "项目概览",
-    description: "查看当前项目状态与访问边界说明。",
-  },
-  {
-    id: "workspaces",
-    label: "工作区清单",
-    description: "管理允许 Agent 读取或操作的目录范围。",
-  },
-  {
-    id: "history",
-    label: "历史项目",
-    description: "查看已归档项目，并执行恢复或删除。",
-  },
+  { id: "general", label: "通用设置", hint: "写入总开关" },
+  { id: "overview", label: "项目概览", hint: "状态与边界" },
+  { id: "tools", label: "工具", hint: "能力目录" },
+  { id: "workspaces", label: "工作区清单", hint: "目录与权限" },
+  { id: "history", label: "历史项目", hint: "归档与恢复" },
 ] as const;
 
 type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number]["id"];
+
+interface SettingsPageProps {
+  isActive?: boolean;
+}
 
 function normalizeWorkspacePathInput(value: string): string {
   const trimmed = value.trim();
@@ -54,34 +55,73 @@ function sourceLabel(source?: string): string {
   return "用户添加";
 }
 
-interface SettingsPageProps {
-  isActive?: boolean;
+function toolCategoryLabel(category: string): string {
+  if (category === "workspace") return "工作区";
+  if (category === "unity") return "Unity";
+  if (category === "research") return "检索";
+  return "通用";
+}
+
+function toolStatusLabel(tool: ToolCatalogItem): string {
+  if (tool.writes_files) return "可写入";
+  if (tool.requires_workspace) return "需工作区";
+  return "只读";
 }
 
 export function SettingsPage({ isActive = false }: SettingsPageProps) {
   const [state, setState] = useState<StateResponse | null>(null);
   const [projects, setProjects] = useState<ProjectMeta[]>([]);
   const [workspaces, setWorkspaces] = useState<ProjectWorkspace[]>([]);
+  const [tools, setTools] = useState<ToolCatalogItem[]>([]);
+  const [projectSettings, setProjectSettings] =
+    useState<ProjectSettingsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [settingsSubmitting, setSettingsSubmitting] = useState(false);
   const [errorText, setErrorText] = useState("");
   const [successText, setSuccessText] = useState("");
-  const [activeSection, setActiveSection] = useState<SettingsSectionId>("overview");
+  const [activeSection, setActiveSection] =
+    useState<SettingsSectionId>("general");
   const [labelInput, setLabelInput] = useState("");
   const [kindInput, setKindInput] = useState("unity");
   const [pathInput, setPathInput] = useState("");
   const [writableInput, setWritableInput] = useState(false);
+  const [topbarSlot, setTopbarSlot] = useState<HTMLElement | null>(null);
+  const [projectPanelOpen, setProjectPanelOpen] = useState(false);
+  const [projectCreateMode, setProjectCreateMode] = useState(false);
+  const [projectTitleDraft, setProjectTitleDraft] = useState("");
+
+  const projectPanelRef = useRef<HTMLDivElement>(null);
+  const projectPanelButtonRef = useRef<HTMLButtonElement>(null);
 
   const activeProject = useMemo(
     () => projects.find((project) => project.id === state?.project_id),
     [projects, state?.project_id],
   );
+
+  const activeProjects = useMemo(
+    () => projects.filter((project) => !project.archived),
+    [projects],
+  );
+
   const archivedProjects = useMemo(
     () => projects.filter((project) => project.archived),
     [projects],
   );
 
-  const phaseLabel = PHASE_LABEL[state?.phase || ""] || state?.phase || "未开始";
+  const toolsByCategory = useMemo(
+    () =>
+      tools.reduce<Record<string, ToolCatalogItem[]>>((acc, tool) => {
+        const key = tool.category || "general";
+        if (!acc[key]) acc[key] = [];
+        acc[key]!.push(tool);
+        return acc;
+      }, {}),
+    [tools],
+  );
+
+  const phaseLabel =
+    PHASE_LABEL[state?.phase || ""] || state?.phase || "未开始";
   const currentProjectName =
     activeProject?.display_name || activeProject?.title || "未选择项目";
 
@@ -94,20 +134,51 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
     setLoading(true);
     setErrorText("");
     try {
-      const [nextState, nextProjects, nextWorkspaces] = await Promise.all([
+      const [nextState, nextProjects] = await Promise.all([
         workbenchApi.getState(),
         workbenchApi.getProjects(),
-        workbenchApi.getCurrentWorkspaces(),
       ]);
+
       setState(nextState);
       setProjects(nextProjects.projects || []);
-      setWorkspaces(nextWorkspaces.workspaces || []);
+
+      const [workspacesResult, toolsResult, projectSettingsResult] =
+        await Promise.allSettled([
+          workbenchApi.getCurrentWorkspaces(),
+          workbenchApi.getTools(),
+          workbenchApi.getCurrentProjectSettings(),
+        ]);
+
+      if (workspacesResult.status === "fulfilled") {
+        setWorkspaces(workspacesResult.value.workspaces || []);
+      } else {
+        setWorkspaces([]);
+      }
+
+      if (toolsResult.status === "fulfilled") {
+        setTools(toolsResult.value.tools || []);
+      } else {
+        setTools([]);
+      }
+
+      if (projectSettingsResult.status === "fulfilled") {
+        setProjectSettings(projectSettingsResult.value);
+      } else {
+        setProjectSettings({
+          project_id: nextState.project_id || nextProjects.active_project || "",
+          agent_file_write_enabled: true,
+        });
+      }
     } catch (error) {
       setErrorText(toErrorMessage(error));
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    setTopbarSlot(document.getElementById("topbar-center-slot"));
+  }, []);
 
   useEffect(() => {
     void refresh();
@@ -117,6 +188,79 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
     if (!isActive) return;
     void refresh();
   }, [isActive]);
+
+  useEffect(() => {
+    if (!projectPanelOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (
+        projectPanelRef.current?.contains(target) ||
+        projectPanelButtonRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setProjectPanelOpen(false);
+      setProjectCreateMode(false);
+      setProjectTitleDraft("");
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+    };
+  }, [projectPanelOpen]);
+
+  const closeProjectPanel = () => {
+    setProjectPanelOpen(false);
+    setProjectCreateMode(false);
+    setProjectTitleDraft("");
+  };
+
+  const openProject = async (projectId: string) => {
+    if (!projectId) return;
+    clearMessages();
+    try {
+      const selected = await workbenchApi.selectProject(projectId);
+      setState(selected.state);
+      setProjects((prev) => {
+        if (!prev.length) return prev;
+        return prev.map((project) =>
+          project.id === selected.active_project
+            ? { ...project, archived: false }
+            : project,
+        );
+      });
+      closeProjectPanel();
+      void refresh();
+    } catch (error) {
+      setErrorText(toErrorMessage(error));
+    }
+  };
+
+  const createProject = async (title: string) => {
+    const trimmed = title.trim();
+    if (!trimmed) {
+      setErrorText("请输入项目名称。");
+      return;
+    }
+    clearMessages();
+    try {
+      const created = await workbenchApi.createProject({
+        display_name: trimmed,
+        title: trimmed,
+      });
+      setState(created.state);
+      setProjects((prev) => [
+        created.project,
+        ...prev.filter((project) => project.id !== created.project.id),
+      ]);
+      closeProjectPanel();
+      void refresh();
+    } catch (error) {
+      setErrorText(toErrorMessage(error));
+    }
+  };
 
   const handleAddWorkspace = async () => {
     const root = normalizeWorkspacePathInput(pathInput);
@@ -198,16 +342,185 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
     }
   };
 
+  const handleToggleFileWrite = async (enabled: boolean) => {
+    setSettingsSubmitting(true);
+    clearMessages();
+    try {
+      const response = await workbenchApi.updateCurrentProjectSettings({
+        agent_file_write_enabled: enabled,
+      });
+      setProjectSettings(response);
+      setSuccessText(enabled ? "已开启 Agent 文件写入。" : "已关闭 Agent 文件写入。");
+    } catch (error) {
+      setErrorText(toErrorMessage(error));
+    } finally {
+      setSettingsSubmitting(false);
+    }
+  };
+
+  const topbarProjectNode =
+    isActive && topbarSlot
+      ? createPortal(
+          <div className="project-toolbar">
+            <div className="project-toolbar-info">
+              <div className="project-toolbar-meta">
+                <span className="project-toolbar-label">项目名</span>
+                <strong>{currentProjectName}</strong>
+              </div>
+              <div className="project-toolbar-meta">
+                <span className="project-toolbar-label">项目阶段</span>
+                <strong>{phaseLabel}</strong>
+              </div>
+              <div className="project-toolbar-meta">
+                <span className="project-toolbar-label">更新时间</span>
+                <strong>{projectUpdated(activeProject)}</strong>
+              </div>
+            </div>
+
+            <div className="project-toolbar-menu">
+              <button
+                ref={projectPanelButtonRef}
+                type="button"
+                className={`project-toolbar-toggle${projectPanelOpen ? " is-active" : ""}`}
+                onClick={() => {
+                  if (projectPanelOpen) {
+                    closeProjectPanel();
+                    return;
+                  }
+                  setProjectPanelOpen(true);
+                }}
+              >
+                项目选单
+              </button>
+
+              {projectPanelOpen ? (
+                <div ref={projectPanelRef} className="project-toolbar-panel">
+                  {!projectCreateMode ? (
+                    <>
+                      <div className="project-toolbar-panel-title">切换项目</div>
+                      <div className="project-toolbar-list">
+                        {activeProjects.map((project) => (
+                          <button
+                            key={project.id}
+                            type="button"
+                            className={`project-toolbar-item${
+                              project.id === state?.project_id ? " is-active" : ""
+                            }`}
+                            onClick={() => {
+                              void openProject(project.id);
+                            }}
+                          >
+                            <div className="project-toolbar-item-head">
+                              <strong>{project.display_name || project.id}</strong>
+                              {project.id === state?.project_id ? (
+                                <span className="tag active">当前</span>
+                              ) : null}
+                            </div>
+                            <div className="project-toolbar-item-sub">
+                              {(project.last_phase || "暂无阶段") +
+                                " · " +
+                                projectUpdated(project)}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        className="project-toolbar-create-entry"
+                        onClick={() => {
+                          setProjectCreateMode(true);
+                          setProjectTitleDraft("");
+                        }}
+                      >
+                        <span>新建项目</span>
+                        <span className="project-toolbar-create-plus">+</span>
+                      </button>
+                    </>
+                  ) : (
+                    <div className="project-toolbar-create">
+                      <div className="project-toolbar-panel-title">新建项目</div>
+                      <input
+                        value={projectTitleDraft}
+                        onChange={(event) => setProjectTitleDraft(event.target.value)}
+                        type="text"
+                        placeholder="输入项目名称"
+                        autoFocus
+                      />
+                      <div className="project-toolbar-create-actions">
+                        <button
+                          type="button"
+                          className="shell-btn primary"
+                          onClick={() => {
+                            void createProject(projectTitleDraft);
+                          }}
+                        >
+                          确认新建
+                        </button>
+                        <button
+                          type="button"
+                          className="shell-btn"
+                          onClick={() => {
+                            setProjectCreateMode(false);
+                            setProjectTitleDraft("");
+                          }}
+                        >
+                          取消
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          </div>,
+          topbarSlot,
+        )
+      : null;
+
+  const renderGeneral = () => (
+    <div className="settings-detail-stack">
+      <section className="settings-pane-card settings-pane-card-main">
+        <div className="settings-card-head">
+          <div>
+            <h2 className="settings-card-title">通用设置</h2>
+          </div>
+          <span className="settings-chip">
+            {projectSettings?.agent_file_write_enabled ? "已开启" : "已关闭"}
+          </span>
+        </div>
+
+        <div className="settings-form">
+          <label className="settings-toggle">
+            <input
+              type="checkbox"
+              checked={projectSettings?.agent_file_write_enabled ?? true}
+              disabled={loading || settingsSubmitting}
+              onChange={(event) => {
+                void handleToggleFileWrite(event.target.checked);
+              }}
+            />
+            <span>允许 Agent 写入当前项目工作区中的文件</span>
+          </label>
+
+          <div className="settings-note-strip">
+            <span className="settings-note-item">
+              关闭后，创建目录、写入、补丁、删除等写入类工具会被拒绝
+            </span>
+            <span className="settings-note-item">
+              开启后，仍然会继续受工作区可写权限约束
+            </span>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+
   const renderOverview = () => (
     <div className="settings-detail-stack">
-      <section className="settings-pane-card settings-pane-hero">
-        <div className="settings-pane-head">
+      <section className="settings-pane-card settings-pane-card-main">
+        <div className="settings-card-head">
           <div>
-            <div className="settings-kicker">项目设置</div>
-            <h1 className="settings-pane-title">{currentProjectName}</h1>
-            <p className="settings-pane-text">
-              这里用于维护当前项目的访问边界与基础配置信息。Agent 只能读取或操作你明确加入工作区清单的目录，不会自行扩大访问范围。
-            </p>
+            <h2 className="settings-card-title">项目概览</h2>
           </div>
           <button
             type="button"
@@ -217,47 +530,87 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
             }}
             disabled={loading}
           >
-            刷新设置
+            刷新
           </button>
         </div>
+
+        <div className="settings-inline-stats">
+          <div className="settings-inline-stat">
+            <span className="settings-stat-label">项目名称</span>
+            <strong>{currentProjectName}</strong>
+          </div>
+          <div className="settings-inline-stat">
+            <span className="settings-stat-label">当前阶段</span>
+            <strong>{phaseLabel}</strong>
+          </div>
+          <div className="settings-inline-stat">
+            <span className="settings-stat-label">工作区数量</span>
+            <strong>{workspaces.length}</strong>
+          </div>
+          <div className="settings-inline-stat">
+            <span className="settings-stat-label">工具总数</span>
+            <strong>{tools.length}</strong>
+          </div>
+          <div className="settings-inline-stat wide">
+            <span className="settings-stat-label">最近更新时间</span>
+            <strong>{projectUpdated(activeProject)}</strong>
+          </div>
+        </div>
+
+        <div className="settings-note-strip">
+          <span className="settings-note-item">Agent 只能访问已加入清单的目录</span>
+          <span className="settings-note-item">工作区边界由你手动维护</span>
+          <span className="settings-note-item">可写工作区建议按需开启</span>
+        </div>
       </section>
+    </div>
+  );
 
-      <section className="settings-overview-grid">
-        <article className="settings-pane-card">
-          <div className="settings-card-kicker">当前项目</div>
-          <h2 className="settings-card-title">项目状态</h2>
-          <div className="settings-stat-grid">
-            <div className="settings-stat">
-              <span className="settings-stat-label">项目名称</span>
-              <strong>{currentProjectName}</strong>
-            </div>
-            <div className="settings-stat">
-              <span className="settings-stat-label">当前阶段</span>
-              <strong>{phaseLabel}</strong>
-            </div>
-            <div className="settings-stat">
-              <span className="settings-stat-label">工作区数量</span>
-              <strong>{workspaces.length}</strong>
-            </div>
-            <div className="settings-stat">
-              <span className="settings-stat-label">最近更新</span>
-              <strong>{projectUpdated(activeProject)}</strong>
-            </div>
+  const renderTools = () => (
+    <div className="settings-detail-stack tools-detail-stack">
+      <section className="settings-pane-card settings-pane-card-main settings-pane-scroll-frame">
+        <div className="settings-card-head">
+          <div>
+            <h2 className="settings-card-title">工具目录</h2>
           </div>
-          <div className="settings-note-strip">
-            当前前端只要求输入项目名称，系统会在后台自动生成稳定的项目标识，不再要求手动填写项目 ID。
+          <span className="settings-chip">{tools.length} 项</span>
+        </div>
+        {!tools.length ? (
+          <div className="settings-empty">当前还没有可展示的工具能力。</div>
+        ) : (
+          <div className="tools-group-list">
+            {Object.entries(toolsByCategory).map(([category, items]) => (
+              <section key={category} className="tool-group">
+                <div className="tool-group-head">
+                  <h3>{toolCategoryLabel(category)}</h3>
+                  <span className="settings-chip">{items.length} 项</span>
+                </div>
+                <div className="tool-list">
+                  {items.map((tool) => (
+                    <article key={tool.name} className="tool-card">
+                      <div className="tool-card-head">
+                        <div>
+                          <h4>{tool.name}</h4>
+                          <div className="tool-card-meta">
+                            <span className="settings-chip subtle">
+                              {toolStatusLabel(tool)}
+                            </span>
+                            {tool.workspace_kind ? (
+                              <span className="settings-chip subtle">
+                                {kindLabel(tool.workspace_kind)}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                      <p className="tool-card-text">{tool.description}</p>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            ))}
           </div>
-        </article>
-
-        <article className="settings-pane-card">
-          <div className="settings-card-kicker">访问边界</div>
-          <h2 className="settings-card-title">工作区规则</h2>
-          <ul className="settings-bullets">
-            <li>只有加入清单的目录，Agent 才能读取或操作。</li>
-            <li>当前阶段由用户手动配置工作区，Agent 不能自行绑定目录。</li>
-            <li>可写工作区用于后续受控写入能力，默认建议保持关闭。</li>
-          </ul>
-        </article>
+        )}
       </section>
     </div>
   );
@@ -270,7 +623,8 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
     if (!workspaces.length) {
       return (
         <div className="settings-empty">
-          当前项目还没有工作区。你可以在右侧添加 Unity、Generic 或 Blender 工作区。
+          当前项目还没有工作区。你可以在右侧添加 Unity、Generic 或 Blender
+          工作区。
         </div>
       );
     }
@@ -314,33 +668,23 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
 
   const renderWorkspaces = () => (
     <div className="settings-detail-stack">
-      <section className="settings-pane-card settings-pane-hero">
-        <div className="settings-pane-head">
-          <div>
-            <div className="settings-kicker">工作区清单</div>
-            <h1 className="settings-pane-title">允许访问的目录</h1>
-            <p className="settings-pane-text">
-              这里列出当前项目允许 Agent 读取或操作的目录。你可以按项目需要添加 Unity、Generic 或 Blender 工作区。
-            </p>
-          </div>
-          <span className="settings-chip">{workspaces.length} 项</span>
-        </div>
-      </section>
-
       <section className="settings-workspace-layout">
-        <article className="settings-pane-card">
+        <article className="settings-pane-card settings-pane-card-main">
           <div className="settings-card-head">
             <div>
-              <div className="settings-card-kicker">已批准目录</div>
               <h2 className="settings-card-title">当前工作区</h2>
             </div>
+            <span className="settings-chip">{workspaces.length} 项</span>
           </div>
           {renderWorkspaceList()}
         </article>
 
-        <article className="settings-pane-card">
-          <div className="settings-card-kicker">新增工作区</div>
-          <h2 className="settings-card-title">加入当前项目</h2>
+        <article className="settings-pane-card settings-pane-card-side">
+          <div className="settings-card-head compact">
+            <div>
+              <h2 className="settings-card-title">添加工作区</h2>
+            </div>
+          </div>
           <div className="settings-form">
             <label className="settings-field">
               <span>显示名称</span>
@@ -354,7 +698,10 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
 
             <label className="settings-field">
               <span>工作区类型</span>
-              <select value={kindInput} onChange={(event) => setKindInput(event.target.value)}>
+              <select
+                value={kindInput}
+                onChange={(event) => setKindInput(event.target.value)}
+              >
                 {WORKSPACE_KIND_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
@@ -400,25 +747,12 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
 
   const renderHistory = () => (
     <div className="settings-detail-stack">
-      <section className="settings-pane-card settings-pane-hero">
-        <div className="settings-pane-head">
-          <div>
-            <div className="settings-kicker">历史项目</div>
-            <h1 className="settings-pane-title">已归档项目</h1>
-            <p className="settings-pane-text">
-              这里集中管理已经归档的项目。你可以恢复它们回到工作台，也可以在确认后永久删除。
-            </p>
-          </div>
-          <span className="settings-chip">{archivedProjects.length} 项</span>
-        </div>
-      </section>
-
-      <section className="settings-pane-card">
+      <section className="settings-pane-card settings-pane-card-main">
         <div className="settings-card-head">
           <div>
-            <div className="settings-card-kicker">归档列表</div>
             <h2 className="settings-card-title">项目历史</h2>
           </div>
+          <span className="settings-chip">{archivedProjects.length} 项</span>
         </div>
         {!archivedProjects.length ? (
           <div className="settings-empty">当前还没有历史项目。</div>
@@ -434,7 +768,9 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
                         <span className="settings-chip subtle">已归档</span>
                       </div>
                       <div className="workspace-source">
-                        {project.last_phase || "暂无阶段"} · {projectUpdated(project)}
+                        {(project.last_phase || "暂无阶段") +
+                          " · " +
+                          projectUpdated(project)}
                       </div>
                     </div>
                     <div className="workspace-actions">
@@ -471,44 +807,45 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
   );
 
   return (
-    <div className="settings-page">
-      <aside className="settings-sidebar">
-        <div className="settings-sidebar-head">
-          <div className="settings-kicker">设置</div>
-          <h1 className="settings-sidebar-title">项目设置</h1>
-          <p className="settings-sidebar-text">
-            通过左侧目录导航查看项目概览、工作区权限与历史项目，右侧展示当前设置项的详细内容。
-          </p>
-        </div>
+    <>
+      {topbarProjectNode}
+      <div className="settings-page">
+        <aside className="settings-sidebar">
+          <nav className="settings-nav" aria-label="设置目录">
+            {SETTINGS_SECTIONS.map((section) => {
+              const isCurrent = activeSection === section.id;
+              return (
+                <button
+                  key={section.id}
+                  type="button"
+                  className={`settings-nav-item${isCurrent ? " is-active" : ""}`}
+                  onClick={() => {
+                    clearMessages();
+                    setActiveSection(section.id);
+                  }}
+                >
+                  <span className="settings-nav-label">{section.label}</span>
+                  <span className="settings-nav-text">{section.hint}</span>
+                </button>
+              );
+            })}
+          </nav>
+        </aside>
 
-        <nav className="settings-nav" aria-label="设置目录">
-          {SETTINGS_SECTIONS.map((section) => {
-            const isActiveSection = activeSection === section.id;
-            return (
-              <button
-                key={section.id}
-                type="button"
-                className={`settings-nav-item${isActiveSection ? " is-active" : ""}`}
-                onClick={() => {
-                  clearMessages();
-                  setActiveSection(section.id);
-                }}
-              >
-                <span className="settings-nav-label">{section.label}</span>
-                <span className="settings-nav-text">{section.description}</span>
-              </button>
-            );
-          })}
-        </nav>
-      </aside>
-
-      <main className="settings-detail">
-        {activeSection === "overview" ? renderOverview() : null}
-        {activeSection === "workspaces" ? renderWorkspaces() : null}
-        {activeSection === "history" ? renderHistory() : null}
-        {successText ? <div className="settings-feedback success">{successText}</div> : null}
-        {errorText ? <div className="settings-feedback error">{errorText}</div> : null}
-      </main>
-    </div>
+        <main className="settings-detail">
+          {activeSection === "general" ? renderGeneral() : null}
+          {activeSection === "overview" ? renderOverview() : null}
+          {activeSection === "tools" ? renderTools() : null}
+          {activeSection === "workspaces" ? renderWorkspaces() : null}
+          {activeSection === "history" ? renderHistory() : null}
+          {successText ? (
+            <div className="settings-feedback success">{successText}</div>
+          ) : null}
+          {errorText ? (
+            <div className="settings-feedback error">{errorText}</div>
+          ) : null}
+        </main>
+      </div>
+    </>
   );
 }

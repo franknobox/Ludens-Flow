@@ -81,7 +81,7 @@ body {
 }
 
 .topbar-tabs-box {
-  justify-content: flex-end;
+  justify-content: center;
 }
 
 .topbar-center-slot {
@@ -97,6 +97,25 @@ body {
   min-width: 0;
 }
 
+.topbar-brand-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.topbar-logo {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  display: block;
+}
+
+.topbar-brand-text {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
 .topbar-title {
   font-size: 15px;
   font-weight: 800;
@@ -105,7 +124,7 @@ body {
 }
 
 .topbar-subtitle {
-  margin-top: 2px;
+  margin-top: 1px;
   font-size: 11px;
   color: var(--muted);
 }
@@ -115,6 +134,7 @@ body {
   align-items: center;
   gap: 8px;
   padding: 4px;
+  width: min(100%, 280px);
   border-radius: 999px;
   background: rgba(239, 243, 248, 0.92);
   border: 1px solid rgba(215, 224, 234, 0.9);
@@ -122,7 +142,8 @@ body {
 
 .topbar-tab {
   height: 36px;
-  min-width: 112px;
+  flex: 1 1 0;
+  min-width: 0;
   padding: 0 16px;
   border: none;
   border-radius: 999px;

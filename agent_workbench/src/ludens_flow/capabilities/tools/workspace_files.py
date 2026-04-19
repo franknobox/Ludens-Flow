@@ -26,6 +26,10 @@ def _read_text_file(path: Path, *, max_chars: int) -> tuple[str, bool]:
     return content[:max_chars], True
 
 
+def _normalize_text(value: Any) -> str:
+    return str(value or "")
+
+
 def workspace_read_files_batch(
     paths: list[str],
     *,
@@ -126,12 +130,6 @@ def workspace_write_text_file(
             "TARGET_NOT_A_FILE",
             f"Target exists but is not a file: {target.relative_path}",
         )
-    if not target.target.parent.exists():
-        raise WorkspaceAccessError(
-            "PARENT_DIRECTORY_MISSING",
-            f"Parent directory does not exist inside workspace: {target.target.parent}",
-        )
-
     _emit_tool_event(
         tool_event_handler,
         {
@@ -150,7 +148,7 @@ def workspace_write_text_file(
         if target.target.exists()
         else None
     )
-    target.target.write_text(str(content or ""), encoding="utf-8")
+    target.target.write_text(_normalize_text(content), encoding="utf-8")
 
     change_type = "created" if previous_content is None else "modified"
     _emit_tool_event(
@@ -168,7 +166,7 @@ def workspace_write_text_file(
             "change_type": change_type,
             "summary": (
                 f"{change_type.capitalize()} {target.relative_path} "
-                f"({len(str(content or ''))} chars)"
+                f"({len(_normalize_text(content))} chars)"
             ),
         },
     )
@@ -177,7 +175,244 @@ def workspace_write_text_file(
         f"Workspace: {target.binding.workspace.get('id', '')} ({target.binding.workspace.get('label', '')})\n"
         f"File: {target.relative_path}\n"
         f"Result: {change_type}\n"
-        f"Characters Written: {len(str(content or ''))}"
+        f"Characters Written: {len(_normalize_text(content))}"
+    )
+
+
+def workspace_create_directory(
+    path: str,
+    *,
+    workspace_id: Optional[str] = None,
+    project_id: Optional[str] = None,
+    tool_event_handler: _ToolEventHandler = None,
+) -> str:
+    target = resolve_workspace_target(
+        project_id,
+        workspace_id=workspace_id,
+        relative_path=path,
+        operation="create",
+        require_enabled=True,
+        require_writable=True,
+    )
+    if target.target.exists() and not target.target.is_dir():
+        raise WorkspaceAccessError(
+            "TARGET_NOT_A_DIRECTORY",
+            f"Target exists but is not a directory: {target.relative_path}",
+        )
+
+    _emit_tool_event(
+        tool_event_handler,
+        {
+            "type": "tool_progress",
+            "tool_name": "workspace_create_directory",
+            "args": {
+                "workspace_id": target.binding.workspace.get("id"),
+                "path": target.relative_path,
+            },
+            "message": f"Creating directory: {target.relative_path}",
+        },
+    )
+
+    existed = target.target.exists()
+    target.target.mkdir(parents=True, exist_ok=True)
+
+    _emit_tool_event(
+        tool_event_handler,
+        {
+            "type": "file_changed",
+            "tool_name": "workspace_create_directory",
+            "args": {
+                "workspace_id": target.binding.workspace.get("id"),
+                "path": target.relative_path,
+            },
+            "workspace_id": target.binding.workspace.get("id"),
+            "workspace_label": target.binding.workspace.get("label", ""),
+            "path": target.relative_path,
+            "change_type": "directory_created" if not existed else "directory_verified",
+            "summary": (
+                f"{'Created' if not existed else 'Verified'} directory {target.relative_path}"
+            ),
+        },
+    )
+
+    return (
+        f"Workspace: {target.binding.workspace.get('id', '')} ({target.binding.workspace.get('label', '')})\n"
+        f"Directory: {target.relative_path}\n"
+        f"Result: {'created' if not existed else 'already_exists'}"
+    )
+
+
+def workspace_delete_file(
+    path: str,
+    *,
+    workspace_id: Optional[str] = None,
+    project_id: Optional[str] = None,
+    tool_event_handler: _ToolEventHandler = None,
+) -> str:
+    target = check_workspace_write_permission(
+        project_id,
+        workspace_id=workspace_id,
+        relative_path=path,
+    )
+    if not target.target.exists():
+        raise WorkspaceAccessError(
+            "FILE_NOT_FOUND",
+            f"File does not exist in workspace: {target.relative_path}",
+        )
+    if not target.target.is_file():
+        raise WorkspaceAccessError(
+            "TARGET_NOT_A_FILE",
+            f"Target is not a file: {target.relative_path}",
+        )
+
+    _emit_tool_event(
+        tool_event_handler,
+        {
+            "type": "tool_progress",
+            "tool_name": "workspace_delete_file",
+            "args": {
+                "workspace_id": target.binding.workspace.get("id"),
+                "path": target.relative_path,
+            },
+            "message": f"Deleting file: {target.relative_path}",
+        },
+    )
+
+    target.target.unlink()
+
+    _emit_tool_event(
+        tool_event_handler,
+        {
+            "type": "file_changed",
+            "tool_name": "workspace_delete_file",
+            "args": {
+                "workspace_id": target.binding.workspace.get("id"),
+                "path": target.relative_path,
+            },
+            "workspace_id": target.binding.workspace.get("id"),
+            "workspace_label": target.binding.workspace.get("label", ""),
+            "path": target.relative_path,
+            "change_type": "deleted",
+            "summary": f"Deleted file {target.relative_path}",
+        },
+    )
+
+    return (
+        f"Workspace: {target.binding.workspace.get('id', '')} ({target.binding.workspace.get('label', '')})\n"
+        f"File: {target.relative_path}\n"
+        "Result: deleted"
+    )
+
+
+def workspace_patch_text_file(
+    path: str,
+    patches: list[dict[str, Any]],
+    *,
+    workspace_id: Optional[str] = None,
+    project_id: Optional[str] = None,
+    tool_event_handler: _ToolEventHandler = None,
+) -> str:
+    if not isinstance(patches, list) or not patches:
+        raise WorkspaceAccessError(
+            "INVALID_ARGUMENT",
+            "Provide a non-empty list of patch operations.",
+        )
+
+    target = check_workspace_write_permission(
+        project_id,
+        workspace_id=workspace_id,
+        relative_path=path,
+    )
+    if not target.target.exists():
+        raise WorkspaceAccessError(
+            "FILE_NOT_FOUND",
+            f"File does not exist in workspace: {target.relative_path}",
+        )
+    if not target.target.is_file():
+        raise WorkspaceAccessError(
+            "TARGET_NOT_A_FILE",
+            f"Target is not a file: {target.relative_path}",
+        )
+
+    original = target.target.read_text(encoding="utf-8", errors="replace")
+    updated = original
+    applied = 0
+
+    _emit_tool_event(
+        tool_event_handler,
+        {
+            "type": "tool_progress",
+            "tool_name": "workspace_patch_text_file",
+            "args": {
+                "workspace_id": target.binding.workspace.get("id"),
+                "path": target.relative_path,
+            },
+            "message": f"Patching file: {target.relative_path}",
+        },
+    )
+
+    for index, patch in enumerate(patches, start=1):
+        if not isinstance(patch, dict):
+            raise WorkspaceAccessError(
+                "INVALID_ARGUMENT",
+                f"Patch #{index} must be an object.",
+            )
+        find = _normalize_text(patch.get("find"))
+        replace = _normalize_text(patch.get("replace"))
+        replace_all = bool(patch.get("replace_all", False))
+        if not find:
+            raise WorkspaceAccessError(
+                "INVALID_ARGUMENT",
+                f"Patch #{index} is missing a non-empty 'find' string.",
+            )
+        occurrences = updated.count(find)
+        if occurrences <= 0:
+            raise WorkspaceAccessError(
+                "PATCH_TARGET_NOT_FOUND",
+                f"Patch #{index} could not find target text in {target.relative_path}.",
+            )
+        if not replace_all and occurrences > 1:
+            raise WorkspaceAccessError(
+                "PATCH_AMBIGUOUS",
+                f"Patch #{index} matched multiple locations in {target.relative_path}. Set replace_all=true to replace all occurrences.",
+            )
+        updated = (
+            updated.replace(find, replace)
+            if replace_all
+            else updated.replace(find, replace, 1)
+        )
+        applied += occurrences if replace_all else 1
+
+    if updated == original:
+        raise WorkspaceAccessError(
+            "PATCH_NO_CHANGE",
+            f"Patches did not change the file: {target.relative_path}",
+        )
+
+    target.target.write_text(updated, encoding="utf-8")
+
+    _emit_tool_event(
+        tool_event_handler,
+        {
+            "type": "file_changed",
+            "tool_name": "workspace_patch_text_file",
+            "args": {
+                "workspace_id": target.binding.workspace.get("id"),
+                "path": target.relative_path,
+            },
+            "workspace_id": target.binding.workspace.get("id"),
+            "workspace_label": target.binding.workspace.get("label", ""),
+            "path": target.relative_path,
+            "change_type": "patched",
+            "summary": f"Patched {target.relative_path} ({applied} changes)",
+        },
+    )
+
+    return (
+        f"Workspace: {target.binding.workspace.get('id', '')} ({target.binding.workspace.get('label', '')})\n"
+        f"File: {target.relative_path}\n"
+        f"Result: patched\n"
+        f"Changes Applied: {applied}"
     )
 
 
@@ -235,6 +470,97 @@ WORKSPACE_WRITE_TEXT_FILE_TOOL_SCHEMA = {
                 },
             },
             "required": ["path", "content"],
+        },
+    },
+}
+
+
+WORKSPACE_CREATE_DIRECTORY_TOOL_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "workspace_create_directory",
+        "description": "Create a directory inside an approved writable workspace. Parent folders will be created when needed.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "workspace_id": {
+                    "type": "string",
+                    "description": "Optional workspace id from the project's approved workspace list. Required when multiple workspaces are configured.",
+                },
+                "path": {
+                    "type": "string",
+                    "description": "Relative directory path inside the approved writable workspace.",
+                },
+            },
+            "required": ["path"],
+        },
+    },
+}
+
+
+WORKSPACE_DELETE_FILE_TOOL_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "workspace_delete_file",
+        "description": "Delete a text file inside an approved writable workspace.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "workspace_id": {
+                    "type": "string",
+                    "description": "Optional workspace id from the project's approved workspace list. Required when multiple workspaces are configured.",
+                },
+                "path": {
+                    "type": "string",
+                    "description": "Relative file path inside the approved writable workspace.",
+                },
+            },
+            "required": ["path"],
+        },
+    },
+}
+
+
+WORKSPACE_PATCH_TEXT_FILE_TOOL_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "workspace_patch_text_file",
+        "description": "Apply exact text replacements to a text file inside an approved writable workspace.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "workspace_id": {
+                    "type": "string",
+                    "description": "Optional workspace id from the project's approved workspace list. Required when multiple workspaces are configured.",
+                },
+                "path": {
+                    "type": "string",
+                    "description": "Relative file path inside the approved writable workspace.",
+                },
+                "patches": {
+                    "type": "array",
+                    "description": "One or more exact text replacement operations.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "find": {
+                                "type": "string",
+                                "description": "Exact text to find.",
+                            },
+                            "replace": {
+                                "type": "string",
+                                "description": "Replacement text.",
+                            },
+                            "replace_all": {
+                                "type": "boolean",
+                                "description": "When true, replace every occurrence instead of only one.",
+                            },
+                        },
+                        "required": ["find", "replace"],
+                    },
+                },
+            },
+            "required": ["path", "patches"],
         },
     },
 }

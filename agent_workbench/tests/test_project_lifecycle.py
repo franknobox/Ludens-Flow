@@ -377,6 +377,22 @@ class ProjectLifecycleTests(unittest.TestCase):
         deleted = api.delete_current_project_workspace("unity-alpha")
         self.assertEqual(deleted["workspaces"], [])
 
+    def test_api_can_read_and_update_current_project_settings(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+
+        current = api.get_current_project_settings()
+        self.assertEqual(current["project_id"], "alpha")
+        self.assertTrue(current["agent_file_write_enabled"])
+
+        updated = api.post_current_project_settings(
+            api.ProjectSettingsRequest(agent_file_write_enabled=False)
+        )
+        self.assertEqual(updated["project_id"], "alpha")
+        self.assertFalse(updated["agent_file_write_enabled"])
+
+        reloaded = api.get_current_project_settings()
+        self.assertFalse(reloaded["agent_file_write_enabled"])
+
     def test_api_workspace_create_returns_http_400_for_invalid_path(self):
         api.post_project(api.ProjectRequest(project_id="alpha"))
 

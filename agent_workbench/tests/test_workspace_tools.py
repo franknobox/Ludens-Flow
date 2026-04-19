@@ -14,6 +14,9 @@ from ludens_flow.core.paths import add_project_workspace
 from ludens_flow.core.state import init_workspace
 from ludens_flow.capabilities.tools.registry import dispatch_tool_call
 from ludens_flow.capabilities.tools.workspace_files import (
+    workspace_create_directory,
+    workspace_delete_file,
+    workspace_patch_text_file,
     workspace_read_files_batch,
     workspace_write_text_file,
 )
@@ -112,6 +115,67 @@ class WorkspaceToolsTests(unittest.TestCase):
             ["tool_progress", "file_changed"],
         )
 
+    def test_workspace_create_directory_then_write_cs_file(self):
+        events: list[dict] = []
+        create_output = dispatch_tool_call(
+            "workspace_create_directory",
+            {
+                "workspace_id": "generic-main",
+                "path": "Assets/Scripts/Gameplay",
+            },
+            project_id="alpha",
+            tool_event_handler=events.append,
+        )
+        self.assertIn("Result: created", create_output)
+        self.assertTrue((self.generic_root / "Assets" / "Scripts" / "Gameplay").is_dir())
+
+        write_output = dispatch_tool_call(
+            "workspace_write_text_file",
+            {
+                "workspace_id": "generic-main",
+                "path": "Assets/Scripts/Gameplay/StoryManager.cs",
+                "content": "public class StoryManager {}\n",
+            },
+            project_id="alpha",
+            tool_event_handler=events.append,
+        )
+        self.assertIn("Result: created", write_output)
+        self.assertEqual(
+            (self.generic_root / "Assets" / "Scripts" / "Gameplay" / "StoryManager.cs").read_text(
+                encoding="utf-8"
+            ),
+            "public class StoryManager {}\n",
+        )
+        self.assertIn("file_changed", [event["type"] for event in events])
+
+    def test_workspace_patch_text_file_applies_exact_replacement(self):
+        target = self.generic_root / "Scripts" / "PatchMe.cs"
+        target.write_text(
+            "public class PatchMe {\n    private int speed = 1;\n}\n",
+            encoding="utf-8",
+        )
+
+        output = workspace_patch_text_file(
+            "Scripts/PatchMe.cs",
+            [{"find": "speed = 1", "replace": "speed = 2"}],
+            project_id="alpha",
+            workspace_id="generic-main",
+        )
+        self.assertIn("Result: patched", output)
+        self.assertIn("speed = 2", target.read_text(encoding="utf-8"))
+
+    def test_workspace_delete_file_removes_existing_file(self):
+        target = self.generic_root / "Scripts" / "DeleteMe.cs"
+        target.write_text("public class DeleteMe {}\n", encoding="utf-8")
+
+        output = workspace_delete_file(
+            "Scripts/DeleteMe.cs",
+            project_id="alpha",
+            workspace_id="generic-main",
+        )
+        self.assertIn("Result: deleted", output)
+        self.assertFalse(target.exists())
+
     def test_workspace_write_text_file_rejects_disallowed_extensions(self):
         with self.assertRaises(WorkspaceAccessError) as ctx:
             workspace_write_text_file(
@@ -121,6 +185,21 @@ class WorkspaceToolsTests(unittest.TestCase):
                 workspace_id="generic-main",
             )
         self.assertEqual(ctx.exception.code, "FILE_TYPE_NOT_ALLOWED")
+
+    def test_workspace_write_text_file_respects_project_write_master_switch(self):
+        init_workspace(project_id="alpha")
+        from ludens_flow.core.paths import set_project_agent_file_write_enabled
+
+        set_project_agent_file_write_enabled(False, project_id="alpha")
+
+        with self.assertRaises(WorkspaceAccessError) as ctx:
+            workspace_write_text_file(
+                "Scripts/Blocked.cs",
+                "public class Blocked {}\n",
+                project_id="alpha",
+                workspace_id="generic-main",
+            )
+        self.assertEqual(ctx.exception.code, "PROJECT_WRITE_DISABLED")
 
     def test_workspace_read_files_batch_rejects_absolute_paths(self):
         with self.assertRaises(WorkspaceAccessError) as ctx:

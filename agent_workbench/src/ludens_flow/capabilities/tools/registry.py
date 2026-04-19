@@ -11,8 +11,14 @@ from ludens_flow.capabilities.tools.unity_files import (
     unity_read_file,
 )
 from ludens_flow.capabilities.tools.workspace_files import (
+    WORKSPACE_CREATE_DIRECTORY_TOOL_SCHEMA,
+    WORKSPACE_DELETE_FILE_TOOL_SCHEMA,
+    WORKSPACE_PATCH_TEXT_FILE_TOOL_SCHEMA,
     WORKSPACE_READ_FILES_BATCH_TOOL_SCHEMA,
     WORKSPACE_WRITE_TEXT_FILE_TOOL_SCHEMA,
+    workspace_create_directory,
+    workspace_delete_file,
+    workspace_patch_text_file,
     workspace_read_files_batch,
     workspace_write_text_file,
 )
@@ -21,12 +27,57 @@ from ludens_flow.capabilities.workspaces import WorkspaceAccessError
 
 COMMON_TOOL_SCHEMAS: List[Dict[str, Any]] = [
     SEARCH_TOOL_SCHEMA,
+    WORKSPACE_CREATE_DIRECTORY_TOOL_SCHEMA,
     WORKSPACE_READ_FILES_BATCH_TOOL_SCHEMA,
+    WORKSPACE_PATCH_TEXT_FILE_TOOL_SCHEMA,
     WORKSPACE_WRITE_TEXT_FILE_TOOL_SCHEMA,
+    WORKSPACE_DELETE_FILE_TOOL_SCHEMA,
     UNITY_LIST_DIR_TOOL_SCHEMA,
     UNITY_READ_FILE_TOOL_SCHEMA,
     UNITY_FIND_FILES_TOOL_SCHEMA,
 ]
+
+
+def list_common_tools() -> List[Dict[str, Any]]:
+    catalog: List[Dict[str, Any]] = []
+    for tool in COMMON_TOOL_SCHEMAS:
+        fn = (tool or {}).get("function", {})
+        name = str(fn.get("name", "") or "").strip()
+        if not name:
+            continue
+
+        category = "general"
+        workspace_kind = None
+        requires_workspace = False
+        writes_files = False
+
+        if name == "web_search":
+            category = "research"
+        elif name.startswith("workspace_"):
+            category = "workspace"
+            requires_workspace = True
+            writes_files = name in {
+                "workspace_create_directory",
+                "workspace_write_text_file",
+                "workspace_patch_text_file",
+                "workspace_delete_file",
+            }
+        elif name.startswith("unity_"):
+            category = "unity"
+            workspace_kind = "unity"
+            requires_workspace = True
+
+        catalog.append(
+            {
+                "name": name,
+                "description": str(fn.get("description", "") or "").strip(),
+                "category": category,
+                "workspace_kind": workspace_kind,
+                "requires_workspace": requires_workspace,
+                "writes_files": writes_files,
+            }
+        )
+    return catalog
 
 
 def merge_tool_schemas(
@@ -64,10 +115,35 @@ def dispatch_tool_call(
                 max_total_chars=args.get("max_total_chars", 40000),
             )
 
+        if tool_name == "workspace_create_directory":
+            return workspace_create_directory(
+                path=args.get("path", ""),
+                workspace_id=args.get("workspace_id"),
+                project_id=project_id,
+                tool_event_handler=tool_event_handler,
+            )
+
         if tool_name == "workspace_write_text_file":
             return workspace_write_text_file(
                 path=args.get("path", ""),
                 content=args.get("content", ""),
+                workspace_id=args.get("workspace_id"),
+                project_id=project_id,
+                tool_event_handler=tool_event_handler,
+            )
+
+        if tool_name == "workspace_patch_text_file":
+            return workspace_patch_text_file(
+                path=args.get("path", ""),
+                patches=args.get("patches", []),
+                workspace_id=args.get("workspace_id"),
+                project_id=project_id,
+                tool_event_handler=tool_event_handler,
+            )
+
+        if tool_name == "workspace_delete_file":
+            return workspace_delete_file(
+                path=args.get("path", ""),
                 workspace_id=args.get("workspace_id"),
                 project_id=project_id,
                 tool_event_handler=tool_event_handler,

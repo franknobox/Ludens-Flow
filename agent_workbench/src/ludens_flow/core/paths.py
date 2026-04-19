@@ -302,6 +302,9 @@ def _migrate_project_meta_payload(
         "last_phase": meta.get("last_phase", ""),
         "archived": _coerce_bool(meta.get("archived", False)),
         "last_message_preview": str(meta.get("last_message_preview", "") or ""),
+        "agent_file_write_enabled": _coerce_bool(
+            meta.get("agent_file_write_enabled", True)
+        ),
         "unity_root": _first_workspace_root(workspaces, kind="unity"),
         "workspaces": workspaces,
     }
@@ -342,6 +345,9 @@ def _build_project_meta_record(
         "last_phase": meta.get("last_phase", ""),
         "archived": _coerce_bool(meta.get("archived", False)),
         "last_message_preview": meta.get("last_message_preview", ""),
+        "agent_file_write_enabled": _coerce_bool(
+            meta.get("agent_file_write_enabled", True)
+        ),
         "unity_root": _first_workspace_root(workspaces, kind="unity"),
         "workspaces": workspaces,
     }
@@ -359,6 +365,7 @@ def _upsert_project_meta(
     last_phase: Optional[str] = None,
     archived: Optional[bool] = None,
     last_message_preview: Optional[str] = None,
+    agent_file_write_enabled: Any = _UNSET,
     unity_root: Any = _UNSET,
     workspaces: Any = _UNSET,
 ) -> Dict[str, Any]:
@@ -395,6 +402,9 @@ def _upsert_project_meta(
         "last_phase": existing.get("last_phase", ""),
         "archived": _coerce_bool(existing.get("archived", False)),
         "last_message_preview": existing.get("last_message_preview", ""),
+        "agent_file_write_enabled": _coerce_bool(
+            existing.get("agent_file_write_enabled", True)
+        ),
         "unity_root": _first_workspace_root(existing_workspaces, kind="unity"),
         "workspaces": existing_workspaces,
     }
@@ -405,6 +415,8 @@ def _upsert_project_meta(
         meta["archived"] = bool(archived)
     if last_message_preview is not None:
         meta["last_message_preview"] = last_message_preview
+    if agent_file_write_enabled is not _UNSET:
+        meta["agent_file_write_enabled"] = _coerce_bool(agent_file_write_enabled)
     if unity_root is not _UNSET:
         if str(unity_root or "").strip():
             next_workspaces = [
@@ -567,6 +579,7 @@ def create_project(
     title: Optional[str] = None,
     set_active: bool = False,
     archived: Optional[bool] = None,
+    agent_file_write_enabled: Any = _UNSET,
     unity_root: Any = _UNSET,
     workspaces: Any = _UNSET,
 ) -> Dict[str, Any]:
@@ -580,6 +593,7 @@ def create_project(
         display_name=display_name,
         title=title,
         archived=archived,
+        agent_file_write_enabled=agent_file_write_enabled,
         unity_root=unity_root,
         workspaces=workspaces,
     )
@@ -598,6 +612,7 @@ def touch_project(
     last_phase: Optional[str] = None,
     archived: Optional[bool] = None,
     last_message_preview: Optional[str] = None,
+    agent_file_write_enabled: Any = _UNSET,
     unity_root: Any = _UNSET,
     workspaces: Any = _UNSET,
 ) -> Dict[str, Any]:
@@ -614,6 +629,7 @@ def touch_project(
         last_phase=last_phase,
         archived=archived,
         last_message_preview=last_message_preview,
+        agent_file_write_enabled=agent_file_write_enabled,
         unity_root=unity_root,
         workspaces=workspaces,
     )
@@ -730,6 +746,50 @@ def remove_project_workspace(
         project_id=resolved,
     )
     return meta
+
+
+def get_project_settings(project_id: Optional[str] = None) -> Dict[str, Any]:
+    resolved = resolve_project_id(project_id)
+    if not resolved:
+        raise ValueError("Project id is required.")
+
+    record = _build_project_meta_record(
+        resolved,
+        _read_project_meta(resolved),
+        get_project_dir(resolved),
+    )
+    return {
+        "project_id": resolved,
+        "agent_file_write_enabled": _coerce_bool(
+            record.get("agent_file_write_enabled", True)
+        ),
+    }
+
+
+def get_project_agent_file_write_enabled(project_id: Optional[str] = None) -> bool:
+    return _coerce_bool(
+        get_project_settings(project_id=project_id).get(
+            "agent_file_write_enabled", True
+        )
+    )
+
+
+def set_project_agent_file_write_enabled(
+    enabled: bool, *, project_id: Optional[str] = None
+) -> Dict[str, Any]:
+    resolved = resolve_project_id(project_id)
+    if not resolved:
+        raise ValueError("Project id is required.")
+    meta = touch_project(
+        resolved,
+        agent_file_write_enabled=_coerce_bool(enabled),
+    )
+    return {
+        "project_id": resolved,
+        "agent_file_write_enabled": _coerce_bool(
+            meta.get("agent_file_write_enabled", True)
+        ),
+    }
 
 
 def set_project_unity_root(

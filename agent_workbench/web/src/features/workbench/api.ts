@@ -2,10 +2,12 @@ import type {
   ChatResponse,
   ComposerAttachment,
   ProjectCreateResponse,
+  ProjectSettingsResponse,
   ProjectSelectResponse,
   ProjectsResponse,
   ProjectWorkspacesResponse,
   StateResponse,
+  ToolsResponse,
   WorkbenchEvent,
   WorkspaceFileContent,
   WorkspaceFileUpdateResponse,
@@ -70,6 +72,24 @@ export const workbenchApi = {
 
   getCurrentWorkspaces() {
     return fetchJson<ProjectWorkspacesResponse>("/api/projects/current/workspaces");
+  },
+
+  getCurrentProjectSettings() {
+    return fetchJson<ProjectSettingsResponse>("/api/projects/current/settings");
+  },
+
+  updateCurrentProjectSettings(body: {
+    agent_file_write_enabled: boolean;
+  }) {
+    return fetchJson<ProjectSettingsResponse>("/api/projects/current/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  },
+
+  getTools() {
+    return fetchJson<ToolsResponse>("/api/tools");
   },
 
   addCurrentWorkspace(body: {

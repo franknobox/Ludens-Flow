@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Iterable, Literal, Optional
 
 from ludens_flow.core.paths import (
+    get_project_agent_file_write_enabled,
     get_project_workspace,
     list_project_workspaces,
     resolve_project_id,
@@ -253,6 +254,11 @@ def check_workspace_write_permission(
         require_enabled=True,
         require_writable=True,
     )
+    if not get_project_agent_file_write_enabled(binding.project_id):
+        raise WorkspaceAccessError(
+            "PROJECT_WRITE_DISABLED",
+            "Agent file writing is disabled for the current project.",
+        )
     target_path = (binding.root / _clean_input_path(relative_path, allow_empty=False, allow_glob=False)).resolve()
     try:
         target_path.relative_to(binding.root)

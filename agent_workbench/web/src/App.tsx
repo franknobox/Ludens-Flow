@@ -13,8 +13,19 @@ export default function App() {
       <header className="topbar">
         <div className="topbar-block topbar-brand-box">
           <div className="topbar-brand">
-            <div className="topbar-title">Ludens-Flow</div>
-            <div className="topbar-subtitle">游戏开发工作台</div>
+            <div className="topbar-brand-line">
+              <img
+                className="topbar-logo"
+                src="/LF.svg?v=2"
+                alt="Ludens-Flow"
+                width={44}
+                height={44}
+              />
+              <div className="topbar-brand-text">
+                <div className="topbar-title">Ludens-Flow</div>
+                <div className="topbar-subtitle">游戏开发工作台</div>
+              </div>
+            </div>
           </div>
         </div>
 

@@ -19,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from ludens_flow.capabilities.ingest.attachment_ingest import build_attachment_user_input
 from ludens_flow.capabilities.artifacts.artifacts import read_artifact, write_artifact
 from ludens_flow.app.env import load_env_if_available
+from ludens_flow.capabilities.tools.registry import list_common_tools
 from ludens_flow.core.graph import graph_step
 from ludens_flow.core.paths import (
     add_project_workspace,
@@ -26,6 +27,7 @@ from ludens_flow.core.paths import (
     clear_project_unity_root,
     create_project,
     delete_project,
+    get_project_settings,
     get_project_unity_root,
     list_project_workspaces,
     list_active_projects,
@@ -35,6 +37,7 @@ from ludens_flow.core.paths import (
     rename_project,
     resolve_project_id,
     restore_project,
+    set_project_agent_file_write_enabled,
     set_active_project_id,
     set_project_unity_root,
 )
@@ -86,6 +89,10 @@ class ProjectWorkspaceRequest(BaseModel):
     label: str | None = None
     writable: bool = False
     enabled: bool = True
+
+
+class ProjectSettingsRequest(BaseModel):
+    agent_file_write_enabled: bool
 
 
 class ActionRequest(BaseModel):
@@ -277,34 +284,47 @@ def _summarize_tool_call(tool_name: str, args: dict) -> str:
             else ""
         )
         workspace_note = f" @{workspace_id}" if workspace_id else ""
-        return f"??????{workspace_note}?{count} ?"
+        return f"批量读取文件{workspace_note}：{count} 个"
+    if tool_name == "workspace_create_directory":
+        target_path = str(args.get("path", "") or "").strip() or "(未提供路径)"
+        return f"创建目录：{target_path}"
     if tool_name == "workspace_write_text_file":
-        target_path = str(args.get("path", "") or "").strip() or "(???)"
-        return f"?????{target_path}"
+        target_path = str(args.get("path", "") or "").strip() or "(未提供路径)"
+        return f"写入文件：{target_path}"
+    if tool_name == "workspace_patch_text_file":
+        target_path = str(args.get("path", "") or "").strip() or "(未提供路径)"
+        return f"修改文件：{target_path}"
+    if tool_name == "workspace_delete_file":
+        target_path = str(args.get("path", "") or "").strip() or "(未提供路径)"
+        return f"删除文件：{target_path}"
     if tool_name == "unity_list_dir":
         relative_path = str(args.get("relative_path", "") or "").strip() or "/"
-        return f"?????{relative_path}"
+        return f"列出目录：{relative_path}"
     if tool_name == "unity_read_file":
-        relative_path = str(args.get("relative_path", "") or "").strip() or "(???)"
-        return f"?????{relative_path}"
+        relative_path = str(args.get("relative_path", "") or "").strip() or "(未提供路径)"
+        return f"读取文件：{relative_path}"
     if tool_name == "unity_find_files":
         pattern = str(args.get("pattern", "*.cs") or "*.cs").strip()
         relative_path = str(args.get("relative_path", "") or "").strip() or "/"
-        return f"?????{relative_path} ??? {pattern}"
+        return f"查找文件：{relative_path} 内匹配 {pattern}"
     if tool_name == "web_search":
-        query = str(args.get("query", "") or "").strip() or "(???)"
-        return f"?????{query}"
+        query = str(args.get("query", "") or "").strip() or "(未提供关键词)"
+        return f"搜索网络：{query}"
     return tool_name
 
 
 def _summarize_tool_result(tool_name: str, result: str) -> str:
     text = str(result or "").strip()
     if not text:
-        return "???????????"
-    if tool_name in {"unity_list_dir", "unity_find_files", "workspace_read_files_batch"}:
+        return "工具执行完成。"
+    if tool_name in {
+        "unity_list_dir",
+        "unity_find_files",
+        "workspace_read_files_batch",
+    }:
         lines = [line for line in text.splitlines() if line.strip()]
-        return f"??? {len(lines)} ????"
-    return (text[:120] + "?") if len(text) > 120 else text
+        return f"共返回 {len(lines)} 行结果"
+    return (text[:120] + "…") if len(text) > 120 else text
 
 
 def _build_tool_event_handler(project_id: str, state) -> callable:
@@ -337,7 +357,7 @@ def _build_tool_event_handler(project_id: str, state) -> callable:
             payload["change_type"] = str(event.get("change_type", "") or "")
             payload["message"] = str(event.get("summary", "") or "")
         if event_type == "tool_failed":
-            payload["error"] = str(event.get("error", "") or "???????")
+            payload["error"] = str(event.get("error", "") or "工具执行失败。")
         _publish_project_event(project_id, payload)
 
     return emit
@@ -696,6 +716,28 @@ def get_current_project_workspaces():
     return {
         "project_id": project_id,
         "workspaces": list_project_workspaces(project_id=project_id, include_disabled=True),
+    }
+
+
+@app.get("/api/projects/current/settings")
+def get_current_project_settings():
+    project_id = resolve_project_id()
+    return get_project_settings(project_id=project_id)
+
+
+@app.post("/api/projects/current/settings")
+def post_current_project_settings(req: ProjectSettingsRequest):
+    project_id = resolve_project_id()
+    return set_project_agent_file_write_enabled(
+        req.agent_file_write_enabled,
+        project_id=project_id,
+    )
+
+
+@app.get("/api/tools")
+def get_tool_catalog():
+    return {
+        "tools": list_common_tools(),
     }
 
 
