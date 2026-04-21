@@ -1,3 +1,9 @@
+"""
+文件功能：状态子模块（state_workspace.py），服务项目级状态持久化与演进。
+核心内容：围绕状态读写、迁移、日志与项目工作区操作提供基础能力。
+核心内容：与 graph/router 协同，保证流程状态可追踪、可恢复、可扩展。
+"""
+
 import json
 import shutil
 import zipfile

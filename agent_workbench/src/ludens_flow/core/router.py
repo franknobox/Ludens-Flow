@@ -1,3 +1,9 @@
+"""
+文件功能：流程路由器，根据状态与用户输入决定下一阶段与动作。
+核心内容：统一维护 phase 枚举、显式动作识别和默认流转规则。
+核心内容：输出可解释的路由原因，供 graph 与前端动作面板复用。
+"""
+
 import logging
 import re
 from datetime import datetime, timezone

@@ -1,3 +1,7 @@
+// 文件功能：Workbench 前端类型定义中心，统一声明页面与接口数据结构。
+// 核心内容：定义项目、状态、消息、工具事件与设置等核心类型契约。
+// 核心内容：为 API 层和页面组件提供一致类型，降低跨模块耦合风险。
+
 export type AgentKey = "design" | "pm" | "engineering" | "review";
 
 export interface AgentDef {
@@ -166,6 +170,7 @@ export interface ProjectWorkspacesResponse {
 export interface ProjectSettingsResponse {
   project_id: string;
   agent_file_write_enabled: boolean;
+  model_routing?: Record<string, unknown>;
 }
 
 export interface ToolsResponse {

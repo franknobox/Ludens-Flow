@@ -1,3 +1,9 @@
+"""
+文件功能：项目生命周期测试集合，覆盖 API 与状态存储的关键路径。
+核心内容：验证创建/切换/归档/导入导出/设置更新等项目级行为。
+核心内容：确保 schema 迁移、审计日志与 workspace 管理逻辑稳定可回归。
+"""
+
 import json
 import os
 import shutil
@@ -383,6 +389,7 @@ class ProjectLifecycleTests(unittest.TestCase):
         current = api.get_current_project_settings()
         self.assertEqual(current["project_id"], "alpha")
         self.assertTrue(current["agent_file_write_enabled"])
+        self.assertEqual(current.get("model_routing"), {})
 
         updated = api.post_current_project_settings(
             api.ProjectSettingsRequest(agent_file_write_enabled=False)
@@ -392,6 +399,32 @@ class ProjectLifecycleTests(unittest.TestCase):
 
         reloaded = api.get_current_project_settings()
         self.assertFalse(reloaded["agent_file_write_enabled"])
+
+    def test_api_can_update_project_model_routing(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+
+        updated = api.post_current_project_settings(
+            api.ProjectSettingsRequest(
+                model_routing={
+                    "global": {
+                        "provider": "openai",
+                        "model": "gpt-4o-mini",
+                    },
+                    "agents": {
+                        "review": {
+                            "model": "o4-mini",
+                        }
+                    },
+                }
+            )
+        )
+
+        self.assertEqual(updated["project_id"], "alpha")
+        self.assertIn("model_routing", updated)
+        self.assertEqual(
+            updated["model_routing"]["agents"]["review"]["model"],
+            "o4-mini",
+        )
 
     def test_api_workspace_create_returns_http_400_for_invalid_path(self):
         api.post_project(api.ProjectRequest(project_id="alpha"))

@@ -1,3 +1,7 @@
+// 文件功能：Workbench 前端 API 访问层，统一封装所有 HTTP 请求。
+// 核心内容：提供状态、项目、会话、工作区文件与设置接口调用方法。
+// 核心内容：统一请求错误解析与 SSE 事件订阅，减少页面层重复逻辑。
+
 import type {
   ChatResponse,
   ComposerAttachment,
@@ -79,7 +83,8 @@ export const workbenchApi = {
   },
 
   updateCurrentProjectSettings(body: {
-    agent_file_write_enabled: boolean;
+    agent_file_write_enabled?: boolean;
+    model_routing?: Record<string, unknown>;
   }) {
     return fetchJson<ProjectSettingsResponse>("/api/projects/current/settings", {
       method: "POST",

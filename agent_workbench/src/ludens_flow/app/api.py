@@ -1,5 +1,8 @@
 """
-Ludens-Flow frontend API: provides state/chat/reset endpoints for Web workbench.
+文件功能：Web/API 入口层，向前端工作台提供状态、会话和项目操作接口。
+核心内容：封装项目生命周期、workspace、settings、SSE 事件推送等 HTTP 能力。
+核心内容：协调 graph/state/path 等 core 能力并返回前端可消费的数据结构。
+关联文件：core/graph.py, core/paths.py, core/state/, capabilities/*
 """
 
 import argparse
@@ -38,6 +41,7 @@ from ludens_flow.core.paths import (
     resolve_project_id,
     restore_project,
     set_project_agent_file_write_enabled,
+    set_project_model_routing,
     set_active_project_id,
     set_project_unity_root,
 )
@@ -92,7 +96,8 @@ class ProjectWorkspaceRequest(BaseModel):
 
 
 class ProjectSettingsRequest(BaseModel):
-    agent_file_write_enabled: bool
+    agent_file_write_enabled: bool | None = None
+    model_routing: dict | None = None
 
 
 class ActionRequest(BaseModel):
@@ -728,10 +733,22 @@ def get_current_project_settings():
 @app.post("/api/projects/current/settings")
 def post_current_project_settings(req: ProjectSettingsRequest):
     project_id = resolve_project_id()
-    return set_project_agent_file_write_enabled(
-        req.agent_file_write_enabled,
-        project_id=project_id,
-    )
+    if req.agent_file_write_enabled is None and req.model_routing is None:
+        raise HTTPException(status_code=400, detail="No settings field provided.")
+
+    if req.agent_file_write_enabled is not None:
+        set_project_agent_file_write_enabled(
+            req.agent_file_write_enabled,
+            project_id=project_id,
+        )
+
+    if req.model_routing is not None:
+        set_project_model_routing(
+            req.model_routing,
+            project_id=project_id,
+        )
+
+    return get_project_settings(project_id=project_id)
 
 
 @app.get("/api/tools")

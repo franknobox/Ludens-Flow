@@ -1,8 +1,16 @@
+"""
+文件功能：工作流图编排器，负责 phase 跳转、Agent 调用与状态落盘。
+核心内容：根据 router 决策分发 discuss/commit/coach 等模式并合并结果。
+核心内容：在节点执行前按项目路由解析模型配置，支撑 Agent/能力级多模型。
+关联文件：core/router.py, core/state/, llm/modelrouter.py
+"""
+
 import logging
 from typing import Tuple, Dict, Any, Optional
 
 from ludens_flow.capabilities.artifacts.artifacts import write_artifact
 from ludens_flow.capabilities.context.prompt_templates import load_prompt_template
+from llm.modelrouter import resolve_model_config
 from ludens_flow.core.state import LudensState, save_state, write_trace_log
 from ludens_flow.core.router import ludens_router_logic_with_action, Phase
 from ludens_flow.core.agents.base import AgentResult
@@ -27,6 +35,17 @@ _gdd_agent = DesignAgent()
 _pm_agent = PMAgent()
 _eng_agent = EngineeringAgent()
 _review_agent = ReviewAgent()
+
+
+def _mode_to_capability(mode: str) -> str:
+    mapping = {
+        "DISCUSS": "discuss",
+        "COMMIT": "commit",
+        "PLAN_DISCUSS": "plan_discuss",
+        "PLAN_COMMIT": "plan_commit",
+        "COACH": "coach",
+    }
+    return mapping.get(mode, "default")
 
 
 def _phase_to_agent_name(phase: str) -> str:
@@ -234,6 +253,14 @@ def run_agent_step(
         # 按 mode 分发到对应能力入口。
         result = None
         agent_state_snapshot = LudensState.from_dict(state.to_dict())
+        capability_key = _mode_to_capability(mode)
+        resolved_cfg = resolve_model_config(
+            project_id=state.project_id,
+            agent_key=getattr(agent, "agent_key", "base"),
+            capability=capability_key,
+            default_route=getattr(agent, "default_model_route", {}),
+            capability_defaults=getattr(agent, "capability_model_defaults", {}),
+        )
         try:
             if template_system:
                 agent.system_prompt = template_system
@@ -244,6 +271,7 @@ def run_agent_step(
                 result: AgentResult = agent.discuss(
                     agent_state_snapshot,
                     user_input,
+                    cfg=resolved_cfg,
                     user_persona=user_persona_block,
                     stream_handler=stream_handler,
                     tool_event_handler=tool_event_handler,
@@ -252,6 +280,7 @@ def run_agent_step(
                 result: AgentResult = agent.commit(
                     agent_state_snapshot,
                     user_input,
+                    cfg=resolved_cfg,
                     user_persona=user_persona_block,
                     tool_event_handler=tool_event_handler,
                 )
@@ -259,7 +288,7 @@ def run_agent_step(
                 result: AgentResult = getattr(agent, "plan_discuss")(
                     agent_state_snapshot,
                     user_input,
-                    None,
+                    resolved_cfg,
                     user_persona=user_persona_block,
                     stream_handler=stream_handler,
                     tool_event_handler=tool_event_handler,
@@ -268,7 +297,7 @@ def run_agent_step(
                 result: AgentResult = getattr(agent, "plan_commit")(
                     agent_state_snapshot,
                     user_input,
-                    None,
+                    resolved_cfg,
                     user_persona=user_persona_block,
                     tool_event_handler=tool_event_handler,
                 )
@@ -276,7 +305,7 @@ def run_agent_step(
                 result: AgentResult = getattr(agent, "coach")(
                     agent_state_snapshot,
                     user_input,
-                    None,
+                    resolved_cfg,
                     user_persona=user_persona_block,
                     stream_handler=stream_handler,
                     tool_event_handler=tool_event_handler,

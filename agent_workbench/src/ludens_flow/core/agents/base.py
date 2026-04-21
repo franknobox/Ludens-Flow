@@ -1,3 +1,9 @@
+"""
+文件功能：Agent 基类与统一结果契约定义。
+核心内容：封装 prompt 组装、模型调用、工具调用循环和流式输出逻辑。
+核心内容：提供 discuss/commit 抽象接口，供具体角色 Agent 继承实现。
+"""
+
 import json
 import logging
 import re
@@ -37,7 +43,10 @@ class BaseAgent(ABC):
     """Shared base class for all agents."""
 
     name: str = "BaseAgent"
+    agent_key: str = "base"
     system_prompt: str = ""
+    default_model_route: Dict[str, Any] = {}
+    capability_model_defaults: Dict[str, Dict[str, Any]] = {}
     _STREAM_BREAK_PATTERN = re.compile(r"(.+?(?:\n\n|[。！？!?]\s*|\n))", re.DOTALL)
 
     def _compose_user_prompt(

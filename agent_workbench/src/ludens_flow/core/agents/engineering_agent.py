@@ -1,3 +1,9 @@
+"""
+文件功能：engineering_agent 角色 Agent 实现，负责对应阶段的讨论与提交逻辑。
+核心内容：基于 BaseAgent 约定实现角色化提示词和工件产出规则。
+核心内容：输出统一 AgentResult，供 graph 编排层合并状态与推进流程。
+"""
+
 import logging
 import re
 from typing import Callable, Optional
@@ -15,6 +21,7 @@ class EngineeringAgent(BaseAgent):
     """Handles engineering preset discussion, implementation planning, and coaching."""
 
     name = "EngineeringAgent"
+    agent_key = "engineering"
 
     def discuss(
         self,

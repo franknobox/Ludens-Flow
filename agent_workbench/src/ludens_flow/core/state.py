@@ -1,13 +1,7 @@
-"""High-level state architecture overview.
-
-This module is intentionally lightweight and documentation-oriented.
-It exists at the package root to present the state design at a glance,
-while concrete implementations live under ``ludens_flow/core/state/``.
-
-Why this file exists:
-- show the state model in one place
-- clarify lifecycle and invariants for maintainers
-- keep orchestration code (graph/router) aligned with storage semantics
+"""
+文件功能：状态体系设计说明文件，用于展示高层状态架构思路。
+核心内容：总结状态数据源、生命周期、迁移策略与一致性模型。
+核心内容：提供可读摘要，帮助维护者快速建立状态心智模型。
 """
 
 from __future__ import annotations

@@ -1,3 +1,9 @@
+"""
+文件功能：pm_agent 角色 Agent 实现，负责对应阶段的讨论与提交逻辑。
+核心内容：基于 BaseAgent 约定实现角色化提示词和工件产出规则。
+核心内容：输出统一 AgentResult，供 graph 编排层合并状态与推进流程。
+"""
+
 import json
 import logging
 import re
@@ -16,6 +22,7 @@ class PMAgent(BaseAgent):
     """Handles project planning discussion, scope shaping, and PM commits."""
 
     name = "PMAgent"
+    agent_key = "pm"
 
     def discuss(
         self,

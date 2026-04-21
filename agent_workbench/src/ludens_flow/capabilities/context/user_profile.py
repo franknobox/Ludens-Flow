@@ -1,3 +1,9 @@
+"""
+文件功能：上下文能力模块（user_profile.py），负责提示模板与用户画像能力。
+核心内容：统一处理 prompt 模板加载、用户画像读写与格式化注入。
+核心内容：为 Agent 调用提供可复用上下文拼装能力。
+"""
+
 from __future__ import annotations
 
 import logging

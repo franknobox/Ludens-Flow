@@ -1,1 +1,6 @@
-"""Capability adapters: tools, context, ingest, workspace access."""
+"""
+文件功能：capabilities 包导出入口，组织当前子模块对外能力。
+核心内容：统一导出核心类型与函数，减少跨模块导入耦合。
+核心内容：为上层调用方提供稳定、可维护的包级接口。
+"""
+

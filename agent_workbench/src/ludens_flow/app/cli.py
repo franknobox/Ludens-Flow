@@ -1,3 +1,9 @@
+"""
+文件功能：CLI 入口层，提供命令行会话与流程操作能力。
+核心内容：封装用户输入解析、graph 调用与状态展示输出逻辑。
+核心内容：复用 core 路由与状态体系，保证与 Web/API 行为一致。
+"""
+
 import argparse
 import logging
 import os

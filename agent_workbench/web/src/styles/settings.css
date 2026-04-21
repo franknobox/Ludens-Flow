@@ -434,6 +434,61 @@
   background: #fff;
 }
 
+.settings-field textarea {
+  min-height: 220px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(29, 39, 52, 0.1);
+  background: rgba(248, 250, 253, 0.96);
+  color: #243041;
+  outline: none;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    background 0.16s ease;
+  font: 12px/1.55 var(--mono);
+  resize: vertical;
+}
+
+.settings-field textarea:focus {
+  border-color: rgba(22, 99, 255, 0.34);
+  box-shadow: 0 0 0 3px rgba(22, 99, 255, 0.08);
+  background: #fff;
+}
+
+.settings-json-editor.is-invalid {
+  border-color: rgba(197, 58, 47, 0.36);
+  box-shadow: 0 0 0 3px rgba(197, 58, 47, 0.12);
+  background: #fff8f8;
+}
+
+.settings-route-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.settings-inline-help {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(29, 39, 52, 0.08);
+  background: rgba(245, 248, 252, 0.9);
+  color: #5f6e82;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.settings-inline-error {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(197, 58, 47, 0.22);
+  background: rgba(255, 244, 243, 0.94);
+  color: #8c302a;
+  font-size: 12px;
+  line-height: 1.55;
+  font-weight: 600;
+}
+
 .settings-toggle {
   display: inline-flex;
   align-items: center;

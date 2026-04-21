@@ -1,3 +1,10 @@
+"""
+文件功能：项目与工作区路径管理器，统一维护项目元数据和目录结构。
+核心内容：提供项目创建、切换、归档、工作区绑定与 settings 读写能力。
+核心内容：负责 schema_version 迁移与 model_routing 持久化规范化处理。
+关联文件：core/state/, app/api.py, llm/modelrouter.py
+"""
+
 from __future__ import annotations
 
 import json
@@ -15,7 +22,7 @@ ACTIVE_PROJECT_FILE = ".active_project"
 PROJECTS_DIR_NAME = "projects"
 PROJECT_META_FILE_NAME = "meta.json"
 DEFAULT_PROJECT_PREFIX = "project"
-PROJECT_META_SCHEMA_VERSION = 3
+PROJECT_META_SCHEMA_VERSION = 4
 _UNSET = object()
 DEFAULT_UNITY_WORKSPACE_ID = "unity-main"
 SUPPORTED_WORKSPACE_KINDS = {"unity", "generic", "blender"}
@@ -87,6 +94,99 @@ def _normalize_workspace_kind(kind: Optional[str]) -> str:
             f"Unsupported workspace kind '{raw}'. Supported kinds: {', '.join(sorted(SUPPORTED_WORKSPACE_KINDS))}."
         )
     return raw
+
+
+def _normalize_model_route_entry(raw: Any) -> Dict[str, Any]:
+    if not isinstance(raw, dict):
+        return {}
+
+    entry: Dict[str, Any] = {}
+
+    provider = str(raw.get("provider") or "").strip().lower()
+    if provider:
+        entry["provider"] = provider
+
+    model = str(raw.get("model") or "").strip()
+    if model:
+        entry["model"] = model
+
+    base_url = str(raw.get("base_url") or "").strip()
+    if base_url:
+        entry["base_url"] = base_url
+
+    api_key_env = str(raw.get("api_key_env") or "").strip()
+    if api_key_env:
+        entry["api_key_env"] = api_key_env
+
+    if "temperature" in raw and raw.get("temperature") is not None:
+        try:
+            entry["temperature"] = float(raw.get("temperature"))
+        except (TypeError, ValueError):
+            pass
+
+    return entry
+
+
+def _normalize_model_routing(raw: Any) -> Dict[str, Any]:
+    if not isinstance(raw, dict):
+        return {}
+
+    normalized: Dict[str, Any] = {}
+
+    global_entry = _normalize_model_route_entry(raw.get("global"))
+    if global_entry:
+        normalized["global"] = global_entry
+
+    agents_raw = raw.get("agents")
+    if isinstance(agents_raw, dict):
+        agents: Dict[str, Dict[str, Any]] = {}
+        for key, value in agents_raw.items():
+            agent_key = str(key or "").strip().lower()
+            if not agent_key:
+                continue
+            entry = _normalize_model_route_entry(value)
+            if entry:
+                agents[agent_key] = entry
+        if agents:
+            normalized["agents"] = agents
+
+    capabilities_raw = raw.get("capabilities")
+    if isinstance(capabilities_raw, dict):
+        capabilities: Dict[str, Dict[str, Any]] = {}
+        for key, value in capabilities_raw.items():
+            capability_key = str(key or "").strip().lower()
+            if not capability_key:
+                continue
+            entry = _normalize_model_route_entry(value)
+            if entry:
+                capabilities[capability_key] = entry
+        if capabilities:
+            normalized["capabilities"] = capabilities
+
+    agent_capabilities_raw = raw.get("agent_capabilities")
+    if isinstance(agent_capabilities_raw, dict):
+        agent_capabilities: Dict[str, Dict[str, Dict[str, Any]]] = {}
+        for agent_key, capability_map in agent_capabilities_raw.items():
+            normalized_agent = str(agent_key or "").strip().lower()
+            if not normalized_agent or not isinstance(capability_map, dict):
+                continue
+
+            normalized_capabilities: Dict[str, Dict[str, Any]] = {}
+            for capability_key, value in capability_map.items():
+                normalized_capability = str(capability_key or "").strip().lower()
+                if not normalized_capability:
+                    continue
+                entry = _normalize_model_route_entry(value)
+                if entry:
+                    normalized_capabilities[normalized_capability] = entry
+
+            if normalized_capabilities:
+                agent_capabilities[normalized_agent] = normalized_capabilities
+
+        if agent_capabilities:
+            normalized["agent_capabilities"] = agent_capabilities
+
+    return normalized
 
 
 def _normalize_workspace_id(workspace_id: Optional[str], fallback: str) -> str:
@@ -305,6 +405,7 @@ def _migrate_project_meta_payload(
         "agent_file_write_enabled": _coerce_bool(
             meta.get("agent_file_write_enabled", True)
         ),
+        "model_routing": _normalize_model_routing(meta.get("model_routing")),
         "unity_root": _first_workspace_root(workspaces, kind="unity"),
         "workspaces": workspaces,
     }
@@ -348,6 +449,7 @@ def _build_project_meta_record(
         "agent_file_write_enabled": _coerce_bool(
             meta.get("agent_file_write_enabled", True)
         ),
+        "model_routing": _normalize_model_routing(meta.get("model_routing")),
         "unity_root": _first_workspace_root(workspaces, kind="unity"),
         "workspaces": workspaces,
     }
@@ -366,6 +468,7 @@ def _upsert_project_meta(
     archived: Optional[bool] = None,
     last_message_preview: Optional[str] = None,
     agent_file_write_enabled: Any = _UNSET,
+    model_routing: Any = _UNSET,
     unity_root: Any = _UNSET,
     workspaces: Any = _UNSET,
 ) -> Dict[str, Any]:
@@ -405,6 +508,7 @@ def _upsert_project_meta(
         "agent_file_write_enabled": _coerce_bool(
             existing.get("agent_file_write_enabled", True)
         ),
+        "model_routing": _normalize_model_routing(existing.get("model_routing")),
         "unity_root": _first_workspace_root(existing_workspaces, kind="unity"),
         "workspaces": existing_workspaces,
     }
@@ -417,6 +521,8 @@ def _upsert_project_meta(
         meta["last_message_preview"] = last_message_preview
     if agent_file_write_enabled is not _UNSET:
         meta["agent_file_write_enabled"] = _coerce_bool(agent_file_write_enabled)
+    if model_routing is not _UNSET:
+        meta["model_routing"] = _normalize_model_routing(model_routing)
     if unity_root is not _UNSET:
         if str(unity_root or "").strip():
             next_workspaces = [
@@ -580,6 +686,7 @@ def create_project(
     set_active: bool = False,
     archived: Optional[bool] = None,
     agent_file_write_enabled: Any = _UNSET,
+    model_routing: Any = _UNSET,
     unity_root: Any = _UNSET,
     workspaces: Any = _UNSET,
 ) -> Dict[str, Any]:
@@ -594,6 +701,7 @@ def create_project(
         title=title,
         archived=archived,
         agent_file_write_enabled=agent_file_write_enabled,
+        model_routing=model_routing,
         unity_root=unity_root,
         workspaces=workspaces,
     )
@@ -613,6 +721,7 @@ def touch_project(
     archived: Optional[bool] = None,
     last_message_preview: Optional[str] = None,
     agent_file_write_enabled: Any = _UNSET,
+    model_routing: Any = _UNSET,
     unity_root: Any = _UNSET,
     workspaces: Any = _UNSET,
 ) -> Dict[str, Any]:
@@ -630,6 +739,7 @@ def touch_project(
         archived=archived,
         last_message_preview=last_message_preview,
         agent_file_write_enabled=agent_file_write_enabled,
+        model_routing=model_routing,
         unity_root=unity_root,
         workspaces=workspaces,
     )
@@ -763,6 +873,7 @@ def get_project_settings(project_id: Optional[str] = None) -> Dict[str, Any]:
         "agent_file_write_enabled": _coerce_bool(
             record.get("agent_file_write_enabled", True)
         ),
+        "model_routing": _normalize_model_routing(record.get("model_routing")),
     }
 
 
@@ -789,6 +900,31 @@ def set_project_agent_file_write_enabled(
         "agent_file_write_enabled": _coerce_bool(
             meta.get("agent_file_write_enabled", True)
         ),
+        "model_routing": _normalize_model_routing(meta.get("model_routing")),
+    }
+
+
+def get_project_model_routing(project_id: Optional[str] = None) -> Dict[str, Any]:
+    return _normalize_model_routing(
+        get_project_settings(project_id=project_id).get("model_routing")
+    )
+
+
+def set_project_model_routing(
+    model_routing: Any, *, project_id: Optional[str] = None
+) -> Dict[str, Any]:
+    resolved = resolve_project_id(project_id)
+    if not resolved:
+        raise ValueError("Project id is required.")
+
+    normalized = _normalize_model_routing(model_routing)
+    meta = touch_project(resolved, model_routing=normalized)
+    return {
+        "project_id": resolved,
+        "agent_file_write_enabled": _coerce_bool(
+            meta.get("agent_file_write_enabled", True)
+        ),
+        "model_routing": _normalize_model_routing(meta.get("model_routing")),
     }
 
 

@@ -12,6 +12,27 @@ import type {
   ToolCatalogItem,
 } from "../workbench/types";
 
+const MODEL_ROUTING_TEMPLATE = {
+  global: {
+    provider: "openai",
+    model: "gpt-4o-mini",
+    temperature: 0.2,
+  },
+  agents: {
+    design: {
+      model: "gpt-4o",
+    },
+    review: {
+      model: "o4-mini",
+    },
+  },
+  capabilities: {
+    review_gate: {
+      model: "o4-mini",
+    },
+  },
+};
+
 const WORKSPACE_KIND_OPTIONS = [
   { value: "unity", label: "Unity" },
   { value: "generic", label: "Generic" },
@@ -90,6 +111,9 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
   const [projectPanelOpen, setProjectPanelOpen] = useState(false);
   const [projectCreateMode, setProjectCreateMode] = useState(false);
   const [projectTitleDraft, setProjectTitleDraft] = useState("");
+  const [modelRoutingDraft, setModelRoutingDraft] = useState("{}");
+  const [modelRoutingDirty, setModelRoutingDirty] = useState(false);
+  const [modelRoutingProjectId, setModelRoutingProjectId] = useState("");
 
   const projectPanelRef = useRef<HTMLDivElement>(null);
   const projectPanelButtonRef = useRef<HTMLButtonElement>(null);
@@ -129,6 +153,40 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
     setErrorText("");
     setSuccessText("");
   };
+
+  const modelRoutingValidation = useMemo(() => {
+    const raw = modelRoutingDraft.trim();
+    if (!raw) {
+      return {
+        parsed: {},
+        normalized: "{}",
+        error: "",
+      } as const;
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return {
+          parsed: null,
+          normalized: "",
+          error: "模型路由必须是 JSON 对象，不能是数组或基础类型。",
+        } as const;
+      }
+
+      return {
+        parsed: parsed as Record<string, unknown>,
+        normalized: JSON.stringify(parsed),
+        error: "",
+      } as const;
+    } catch (error) {
+      return {
+        parsed: null,
+        normalized: "",
+        error: `JSON 格式错误：${toErrorMessage(error)}`,
+      } as const;
+    }
+  }, [modelRoutingDraft]);
 
   const refresh = async () => {
     setLoading(true);
@@ -188,6 +246,24 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
     if (!isActive) return;
     void refresh();
   }, [isActive]);
+
+  useEffect(() => {
+    if (!projectSettings) return;
+
+    const sourceProjectId = projectSettings.project_id || "";
+    const sourceDraft = JSON.stringify(
+      projectSettings.model_routing || {},
+      null,
+      2,
+    );
+
+    const switchedProject = modelRoutingProjectId !== sourceProjectId;
+    if (switchedProject || !modelRoutingDirty) {
+      setModelRoutingDraft(sourceDraft);
+      setModelRoutingDirty(false);
+      setModelRoutingProjectId(sourceProjectId);
+    }
+  }, [projectSettings, modelRoutingDirty, modelRoutingProjectId]);
 
   useEffect(() => {
     if (!projectPanelOpen) return;
@@ -358,6 +434,32 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
     }
   };
 
+  const handleSaveModelRouting = async () => {
+    if (modelRoutingValidation.error || !modelRoutingValidation.parsed) {
+      setErrorText(modelRoutingValidation.error || "模型路由配置无效，无法保存。");
+      setActiveSection("general");
+      return;
+    }
+
+    setSettingsSubmitting(true);
+    clearMessages();
+    try {
+      const response = await workbenchApi.updateCurrentProjectSettings({
+        model_routing: modelRoutingValidation.parsed,
+      });
+      setProjectSettings(response);
+      setModelRoutingDraft(
+        JSON.stringify(response.model_routing || {}, null, 2),
+      );
+      setModelRoutingDirty(false);
+      setSuccessText("模型路由已保存。新请求会按新路由生效。");
+    } catch (error) {
+      setErrorText(toErrorMessage(error));
+    } finally {
+      setSettingsSubmitting(false);
+    }
+  };
+
   const topbarProjectNode =
     isActive && topbarSlot
       ? createPortal(
@@ -510,6 +612,93 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
               开启后，仍然会继续受工作区可写权限约束
             </span>
           </div>
+        </div>
+      </section>
+
+      <section className="settings-pane-card settings-pane-card-main">
+        <div className="settings-card-head">
+          <div>
+            <h2 className="settings-card-title">模型路由</h2>
+          </div>
+          <span className="settings-chip">
+            {modelRoutingDirty ? "有未保存修改" : "已同步"}
+          </span>
+        </div>
+
+        <div className="settings-form">
+          <div className="settings-note-strip">
+            <span className="settings-note-item">优先级：agent_capabilities</span>
+            <span className="settings-note-item">{"> capabilities > agents > global"}</span>
+            <span className="settings-note-item">最后回退到 .env 默认模型</span>
+          </div>
+
+          <div className="settings-route-actions">
+            <button
+              type="button"
+              className="settings-pill-button"
+              disabled={settingsSubmitting}
+              onClick={() => {
+                setModelRoutingDraft(
+                  JSON.stringify(MODEL_ROUTING_TEMPLATE, null, 2),
+                );
+                setModelRoutingDirty(true);
+                clearMessages();
+              }}
+            >
+              填入推荐模板
+            </button>
+            <button
+              type="button"
+              className="settings-pill-button"
+              disabled={settingsSubmitting}
+              onClick={() => {
+                setModelRoutingDraft("{}");
+                setModelRoutingDirty(true);
+                clearMessages();
+              }}
+            >
+              清空为全局默认
+            </button>
+          </div>
+
+          <label className="settings-field">
+            <span>model_routing（JSON）</span>
+            <textarea
+              className={`settings-json-editor${
+                modelRoutingValidation.error ? " is-invalid" : ""
+              }`}
+              value={modelRoutingDraft}
+              onChange={(event) => {
+                setModelRoutingDraft(event.target.value);
+                setModelRoutingDirty(true);
+              }}
+              spellCheck={false}
+              placeholder='例如：{"global":{"provider":"openai","model":"gpt-4o-mini"}}'
+            />
+          </label>
+
+          {modelRoutingValidation.error ? (
+            <div className="settings-inline-error">{modelRoutingValidation.error}</div>
+          ) : (
+            <div className="settings-inline-help">
+              支持字段：`global` / `agents` / `capabilities` / `agent_capabilities`。
+            </div>
+          )}
+
+          <button
+            type="button"
+            className="settings-primary-button"
+            disabled={
+              settingsSubmitting ||
+              !modelRoutingDirty ||
+              Boolean(modelRoutingValidation.error)
+            }
+            onClick={() => {
+              void handleSaveModelRouting();
+            }}
+          >
+            保存模型路由
+          </button>
         </div>
       </section>
     </div>

@@ -1,3 +1,9 @@
+"""
+文件功能：结构化协议子模块（discuss.py），定义并解析关键输出协议。
+核心内容：统一处理 discuss/review 等阶段的 JSON 结构化内容抽取。
+核心内容：为 Agent 与 graph 提供稳定协议边界，降低输出漂移风险。
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
