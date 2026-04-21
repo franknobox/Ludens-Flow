@@ -38,9 +38,33 @@ export function agentName(key: AgentKey): string {
 }
 
 export function projectUpdated(project: ProjectMeta | undefined): string {
-  return project?.updated_at
-    ? String(project.updated_at).replace("T", " ").replace("Z", "")
-    : "暂无活动";
+  if (!project?.updated_at) {
+    return "暂无活动";
+  }
+
+  const raw = String(project.updated_at).replace("T", " ").replace("Z", "").trim();
+  const date = new Date(project.updated_at);
+  if (isNaN(date.getTime())) {
+    return raw || "暂无活动";
+  }
+
+  const diffMs = Date.now() - date.getTime();
+  if (diffMs < 60 * 1000) {
+    return "刚刚";
+  }
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hour = String(date.getHours()).padStart(2, "0");
+  const minute = String(date.getMinutes()).padStart(2, "0");
+
+  const now = new Date();
+  if (year === now.getFullYear() && month === String(now.getMonth() + 1).padStart(2, "0") && day === String(now.getDate()).padStart(2, "0")) {
+    return `${hour}:${minute}`;
+  }
+
+  return `${year}-${month}-${day} ${hour}:${minute}`;
 }
 
 export function transientMessageText(

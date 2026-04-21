@@ -1065,7 +1065,30 @@ def rename_project(project_id: str, display_name: str) -> Dict[str, Any]:
     if not cleaned_name:
         raise ValueError("Display name is required.")
 
-    return touch_project(normalized, display_name=cleaned_name, title=cleaned_name)
+    target_id = _normalize_project_id(cleaned_name)
+    if not target_id:
+        raise ValueError("Display name must contain at least one valid character.")
+
+    if target_id == normalized:
+        return touch_project(normalized, display_name=cleaned_name, title=cleaned_name)
+
+    projects_dir = get_projects_dir()
+    source_dir = projects_dir / normalized
+    target_dir = projects_dir / target_id
+
+    if not source_dir.exists():
+        raise FileNotFoundError(f"Project directory not found: {normalized}")
+    if target_dir.exists():
+        raise FileExistsError(f"Project already exists: {target_id}")
+
+    source_dir.rename(target_dir)
+
+    if _normalize_project_id(os.getenv(PROJECT_ENV_VAR)) == normalized:
+        os.environ[PROJECT_ENV_VAR] = target_id
+    if get_active_project_id() == normalized:
+        set_active_project_id(target_id)
+
+    return touch_project(target_id, display_name=cleaned_name, title=cleaned_name)
 
 
 def delete_project(project_id: str) -> str:

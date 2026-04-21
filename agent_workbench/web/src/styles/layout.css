@@ -296,11 +296,14 @@ body {
 .project-toolbar-item {
   width: 100%;
   text-align: left;
-  padding: 12px 14px;
-  border-radius: 16px;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 14px;
   border: 1px solid rgba(29, 39, 52, 0.08);
   background: rgba(244, 247, 251, 0.96);
   cursor: pointer;
+  display: flex;
+  align-items: center;
 }
 
 .project-toolbar-item:hover,
@@ -311,16 +314,51 @@ body {
 
 .project-toolbar-item-head {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  align-items: flex-end;
+  width: 100%;
   gap: 10px;
   color: #1f2b3c;
 }
 
+.project-toolbar-item-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  line-height: 1.2;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.project-toolbar-item-meta-row {
+  min-width: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
 .project-toolbar-item-sub {
-  margin-top: 6px;
+  margin-top: 0;
   font-size: 12px;
+  line-height: 1;
   color: #617185;
+  white-space: nowrap;
+}
+
+.project-toolbar-item-head .tag {
+  margin-left: auto;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 22px;
+}
+
+.project-toolbar-item-head .tag.active {
+  background: rgba(17, 121, 95, 0.22);
+  color: #93f0d0;
 }
 
 .project-toolbar-create-entry {
@@ -388,6 +426,77 @@ body {
   border-color: rgba(29, 39, 52, 0.18);
 }
 
+.project-toolbar-settings {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid rgba(29, 39, 52, 0.12);
+  border-radius: 999px;
+  background: #fff;
+  color: #344255;
+  font-size: 16px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+  flex-shrink: 0;
+}
+
+.project-toolbar-settings:hover,
+.project-toolbar-settings.is-active {
+  background: rgba(244, 247, 252, 0.98);
+  border-color: rgba(22, 99, 255, 0.18);
+}
+
+.project-toolbar-settings-panel {
+  width: 280px;
+  right: 0;
+}
+
+.project-toolbar-settings-section {
+  padding: 8px 4px;
+  border-top: 1px solid rgba(29, 39, 52, 0.08);
+  display: grid;
+  gap: 8px;
+}
+
+.project-toolbar-settings-section:first-of-type {
+  border-top: none;
+}
+
+.project-toolbar-settings-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #617185;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.project-toolbar-settings-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.project-toolbar-settings-input {
+  flex: 1;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(29, 39, 52, 0.12);
+  background: rgba(248, 250, 253, 0.96);
+  color: #243041;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.project-toolbar-settings-input:focus {
+  border-color: rgba(22, 99, 255, 0.34);
+  box-shadow: 0 0 0 3px rgba(22, 99, 255, 0.08);
+  background: #fff;
+}
 
 @media (max-width: 1180px) {
   .topbar {

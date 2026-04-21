@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 
 import { workbenchApi } from "./api";
 import { PHASE_LABEL } from "./constants";
+import { useProjectRuntime } from "./state/ProjectRuntimeContext";
 import { LeftSidebar } from "./components/LeftSidebar";
 import { MainPanel } from "./components/MainPanel";
 import { RightSidebar } from "./components/RightSidebar";
@@ -74,22 +75,6 @@ function mergeChatResponse(
   };
 }
 
-function applyStateSnapshot(
-  prev: WorkbenchStateModel,
-  state: StateResponse,
-  projects?: WorkbenchStateModel["projects"],
-  activeProjects?: WorkbenchStateModel["active_projects"],
-  archivedProjects?: WorkbenchStateModel["archived_projects"],
-): WorkbenchStateModel {
-  return {
-    ...toModelState(state),
-    projects: projects || prev.projects,
-    active_projects: activeProjects || prev.active_projects,
-    archived_projects: archivedProjects || prev.archived_projects,
-    files: prev.files,
-  };
-}
-
 function fileCacheKey(projectId: string, fileId: string): string {
   return `${projectId}::${fileId}`;
 }
@@ -119,6 +104,17 @@ type WorkbenchPageProps = {
 };
 
 export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
+  const {
+    runtimeState,
+    projects,
+    activeProjects: runtimeActiveProjects,
+    archivedProjects: runtimeArchivedProjects,
+    refreshRuntime,
+    selectProject,
+    createProject: createRuntimeProject,
+    subscribeEvents,
+  } = useProjectRuntime();
+
   const [model, setModel] = useState<WorkbenchStateModel>(INITIAL_MODEL);
   const [currentView, setCurrentView] = useState<ViewState>({
     type: "agent",
@@ -132,19 +128,25 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
   const [projectPanelOpen, setProjectPanelOpen] = useState(false);
   const [projectCreateMode, setProjectCreateMode] = useState(false);
   const [projectTitleDraft, setProjectTitleDraft] = useState("");
+  const [projectSettingsOpen, setProjectSettingsOpen] = useState(false);
+  const [renameDraft, setRenameDraft] = useState("");
+  const [archiveSubmitting, setArchiveSubmitting] = useState(false);
 
   const contentAreaRef = useRef<HTMLElement>(null);
   const lastEventAtRef = useRef(0);
+  const lastSyncedProjectIdRef = useRef("");
   const projectPanelRef = useRef<HTMLDivElement>(null);
   const projectPanelButtonRef = useRef<HTMLButtonElement>(null);
+  const projectSettingsPanelRef = useRef<HTMLDivElement>(null);
+  const projectSettingsButtonRef = useRef<HTMLButtonElement>(null);
   const [topbarSlot, setTopbarSlot] = useState<HTMLElement | null>(null);
 
   const historyByAgent = useMemo(() => buildHistoryByAgent(model), [model]);
   const activeProject = useMemo(
-    () => model.projects.find((project) => project.id === model.project_id),
-    [model.project_id, model.projects],
+    () => runtimeActiveProjects.find((p) => p.id === runtimeState?.project_id),
+    [runtimeActiveProjects, runtimeState?.project_id],
   );
-  const activeProjects = model.active_projects.length ? model.active_projects : model.projects;
+  const activeProjects = runtimeActiveProjects.length ? runtimeActiveProjects : projects;
   const projectName = activeProject?.display_name || model.project_id || "未选择项目";
   const readOnly = currentView.type !== "agent" || currentView.id !== model.current_agent;
 
@@ -172,26 +174,40 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
     setProjectTitleDraft("");
   };
 
-  const syncStateOnly = async (): Promise<StateResponse> => {
-    const state = await workbenchApi.getState();
-    setModel((prev) => ({
-      ...toModelState(state),
-      projects: prev.projects,
-      active_projects: prev.active_projects,
-      archived_projects: prev.archived_projects,
-      files: prev.files,
-    }));
-    return state;
+  const closeProjectSettings = () => {
+    setProjectSettingsOpen(false);
+    setRenameDraft("");
   };
 
-  const syncProjectsOnly = async () => {
-    const data = await workbenchApi.getProjects();
-    setModel((prev) => ({
-      ...prev,
-      projects: data.projects || [],
-      active_projects: data.active_projects || data.projects || [],
-      archived_projects: data.archived_projects || [],
-    }));
+  const handleRenameProject = async () => {
+    const trimmed = renameDraft.trim();
+    if (!trimmed || !activeProject) return;
+    try {
+      await workbenchApi.renameProject(activeProject.id, trimmed);
+      await refreshRuntime();
+      setRenameDraft("");
+      setProjectSettingsOpen(false);
+    } catch (error) {
+      setErrorText("重命名失败：" + toErrorMessage(error));
+    }
+  };
+
+  const handleArchiveProject = async () => {
+    if (!activeProject || activeProject.archived) return;
+    const confirmed = window.confirm(
+      `要将“${activeProject.display_name || activeProject.id}”归档吗？\n\n归档后它会从当前项目列表中移除，可以从设置页历史项目中恢复。`,
+    );
+    if (!confirmed) return;
+    setArchiveSubmitting(true);
+    try {
+      await workbenchApi.archiveProject(activeProject.id);
+      await refreshRuntime();
+      setProjectSettingsOpen(false);
+    } catch (error) {
+      setErrorText("归档失败：" + toErrorMessage(error));
+    } finally {
+      setArchiveSubmitting(false);
+    }
   };
 
   const syncFilesOnly = async () => {
@@ -203,41 +219,11 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
   };
 
   const hardRefresh = async () => {
-    const [state, projects, files] = await Promise.all([
-      workbenchApi.getState(),
-      workbenchApi.getProjects(),
-      workbenchApi.getWorkspaceFiles(),
-    ]);
-
-    setModel({
-      ...toModelState(state),
-      projects: projects.projects || [],
-      active_projects: projects.active_projects || projects.projects || [],
-      archived_projects: projects.archived_projects || [],
-      files: files.files || [],
-    });
-    setCurrentView((prev) =>
-      prev.type === "file"
-        ? prev
-        : {
-            type: "agent",
-            id: state.current_agent || phaseToAgent(state.phase),
-          },
-    );
+    await Promise.all([refreshRuntime(), syncFilesOnly()]);
   };
 
   const handleWorkbenchEvent = (event: WorkbenchEvent) => {
     lastEventAtRef.current = Date.now();
-
-    if (event.type === "projects_updated") {
-      setModel((prev) => ({
-        ...prev,
-        projects: event.projects || prev.projects,
-        active_projects: event.active_projects || event.projects || prev.active_projects,
-        archived_projects: event.archived_projects || prev.archived_projects,
-      }));
-      return;
-    }
 
     if (event.type === "run_started") {
       setRequestInFlight(true);
@@ -337,42 +323,20 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
     }
 
     if (event.type === "state_updated" || event.type === "connected") {
-      if (event.state) {
-        setModel((prev) =>
-          applyStateSnapshot(
-            prev,
-            event.state as StateResponse,
-            event.projects,
-            event.active_projects || event.projects,
-            event.archived_projects,
-          ),
-        );
-        setCurrentView((prev) =>
-          prev.type === "agent"
-            ? {
-                type: "agent",
-                id: event.state?.current_agent || phaseToAgent(event.state?.phase || ""),
-              }
-            : prev,
-        );
-      }
+      setCurrentView((prev) =>
+        prev.type === "agent"
+          ? {
+              type: "agent",
+              id: event.state?.current_agent || phaseToAgent(event.state?.phase || ""),
+            }
+          : prev,
+      );
       clearTransientChat();
       setRequestInFlight(false);
       return;
     }
 
     if (event.type === "run_failed") {
-      if (event.state) {
-        setModel((prev) =>
-          applyStateSnapshot(
-            prev,
-            event.state as StateResponse,
-            event.projects,
-            event.active_projects || event.projects,
-            event.archived_projects,
-          ),
-        );
-      }
       clearTransientChat();
       setRequestInFlight(false);
       setErrorText(event.error || "请求失败。");
@@ -390,26 +354,10 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
     setErrorText("");
     setWarningText("");
     try {
-      const selected = await workbenchApi.selectProject(projectId);
+      await selectProject(projectId);
       clearTransientChat();
       setFileCache({});
-      setModel((prev) =>
-        applyStateSnapshot(
-          prev,
-          selected.state,
-          prev.projects,
-          prev.active_projects,
-          prev.archived_projects,
-        ),
-      );
-      setCurrentView({
-        type: "agent",
-        id: selected.state.current_agent || phaseToAgent(selected.state.phase),
-      });
       closeProjectPanel();
-      void syncProjectsOnly().catch(() => {
-        // keep project switching responsive even if project list refresh is delayed
-      });
       void syncFilesOnly().catch(() => {
         // workspace files can refresh lazily
       });
@@ -444,18 +392,14 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
 
       const updatedState = data.state;
       if (updatedState) {
-        setModel((prev) =>
-          applyStateSnapshot(
-            prev,
-            updatedState,
-            prev.projects,
-            prev.active_projects,
-            prev.archived_projects,
-          ),
-        );
+        setModel((prev) => ({
+          ...prev,
+          ...toModelState(updatedState),
+          files: prev.files,
+        }));
       }
-      void syncProjectsOnly().catch(() => {
-        // do not block save completion on project metadata refresh
+      void refreshRuntime().catch(() => {
+        // do not block save completion on runtime metadata refresh
       });
     } catch (error) {
       throw new Error(`保存失败：${toErrorMessage(error)}`);
@@ -471,40 +415,10 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
 
     setErrorText("");
     try {
-      const created = await workbenchApi.createProject({
-        display_name: displayName,
-        title: displayName,
-      });
+      await createRuntimeProject(displayName);
       clearTransientChat();
       setFileCache({});
-      setModel((prev) => {
-        const nextProjects = [
-          created.project,
-          ...prev.projects.filter((item) => item.id !== created.project.id),
-        ];
-        const nextActiveProjects = [
-          created.project,
-          ...prev.active_projects.filter((item) => item.id !== created.project.id),
-        ];
-        const nextArchivedProjects = prev.archived_projects.filter(
-          (item) => item.id !== created.project.id,
-        );
-        return applyStateSnapshot(
-          prev,
-          created.state,
-          nextProjects,
-          nextActiveProjects,
-          nextArchivedProjects,
-        );
-      });
-      setCurrentView({
-        type: "agent",
-        id: created.state.current_agent || phaseToAgent(created.state.phase),
-      });
       closeProjectPanel();
-      void syncProjectsOnly().catch(() => {
-        // background normalization refresh
-      });
       void syncFilesOnly().catch(() => {
         // workspace files can refresh lazily
       });
@@ -550,8 +464,7 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
       setFileCache({});
       window.setTimeout(() => {
         if (Date.now() - lastEventAtRef.current > 800) {
-          void syncStateOnly();
-          void syncProjectsOnly();
+          void refreshRuntime();
           clearTransientChat();
         }
       }, 600);
@@ -590,8 +503,7 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
       setFileCache({});
       window.setTimeout(() => {
         if (Date.now() - lastEventAtRef.current > 800) {
-          void syncStateOnly();
-          void syncProjectsOnly();
+          void refreshRuntime();
           clearTransientChat();
         }
       }, 600);
@@ -603,6 +515,40 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
       setRequestInFlight(false);
     }
   };
+
+  useEffect(() => {
+    if (!runtimeState) {
+      return;
+    }
+
+    setModel((prev) => ({
+      ...prev,
+      ...toModelState(runtimeState),
+      projects,
+      active_projects: runtimeActiveProjects,
+      archived_projects: runtimeArchivedProjects,
+      files: prev.files,
+    }));
+    setCurrentView((prev) =>
+      prev.type === "agent"
+        ? {
+            type: "agent",
+            id: runtimeState.current_agent || phaseToAgent(runtimeState.phase),
+          }
+        : prev,
+    );
+  }, [runtimeState, projects, runtimeActiveProjects, runtimeArchivedProjects]);
+
+  useEffect(() => {
+    if (!model.project_id || lastSyncedProjectIdRef.current === model.project_id) {
+      return;
+    }
+    lastSyncedProjectIdRef.current = model.project_id;
+    setFileCache({});
+    void syncFilesOnly().catch(() => {
+      // keep UI responsive even if artifact list refresh is delayed
+    });
+  }, [model.project_id]);
 
   useEffect(() => {
     void hardRefresh().catch((error) => {
@@ -643,14 +589,8 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
   }, [model.project_id, transientChat, requestInFlight]);
 
   useEffect(() => {
-    if (!model.project_id) {
-      return;
-    }
-    const source = workbenchApi.openProjectEvents(model.project_id, handleWorkbenchEvent);
-    return () => {
-      source.close();
-    };
-  }, [model.project_id]);
+    return subscribeEvents(handleWorkbenchEvent);
+  }, [subscribeEvents]);
 
   useEffect(() => {
     setTopbarSlot(document.getElementById("topbar-center-slot"));
@@ -677,6 +617,28 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
       document.removeEventListener("mousedown", handlePointerDown);
     };
   }, [projectPanelOpen]);
+
+  useEffect(() => {
+    if (!projectSettingsOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (
+        projectSettingsPanelRef.current?.contains(target) ||
+        projectSettingsButtonRef.current?.contains(target)
+      ) {
+        return;
+      }
+      closeProjectSettings();
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+    };
+  }, [projectSettingsOpen]);
 
   useEffect(() => {
     if (currentView.type !== "agent") {
@@ -737,11 +699,80 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
               closeProjectPanel();
               return;
             }
+            setProjectSettingsOpen(false);
             setProjectPanelOpen(true);
           }}
         >
           项目选单
         </button>
+
+        <button
+          ref={projectSettingsButtonRef}
+          type="button"
+          className={`project-toolbar-settings${projectSettingsOpen ? " is-active" : ""}`}
+          onClick={() => {
+            if (projectSettingsOpen) {
+              closeProjectSettings();
+              return;
+            }
+            setProjectPanelOpen(false);
+            setRenameDraft(activeProject?.display_name || activeProject?.title || "");
+            setProjectSettingsOpen(true);
+          }}
+          title="项目设置"
+        >
+          ⚙
+        </button>
+
+        {projectSettingsOpen ? (
+          <div ref={projectSettingsPanelRef} className="project-toolbar-panel project-toolbar-settings-panel">
+            <div className="project-toolbar-panel-title">项目设置</div>
+
+            <div className="project-toolbar-settings-section">
+              <div className="project-toolbar-settings-label">重命名项目</div>
+              <div className="project-toolbar-settings-row">
+                <input
+                  className="project-toolbar-settings-input"
+                  type="text"
+                  value={renameDraft}
+                  onChange={(event) => setRenameDraft(event.target.value)}
+                  placeholder="输入新名称"
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && renameDraft.trim()) {
+                      void handleRenameProject();
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="shell-btn primary compact"
+                  disabled={!renameDraft.trim() || renameDraft === (activeProject?.display_name || activeProject?.title)}
+                  onClick={() => {
+                    void handleRenameProject();
+                  }}
+                >
+                  确认
+                </button>
+              </div>
+            </div>
+
+            {!activeProject?.archived ? (
+              <div className="project-toolbar-settings-section">
+                <div className="project-toolbar-settings-label">归档项目</div>
+                <button
+                  type="button"
+                  className="shell-btn danger compact"
+                  disabled={archiveSubmitting}
+                  onClick={() => {
+                    void handleArchiveProject();
+                  }}
+                >
+                  {archiveSubmitting ? "归档中…" : "归档当前项目"}
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         {projectPanelOpen ? (
           <div ref={projectPanelRef} className="project-toolbar-panel">
@@ -761,13 +792,27 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
                       }}
                     >
                       <div className="project-toolbar-item-head">
-                        <strong>{project.display_name || project.id}</strong>
+                        <strong className="project-toolbar-item-name">
+                          {project.display_name || project.id}
+                        </strong>
+                        <div className="project-toolbar-item-meta-row">
+                          <span className="project-toolbar-item-sub">
+                            {PHASE_LABEL[
+                              project.id === model.project_id
+                                ? model.phase || project.last_phase || ""
+                                : project.last_phase || ""
+                            ] ||
+                              (project.id === model.project_id
+                                ? model.phase || project.last_phase || "暂无阶段"
+                                : project.last_phase || "暂无阶段")}
+                          </span>
+                          <span className="project-toolbar-item-sub">
+                            {projectUpdated(project)}
+                          </span>
+                        </div>
                         {project.id === model.project_id ? (
                           <span className="tag active">当前</span>
                         ) : null}
-                      </div>
-                      <div className="project-toolbar-item-sub">
-                        {project.last_phase || "暂无阶段"} · {projectUpdated(project)}
                       </div>
                     </button>
                   ))}

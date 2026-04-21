@@ -299,14 +299,26 @@ class ProjectLifecycleTests(unittest.TestCase):
         self.assertEqual([item["id"] for item in list_archived_projects()], [])
         self.assertIn("alpha", {item["id"] for item in list_active_projects()})
 
-    def test_rename_project_updates_display_name(self):
-        create_project("alpha", display_name="Alpha", set_active=False)
+    def test_rename_project_moves_directory_and_updates_project_id(self):
+        create_project("alpha", display_name="Alpha", set_active=True)
 
         renamed = rename_project("alpha", "Alpha Renamed")
 
+        self.assertEqual(renamed["id"], "alpha-renamed")
         self.assertEqual(renamed["display_name"], "Alpha Renamed")
+        self.assertTrue(get_project_dir("alpha-renamed").exists())
+        self.assertFalse((self.workspace_root / "projects" / "alpha").exists())
+        self.assertEqual(get_active_project_id(), "alpha-renamed")
+
         listed = {item["id"]: item for item in list_projects()}
-        self.assertEqual(listed["alpha"]["display_name"], "Alpha Renamed")
+        self.assertEqual(listed["alpha-renamed"]["display_name"], "Alpha Renamed")
+
+    def test_rename_project_rejects_existing_target_id(self):
+        create_project("alpha", display_name="Alpha", set_active=False)
+        create_project("beta", display_name="Beta", set_active=False)
+
+        with self.assertRaises(FileExistsError):
+            rename_project("alpha", "Beta")
 
     def test_delete_project_requires_archived_status(self):
         create_project("alpha", set_active=False)
@@ -360,7 +372,9 @@ class ProjectLifecycleTests(unittest.TestCase):
         )
 
         project_lookup = {item["id"]: item for item in renamed["projects"]}
-        self.assertEqual(project_lookup["alpha"]["display_name"], "Alpha Prime")
+        self.assertEqual(renamed["active_project"], "alpha-prime")
+        self.assertEqual(project_lookup["alpha-prime"]["display_name"], "Alpha Prime")
+        self.assertNotIn("alpha", project_lookup)
 
     def test_api_can_manage_project_workspace_list(self):
         api.post_project(api.ProjectRequest(project_id="alpha"))

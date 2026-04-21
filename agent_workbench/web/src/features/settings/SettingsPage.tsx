@@ -3,12 +3,12 @@ import { createPortal } from "react-dom";
 
 import { workbenchApi } from "../workbench/api";
 import { PHASE_LABEL } from "../workbench/constants";
+import { useProjectRuntime } from "../workbench/state/ProjectRuntimeContext";
 import { projectUpdated, toErrorMessage } from "../workbench/utils";
 import type {
   ProjectMeta,
   ProjectSettingsResponse,
   ProjectWorkspace,
-  StateResponse,
   ToolCatalogItem,
 } from "../workbench/types";
 
@@ -41,7 +41,6 @@ const WORKSPACE_KIND_OPTIONS = [
 
 const SETTINGS_SECTIONS = [
   { id: "general", label: "通用设置", hint: "写入总开关" },
-  { id: "overview", label: "项目概览", hint: "状态与边界" },
   { id: "tools", label: "工具", hint: "能力目录" },
   { id: "workspaces", label: "工作区清单", hint: "目录与权限" },
   { id: "history", label: "历史项目", hint: "归档与恢复" },
@@ -90,8 +89,16 @@ function toolStatusLabel(tool: ToolCatalogItem): string {
 }
 
 export function SettingsPage({ isActive = false }: SettingsPageProps) {
-  const [state, setState] = useState<StateResponse | null>(null);
-  const [projects, setProjects] = useState<ProjectMeta[]>([]);
+  const {
+    runtimeState,
+    projects,
+    activeProjects,
+    archivedProjects,
+    refreshRuntime,
+    selectProject,
+    createProject: createRuntimeProject,
+  } = useProjectRuntime();
+
   const [workspaces, setWorkspaces] = useState<ProjectWorkspace[]>([]);
   const [tools, setTools] = useState<ToolCatalogItem[]>([]);
   const [projectSettings, setProjectSettings] =
@@ -119,18 +126,8 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
   const projectPanelButtonRef = useRef<HTMLButtonElement>(null);
 
   const activeProject = useMemo(
-    () => projects.find((project) => project.id === state?.project_id),
-    [projects, state?.project_id],
-  );
-
-  const activeProjects = useMemo(
-    () => projects.filter((project) => !project.archived),
-    [projects],
-  );
-
-  const archivedProjects = useMemo(
-    () => projects.filter((project) => project.archived),
-    [projects],
+    () => projects.find((project) => project.id === runtimeState?.project_id),
+    [projects, runtimeState?.project_id],
   );
 
   const toolsByCategory = useMemo(
@@ -145,7 +142,7 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
   );
 
   const phaseLabel =
-    PHASE_LABEL[state?.phase || ""] || state?.phase || "未开始";
+    PHASE_LABEL[runtimeState?.phase || ""] || runtimeState?.phase || "未开始";
   const currentProjectName =
     activeProject?.display_name || activeProject?.title || "未选择项目";
 
@@ -192,13 +189,7 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
     setLoading(true);
     setErrorText("");
     try {
-      const [nextState, nextProjects] = await Promise.all([
-        workbenchApi.getState(),
-        workbenchApi.getProjects(),
-      ]);
-
-      setState(nextState);
-      setProjects(nextProjects.projects || []);
+      await refreshRuntime();
 
       const [workspacesResult, toolsResult, projectSettingsResult] =
         await Promise.allSettled([
@@ -223,7 +214,7 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
         setProjectSettings(projectSettingsResult.value);
       } else {
         setProjectSettings({
-          project_id: nextState.project_id || nextProjects.active_project || "",
+          project_id: runtimeState?.project_id || "",
           agent_file_write_enabled: true,
         });
       }
@@ -297,16 +288,7 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
     if (!projectId) return;
     clearMessages();
     try {
-      const selected = await workbenchApi.selectProject(projectId);
-      setState(selected.state);
-      setProjects((prev) => {
-        if (!prev.length) return prev;
-        return prev.map((project) =>
-          project.id === selected.active_project
-            ? { ...project, archived: false }
-            : project,
-        );
-      });
+      await selectProject(projectId);
       closeProjectPanel();
       void refresh();
     } catch (error) {
@@ -322,15 +304,7 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
     }
     clearMessages();
     try {
-      const created = await workbenchApi.createProject({
-        display_name: trimmed,
-        title: trimmed,
-      });
-      setState(created.state);
-      setProjects((prev) => [
-        created.project,
-        ...prev.filter((project) => project.id !== created.project.id),
-      ]);
+      await createRuntimeProject(trimmed);
       closeProjectPanel();
       void refresh();
     } catch (error) {
@@ -506,22 +480,34 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
                             key={project.id}
                             type="button"
                             className={`project-toolbar-item${
-                              project.id === state?.project_id ? " is-active" : ""
+                              project.id === runtimeState?.project_id ? " is-active" : ""
                             }`}
                             onClick={() => {
                               void openProject(project.id);
                             }}
                           >
                             <div className="project-toolbar-item-head">
-                              <strong>{project.display_name || project.id}</strong>
-                              {project.id === state?.project_id ? (
+                              <strong className="project-toolbar-item-name">
+                                {project.display_name || project.id}
+                              </strong>
+                              <div className="project-toolbar-item-meta-row">
+                                <span className="project-toolbar-item-sub">
+                                  {PHASE_LABEL[
+                                    project.id === runtimeState?.project_id
+                                      ? runtimeState?.phase || project.last_phase || ""
+                                      : project.last_phase || ""
+                                  ] ||
+                                    (project.id === runtimeState?.project_id
+                                      ? runtimeState?.phase || project.last_phase || "暂无阶段"
+                                      : project.last_phase || "暂无阶段")}
+                                </span>
+                                <span className="project-toolbar-item-sub">
+                                  {projectUpdated(project)}
+                                </span>
+                              </div>
+                              {project.id === runtimeState?.project_id ? (
                                 <span className="tag active">当前</span>
                               ) : null}
-                            </div>
-                            <div className="project-toolbar-item-sub">
-                              {(project.last_phase || "暂无阶段") +
-                                " · " +
-                                projectUpdated(project)}
                             </div>
                           </button>
                         ))}
@@ -1023,7 +1009,6 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
 
         <main className="settings-detail">
           {activeSection === "general" ? renderGeneral() : null}
-          {activeSection === "overview" ? renderOverview() : null}
           {activeSection === "tools" ? renderTools() : null}
           {activeSection === "workspaces" ? renderWorkspaces() : null}
           {activeSection === "history" ? renderHistory() : null}
