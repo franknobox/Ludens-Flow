@@ -13,6 +13,7 @@ import type {
   AgentKey,
   ChatResponse,
   ComposerAttachment,
+  McpTool,
   StateResponse,
   TransientChat,
   ToolProgressEvent,
@@ -153,6 +154,10 @@ export function useWorkbenchController() {
       ? "GitHub 可视化"
       : currentView.type === "aigc"
       ? "外部 AIGC 集成"
+      : currentView.type === "game-model"
+      ? "游戏内模型接入"
+      : currentView.type === "mcp"
+      ? ({ unity: "Unity MCP", godot: "Godot MCP", ue: "Unreal Engine MCP", blender: "Blender MCP" }[currentView.tool])
       : currentView.type === "agent"
       ? agentName(currentView.id)
       : model.files.find((item) => item.id === currentView.id)?.name ||
@@ -163,6 +168,10 @@ export function useWorkbenchController() {
       ? `仓库：ludens-flow`
       : currentView.type === "aigc"
       ? `生成图片、声音、模型等内容，导入当前项目`
+      : currentView.type === "game-model"
+      ? `配置大模型能力，接入 Unity / REST 游戏运行时`
+      : currentView.type === "mcp"
+      ? `通过 Model Context Protocol 将 AI 直接接入游戏引擎`
       : currentView.type === "agent"
       ? `当前项目：${projectName} · 当前 Agent：${agentName(model.current_agent)}`
       : `正在查看 ${projectName} 内的工件`;
@@ -510,6 +519,14 @@ export function useWorkbenchController() {
     setCurrentView({ type: "aigc" });
   };
 
+  const openGameModel = () => {
+    setCurrentView({ type: "game-model" });
+  };
+
+  const openMcp = (tool: McpTool) => {
+    setCurrentView({ type: "mcp", tool });
+  };
+
   useEffect(() => {
     if (!runtimeState) {
       return;
@@ -640,6 +657,8 @@ createProject,
     handleArchiveProject,
     handleRenameProject,
     openAigc,
+    openGameModel,
+    openMcp,
     openFile,
     openGithub,
     openProject,

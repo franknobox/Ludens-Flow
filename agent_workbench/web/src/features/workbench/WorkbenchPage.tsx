@@ -36,7 +36,9 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
     handleRenameProject,
     openAigc,
     openFile,
+    openGameModel,
     openGithub,
+    openMcp,
     openProject,
     saveWorkspaceFile,
     selectAgent,
@@ -51,6 +53,10 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
       ? "GitHub 可视化"
       : currentView.type === "aigc"
       ? "AIGC 集成"
+      : currentView.type === "game-model"
+      ? "游戏内模型接入"
+      : currentView.type === "mcp"
+      ? "MCP 集成"
       : currentView.type === "agent"
       ? "Agent 对话"
       : "文件查看";
@@ -85,6 +91,8 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
           }}
           onOpenGithub={openGithub}
           onOpenAigc={openAigc}
+          onOpenGameModel={openGameModel}
+          onOpenMcp={openMcp}
         />
 
         <MainPanel

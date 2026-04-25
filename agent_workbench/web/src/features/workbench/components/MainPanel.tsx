@@ -12,6 +12,8 @@ import type {
 } from "../types";
 import { GithubPage } from "../../github/components/GithubPage";
 import { AigcPage } from "../../aigc/components/AigcPage";
+import { GameModelPage } from "../../game-model/components/GameModelPage";
+import { McpPage } from "../../mcp/components/McpPage";
 import { AgentMessages } from "./mainPanel/AgentMessages";
 import { Composer } from "./mainPanel/Composer";
 import { FileView } from "./mainPanel/FileView";
@@ -67,7 +69,7 @@ export function MainPanel(props: MainPanelProps) {
     onSaveFile,
   } = props;
 
-  const isSpecialView = currentView.type === "github" || currentView.type === "aigc";
+  const isSpecialView = currentView.type === "github" || currentView.type === "aigc" || currentView.type === "game-model" || currentView.type === "mcp";
 
   return (
     <main className={`main${isSpecialView ? " main-special-view" : ""}`}>
@@ -90,9 +92,17 @@ export function MainPanel(props: MainPanelProps) {
       )}
 
       <section className="content" ref={contentAreaRef}>
-        {currentView.type === "github" || currentView.type === "aigc" ? (
+        {currentView.type === "github" || currentView.type === "aigc" || currentView.type === "game-model" || currentView.type === "mcp" ? (
           <div className="special-view-container">
-            {currentView.type === "github" ? <GithubPage /> : <AigcPage />}
+            {currentView.type === "github" ? (
+              <GithubPage />
+            ) : currentView.type === "aigc" ? (
+              <AigcPage />
+            ) : currentView.type === "mcp" ? (
+              <McpPage tool={currentView.tool} />
+            ) : (
+              <GameModelPage />
+            )}
           </div>
         ) : currentView.type === "agent" ? (
           <AgentMessages

@@ -22,7 +22,18 @@ export interface ViewStateAigc {
   type: "aigc";
 }
 
-export type ViewState = ViewStateAgent | ViewStateFile | ViewStateGithub | ViewStateAigc;
+export interface ViewStateGameModel {
+  type: "game-model";
+}
+
+export type McpTool = "unity" | "godot" | "ue" | "blender";
+
+export interface ViewStateMcp {
+  type: "mcp";
+  tool: McpTool;
+}
+
+export type ViewState = ViewStateAgent | ViewStateFile | ViewStateGithub | ViewStateAigc | ViewStateGameModel | ViewStateMcp;
 
 export interface RenderMessage {
   role: string;

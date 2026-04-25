@@ -993,3 +993,55 @@ input[type="file"] {
   min-height: 0;
   overflow: hidden;
 }
+
+/* MCP Placeholder Page */
+.mcp-placeholder {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--muted, #6f7e91);
+}
+
+.mcp-placeholder-icon-wrap {
+  opacity: 0.85;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mcp-placeholder-name {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text, #1f2b3c);
+}
+
+.mcp-placeholder-desc {
+  font-size: 14px;
+  line-height: 1.6;
+  max-width: 420px;
+  color: var(--muted, #6f7e91);
+}
+
+.mcp-placeholder-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid var(--line, rgba(29, 39, 52, 0.12));
+  color: var(--muted, #96a5ba);
+  background: transparent;
+}
+
+/* MCP toolbar button label */
+.project-toolbar-mcp-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}

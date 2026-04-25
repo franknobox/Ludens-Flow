@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import type { McpTool } from "../types";
+import { MCP_ICONS } from "../../mcp/components/McpIcons";
+
 import { PHASE_LABEL } from "../constants";
 import { projectUpdated } from "../utils";
 import type { ProjectMeta } from "../types";
@@ -26,6 +29,8 @@ interface ProjectToolbarProps {
   onCreateProject: (title: string) => Promise<boolean | void> | boolean | void;
   onOpenGithub?: () => void;
   onOpenAigc?: () => void;
+  onOpenGameModel?: () => void;
+  onOpenMcp?: (tool: McpTool) => void;
 }
 
 export function ProjectToolbar(props: ProjectToolbarProps) {
@@ -43,6 +48,8 @@ export function ProjectToolbar(props: ProjectToolbarProps) {
     onCreateProject,
     onOpenGithub,
     onOpenAigc,
+    onOpenGameModel,
+    onOpenMcp,
   } = props;
 
   const [projectPanelOpen, setProjectPanelOpen] = useState(false);
@@ -133,6 +140,52 @@ export function ProjectToolbar(props: ProjectToolbarProps) {
       </div>
 
       <div className="project-toolbar-menu">
+        {onOpenMcp ? (
+          <>
+            {([
+              { tool: "unity" as McpTool, title: "Unity MCP" },
+              { tool: "godot" as McpTool, title: "Godot MCP" },
+              { tool: "ue" as McpTool, title: "Unreal Engine MCP" },
+              { tool: "blender" as McpTool, title: "Blender MCP" },
+            ]).map(({ tool, title }) => {
+              const Icon = MCP_ICONS[tool];
+              return (
+                <button
+                  key={tool}
+                  type="button"
+                  className="project-toolbar-settings project-toolbar-mcp-btn"
+                  onClick={() => {
+                    closeProjectPanel();
+                    closeSettingsPanel();
+                    onOpenMcp(tool);
+                  }}
+                  title={title}
+                >
+                  <Icon size={15} />
+                </button>
+              );
+            })}
+          </>
+        ) : null}
+
+        {onOpenGameModel ? (
+          <button
+            type="button"
+            className="project-toolbar-settings"
+            onClick={() => {
+              closeProjectPanel();
+              closeSettingsPanel();
+              onOpenGameModel();
+            }}
+            title="游戏内模型接入"
+          >
+            {/* Phosphor Icons: cpu-fill */}
+            <svg viewBox="0 0 256 256" width="15" height="15" fill="currentColor">
+              <path d="M104,104h48v48H104Zm136,48a8,8,0,0,1-8,8H216v40a16,16,0,0,1-16,16H160v16a8,8,0,0,1-16,0V216H112v16a8,8,0,0,1-16,0V216H56a16,16,0,0,1-16-16V160H24a8,8,0,0,1,0-16H40V112H24a8,8,0,0,1,0-16H40V56A16,16,0,0,1,56,40H96V24a8,8,0,0,1,16,0V40h32V24a8,8,0,0,1,16,0V40h40a16,16,0,0,1,16,16V96h16a8,8,0,0,1,0,16H216v32h16A8,8,0,0,1,240,152ZM168,96a8,8,0,0,0-8-8H96a8,8,0,0,0-8,8v64a8,8,0,0,0,8,8h64a8,8,0,0,0,8-8Z" />
+            </svg>
+          </button>
+        ) : null}
+
         {onOpenAigc ? (
           <button
             type="button"
@@ -144,7 +197,10 @@ export function ProjectToolbar(props: ProjectToolbarProps) {
             }}
             title="AIGC 宇宙"
           >
-            ✨
+            {/* Phosphor Icons: magic-wand-fill */}
+            <svg viewBox="0 0 256 256" width="15" height="15" fill="currentColor">
+              <path d="M248,152a8,8,0,0,1-8,8H224v16a8,8,0,0,1-16,0V160H192a8,8,0,0,1,0-16h16V128a8,8,0,0,1,16,0v16h16A8,8,0,0,1,248,152ZM56,72H72V88a8,8,0,0,0,16,0V72h16a8,8,0,0,0,0-16H88V40a8,8,0,0,0-16,0V56H56a8,8,0,0,0,0,16ZM184,192h-8v-8a8,8,0,0,0-16,0v8h-8a8,8,0,0,0,0,16h8v8a8,8,0,0,0,16,0v-8h8a8,8,0,0,0,0-16ZM219.31,80,80,219.31a16,16,0,0,1-22.62,0L36.68,198.63a16,16,0,0,1,0-22.63L176,36.69a16,16,0,0,1,22.63,0l20.68,20.68A16,16,0,0,1,219.31,80ZM208,68.69,187.31,48l-32,32L176,100.69Z" />
+            </svg>
           </button>
         ) : null}
 

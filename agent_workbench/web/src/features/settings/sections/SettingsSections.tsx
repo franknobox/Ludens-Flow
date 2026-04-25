@@ -130,18 +130,60 @@ export function GeneralSettingsSection(props: GeneralSettingsSectionProps) {
           <h2 className="settings-card-title">UI 主题</h2>
         </div>
         <div className="settings-form">
-          <label className="settings-field">
-            <span>选择主题风格</span>
-            <select
-              className="settings-json-editor"
-              style={{ height: 40 }}
-              value={theme}
-              onChange={(event) => onThemeChange(event.target.value)}
-            >
-              <option value="light">浅色圆角</option>
-              <option value="dark">深色直角</option>
-            </select>
-          </label>
+          <div className="theme-picker">
+            {[
+              {
+                value: "light",
+                label: "浅色圆角",
+                desc: "明亮 · 柔和圆角",
+                preview: (
+                  <div className="theme-preview theme-preview-light">
+                    <div className="tp-topbar" />
+                    <div className="tp-body">
+                      <div className="tp-sidebar" />
+                      <div className="tp-main">
+                        <div className="tp-card" />
+                        <div className="tp-card tp-card-sm" />
+                      </div>
+                    </div>
+                  </div>
+                ),
+              },
+              {
+                value: "dark",
+                label: "深色直角",
+                desc: "暗色 · 硬朗直角",
+                preview: (
+                  <div className="theme-preview theme-preview-dark">
+                    <div className="tp-topbar" />
+                    <div className="tp-body">
+                      <div className="tp-sidebar" />
+                      <div className="tp-main">
+                        <div className="tp-card" />
+                        <div className="tp-card tp-card-sm" />
+                      </div>
+                    </div>
+                  </div>
+                ),
+              },
+            ].map(({ value, label, desc, preview }) => (
+              <button
+                key={value}
+                type="button"
+                className={`theme-option${theme === value ? " is-active" : ""}`}
+                onClick={() => onThemeChange(value)}
+              >
+                {preview}
+                <div className="theme-option-meta">
+                  <span className="theme-option-label">{label}</span>
+                  <span className="theme-option-desc">{desc}</span>
+                </div>
+                {theme === value && (
+                  <span className="theme-option-check">✓</span>
+                )}
+              </button>
+            ))}
+          </div>
         </div>
       </section>
 

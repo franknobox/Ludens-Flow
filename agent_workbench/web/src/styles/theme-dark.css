@@ -274,3 +274,439 @@
 [data-theme="dark"] * {
   scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
 }
+
+/* =========================================================
+   Game Model Page Overrides
+   ========================================================= */
+
+[data-theme="dark"] .game-model-header,
+[data-theme="dark"] .game-model-tabs {
+  background: var(--panel) !important;
+  border-color: var(--line) !important;
+}
+
+[data-theme="dark"] .game-model-title {
+  color: var(--text) !important;
+}
+
+[data-theme="dark"] .game-model-subtitle {
+  color: var(--muted) !important;
+}
+
+[data-theme="dark"] .game-model-content {
+  background: var(--bg) !important;
+  border-color: var(--line) !important;
+  border-radius: 0 0 var(--radius) var(--radius) !important;
+}
+
+[data-theme="dark"] .game-model-header {
+  border-radius: var(--radius) var(--radius) 0 0 !important;
+}
+
+[data-theme="dark"] .game-model-tab {
+  color: var(--muted) !important;
+}
+
+[data-theme="dark"] .game-model-tab:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: var(--text) !important;
+}
+
+[data-theme="dark"] .game-model-tab.is-active {
+  background: var(--primary-soft) !important;
+  color: var(--primary) !important;
+}
+
+[data-theme="dark"] .game-model-action-btn {
+  background: var(--panel) !important;
+  border-color: var(--line) !important;
+  color: var(--text) !important;
+}
+
+[data-theme="dark"] .game-model-action-btn:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+[data-theme="dark"] .game-model-filter-btn {
+  background: transparent !important;
+  border-color: var(--line) !important;
+  color: var(--muted) !important;
+}
+
+[data-theme="dark"] .game-model-filter-btn:hover {
+  color: var(--text) !important;
+  border-color: rgba(88, 166, 255, 0.3) !important;
+}
+
+[data-theme="dark"] .game-model-filter-btn.is-active {
+  background: var(--primary-soft) !important;
+  border-color: var(--primary) !important;
+  color: var(--primary) !important;
+}
+
+[data-theme="dark"] .game-model-card {
+  background: var(--panel) !important;
+  border-color: var(--line) !important;
+}
+
+[data-theme="dark"] .game-model-card:hover {
+  border-color: var(--primary) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
+}
+
+[data-theme="dark"] .game-model-card-name {
+  color: var(--text) !important;
+}
+
+[data-theme="dark"] .game-model-card-provider {
+  color: var(--muted) !important;
+}
+
+[data-theme="dark"] .game-model-card-desc {
+  color: var(--muted) !important;
+}
+
+[data-theme="dark"] .game-model-badge.popular,
+[data-theme="dark"] .game-model-badge.coming-soon {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: var(--line) !important;
+  color: var(--muted) !important;
+}
+
+[data-theme="dark"] .game-model-cat-chip {
+  background: var(--primary-soft) !important;
+  color: var(--primary) !important;
+}
+
+[data-theme="dark"] .game-model-strength-tag {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: var(--line) !important;
+  color: var(--muted) !important;
+}
+
+[data-theme="dark"] .game-model-meta-item,
+[data-theme="dark"] .game-model-recommended-label {
+  color: var(--muted) !important;
+}
+
+[data-theme="dark"] .game-model-recommended-tag {
+  background: var(--green-soft) !important;
+  color: var(--green) !important;
+}
+
+[data-theme="dark"] .game-model-detail-card,
+[data-theme="dark"] .game-model-edit-card,
+[data-theme="dark"] .game-export-panel {
+  background: #1c1c1c !important;
+  border-radius: var(--radius) !important;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7) !important;
+}
+
+[data-theme="dark"] .game-model-detail-name,
+[data-theme="dark"] .game-model-detail-param-val,
+[data-theme="dark"] .game-export-title,
+[data-theme="dark"] .game-export-info-title,
+[data-theme="dark"] .game-export-section-title,
+[data-theme="dark"] .game-scene-name {
+  color: var(--text) !important;
+}
+
+[data-theme="dark"] .game-model-detail-provider,
+[data-theme="dark"] .game-model-detail-desc,
+[data-theme="dark"] .game-model-detail-param-label,
+[data-theme="dark"] .game-model-detail-recommended-label,
+[data-theme="dark"] .game-export-subtitle,
+[data-theme="dark"] .game-scenes-count,
+[data-theme="dark"] .game-export-section p,
+[data-theme="dark"] .game-export-notes li,
+[data-theme="dark"] .game-scene-preview-label,
+[data-theme="dark"] .game-scene-preview-text,
+[data-theme="dark"] .game-custom-intro p {
+  color: var(--muted) !important;
+}
+
+[data-theme="dark"] .game-model-detail-param {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: var(--line) !important;
+}
+
+[data-theme="dark"] .game-model-detail-recommended-tag {
+  background: var(--green-soft) !important;
+  color: var(--green) !important;
+}
+
+[data-theme="dark"] .game-model-detail-btn,
+[data-theme="dark"] .game-scene-btn,
+[data-theme="dark"] .game-export-copy-btn,
+[data-theme="dark"] .game-model-action-btn,
+[data-theme="dark"] .game-export-format-tab {
+  background: var(--panel) !important;
+  border-color: var(--line) !important;
+  color: var(--text) !important;
+}
+
+[data-theme="dark"] .game-model-detail-btn:hover,
+[data-theme="dark"] .game-scene-btn:hover,
+[data-theme="dark"] .game-export-copy-btn:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+[data-theme="dark"] .game-model-detail-close,
+[data-theme="dark"] .game-export-close {
+  background: transparent !important;
+  border-color: var(--line) !important;
+  color: var(--muted) !important;
+}
+
+[data-theme="dark"] .game-model-edit-field span,
+[data-theme="dark"] .game-model-edit-field label span {
+  color: var(--muted) !important;
+}
+
+[data-theme="dark"] .game-model-edit-field input,
+[data-theme="dark"] .game-model-edit-field select,
+[data-theme="dark"] .game-model-edit-field textarea {
+  background: #262626 !important;
+  border-color: var(--line) !important;
+  color: var(--text) !important;
+}
+
+[data-theme="dark"] .game-model-edit-field input:focus,
+[data-theme="dark"] .game-model-edit-field select:focus,
+[data-theme="dark"] .game-model-edit-field textarea:focus {
+  border-color: var(--primary) !important;
+  background: #2a2a2a !important;
+}
+
+[data-theme="dark"] .game-scene-item {
+  background: var(--panel) !important;
+  border-color: var(--line) !important;
+  border-radius: var(--radius) !important;
+}
+
+[data-theme="dark"] .game-scene-cat-chip {
+  background: var(--primary-soft) !important;
+  color: var(--primary) !important;
+}
+
+[data-theme="dark"] .game-scene-model-badge,
+[data-theme="dark"] .game-scene-param {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: var(--line) !important;
+  color: var(--muted) !important;
+}
+
+[data-theme="dark"] .game-scenes-add-btn {
+  background: var(--primary-soft) !important;
+  border-color: var(--primary) !important;
+  color: var(--primary) !important;
+}
+
+[data-theme="dark"] .game-export-format-tab.is-active {
+  background: var(--primary-soft) !important;
+  border-color: var(--primary) !important;
+  color: var(--primary) !important;
+}
+
+[data-theme="dark"] .game-export-feature-list span {
+  color: var(--green) !important;
+}
+
+/* =========================================================
+   GitHub Page Overrides
+   ========================================================= */
+
+/* Toolbar button in topbar */
+[data-theme="dark"] .project-toolbar-github {
+  background: #1c1c1c !important;
+  border-color: var(--line) !important;
+  color: var(--muted) !important;
+}
+
+[data-theme="dark"] .project-toolbar-github:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: var(--primary) !important;
+  color: var(--primary) !important;
+}
+
+/* Page frame */
+[data-theme="dark"] .github-header,
+[data-theme="dark"] .github-tabs {
+  background: var(--panel) !important;
+  border-color: var(--line) !important;
+}
+
+[data-theme="dark"] .github-header {
+  border-radius: var(--radius) var(--radius) 0 0 !important;
+}
+
+[data-theme="dark"] .github-content {
+  background: var(--bg) !important;
+  border-color: var(--line) !important;
+  border-radius: 0 0 var(--radius) var(--radius) !important;
+}
+
+[data-theme="dark"] .github-icon {
+  color: var(--muted) !important;
+}
+
+[data-theme="dark"] .github-repo-name {
+  color: var(--text) !important;
+}
+
+/* Topbar action buttons */
+[data-theme="dark"] .github-action-btn {
+  background: transparent !important;
+  border-color: var(--line) !important;
+  color: var(--muted) !important;
+}
+
+[data-theme="dark"] .github-action-btn:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: var(--text) !important;
+}
+
+/* Tabs */
+[data-theme="dark"] .github-tab {
+  color: var(--muted) !important;
+}
+
+[data-theme="dark"] .github-tab:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: var(--text) !important;
+}
+
+[data-theme="dark"] .github-tab.is-active {
+  background: var(--primary-soft) !important;
+  color: var(--primary) !important;
+}
+
+/* Filter inputs / selects */
+[data-theme="dark"] .github-filter-input,
+[data-theme="dark"] .github-filter-select {
+  background: #262626 !important;
+  border-color: var(--line) !important;
+  color: var(--text) !important;
+}
+
+[data-theme="dark"] .github-filter-input:focus,
+[data-theme="dark"] .github-filter-select:focus {
+  border-color: var(--primary) !important;
+  background: #2a2a2a !important;
+  box-shadow: none !important;
+}
+
+/* Section panels */
+[data-theme="dark"] .github-section-panel {
+  background: var(--panel) !important;
+  border-color: var(--line) !important;
+  border-radius: var(--radius) !important;
+}
+
+[data-theme="dark"] .github-section-title {
+  color: var(--muted) !important;
+}
+
+/* List items */
+[data-theme="dark"] .github-list-item {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: var(--line) !important;
+  border-radius: var(--radius) !important;
+}
+
+[data-theme="dark"] .github-list-item:hover {
+  background: rgba(255, 255, 255, 0.07) !important;
+  border-color: rgba(88, 166, 255, 0.2) !important;
+}
+
+[data-theme="dark"] .github-list-item.is-active {
+  background: var(--primary-soft) !important;
+  border-color: rgba(88, 166, 255, 0.3) !important;
+}
+
+[data-theme="dark"] .github-list-item-meta {
+  color: var(--muted) !important;
+}
+
+[data-theme="dark"] .github-meta-sep {
+  color: rgba(255, 255, 255, 0.2) !important;
+}
+
+[data-theme="dark"] .github-branch-name,
+[data-theme="dark"] .github-commit-message,
+[data-theme="dark"] .github-pr-title {
+  color: var(--text) !important;
+}
+
+[data-theme="dark"] .github-commit-hash {
+  color: var(--muted) !important;
+}
+
+[data-theme="dark"] .github-badge-protected {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: var(--line) !important;
+  color: var(--muted) !important;
+}
+
+[data-theme="dark"] .github-branch-chip {
+  background: var(--primary-soft) !important;
+  color: var(--primary) !important;
+}
+
+/* PR states */
+[data-theme="dark"] .github-pr-number {
+  color: var(--muted) !important;
+}
+
+[data-theme="dark"] .github-pr-open {
+  background: var(--green-soft) !important;
+  color: var(--green) !important;
+}
+
+[data-theme="dark"] .github-pr-merged {
+  background: rgba(131, 63, 210, 0.15) !important;
+  color: #b57bee !important;
+}
+
+[data-theme="dark"] .github-pr-closed {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: var(--muted) !important;
+}
+
+/* Review & checks badges */
+[data-theme="dark"] .github-review-badge.approved,
+[data-theme="dark"] .github-checks-badge.success {
+  background: var(--green-soft) !important;
+  color: var(--green) !important;
+}
+
+[data-theme="dark"] .github-review-badge.changes_requested,
+[data-theme="dark"] .github-checks-badge.failure {
+  background: var(--danger-soft, rgba(220, 80, 70, 0.12)) !important;
+  color: var(--danger, #e05252) !important;
+}
+
+[data-theme="dark"] .github-review-badge.pending,
+[data-theme="dark"] .github-checks-badge.pending,
+[data-theme="dark"] .github-checks-badge.running {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: var(--muted) !important;
+}
+
+/* Tree & graph decorations */
+[data-theme="dark"] .github-tree-dot {
+  background: rgba(255, 255, 255, 0.3) !important;
+}
+
+[data-theme="dark"] .github-tree-line,
+[data-theme="dark"] .github-graph-line {
+  background: var(--line) !important;
+}
+
+[data-theme="dark"] .github-graph-dot {
+  background: var(--primary) !important;
+}
+
+[data-theme="dark"] .github-graph-meta {
+  color: var(--muted) !important;
+}
