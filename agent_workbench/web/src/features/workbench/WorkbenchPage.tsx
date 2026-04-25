@@ -34,7 +34,9 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
     createProject,
     handleArchiveProject,
     handleRenameProject,
+    openAigc,
     openFile,
+    openGithub,
     openProject,
     saveWorkspaceFile,
     selectAgent,
@@ -43,6 +45,15 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
   } = controller;
 
   const phaseLabel = PHASE_LABEL[model.phase] || model.phase || "-";
+
+  const modeBadge =
+    currentView.type === "github"
+      ? "GitHub 可视化"
+      : currentView.type === "aigc"
+      ? "AIGC 集成"
+      : currentView.type === "agent"
+      ? "Agent 对话"
+      : "文件查看";
 
   return (
     <div className="app">
@@ -72,6 +83,8 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
             onRenameProject: handleRenameProject,
             onArchiveProject: handleArchiveProject,
           }}
+          onOpenGithub={openGithub}
+          onOpenAigc={openAigc}
         />
 
         <MainPanel
@@ -80,7 +93,7 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
           currentAgent={model.current_agent}
           projectName={projectName}
           phaseLabel={phaseLabel}
-          modeBadge={currentView.type === "agent" ? "Agent 对话" : "文件查看"}
+          modeBadge={modeBadge}
           readOnly={readOnly}
           subtitle={subtitle}
           title={title}

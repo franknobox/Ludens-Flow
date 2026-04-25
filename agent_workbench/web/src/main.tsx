@@ -5,6 +5,7 @@ import App from "./App";
 import "./styles/layout.css";
 import "./styles/settings.css";
 import "./styles/workbench.css";
+import "./styles/theme-dark.css";
 
 createRoot(document.getElementById("root") as HTMLElement).render(
   <StrictMode>

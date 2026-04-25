@@ -10,6 +10,8 @@ import type {
   WorkflowAction,
   WorkspaceFileItem,
 } from "../types";
+import { GithubPage } from "../../github/components/GithubPage";
+import { AigcPage } from "../../aigc/components/AigcPage";
 import { AgentMessages } from "./mainPanel/AgentMessages";
 import { Composer } from "./mainPanel/Composer";
 import { FileView } from "./mainPanel/FileView";
@@ -65,26 +67,34 @@ export function MainPanel(props: MainPanelProps) {
     onSaveFile,
   } = props;
 
+  const isSpecialView = currentView.type === "github" || currentView.type === "aigc";
+
   return (
-    <main className="main">
-      <header className="main-header">
-        <div>
-          <div className="hero-kicker">多项目工作台</div>
-          <h1 className="hero-title">{title}</h1>
-          <div className="hero-sub">{subtitle}</div>
-        </div>
-        <div className="meta">
-          <span className="badge project">{projectName}</span>
-          <span className="badge phase">{phaseLabel}</span>
-          <span className="badge mode">{modeBadge}</span>
-          {readOnly && currentView.type === "agent" ? (
-            <span className="badge readonly">只读 · {agentName(currentAgent)}</span>
-          ) : null}
-        </div>
-      </header>
+    <main className={`main${isSpecialView ? " main-special-view" : ""}`}>
+      {!isSpecialView && (
+        <header className="main-header">
+          <div>
+            <div className="hero-kicker">多项目工作台</div>
+            <h1 className="hero-title">{title}</h1>
+            <div className="hero-sub">{subtitle}</div>
+          </div>
+          <div className="meta">
+            <span className="badge project">{projectName}</span>
+            <span className="badge phase">{phaseLabel}</span>
+            <span className="badge mode">{modeBadge}</span>
+            {readOnly && currentView.type === "agent" ? (
+              <span className="badge readonly">只读 · {agentName(currentAgent)}</span>
+            ) : null}
+          </div>
+        </header>
+      )}
 
       <section className="content" ref={contentAreaRef}>
-        {currentView.type === "agent" ? (
+        {currentView.type === "github" || currentView.type === "aigc" ? (
+          <div className="special-view-container">
+            {currentView.type === "github" ? <GithubPage /> : <AigcPage />}
+          </div>
+        ) : currentView.type === "agent" ? (
           <AgentMessages
             agentKey={currentView.id}
             currentAgent={currentAgent}
@@ -107,7 +117,7 @@ export function MainPanel(props: MainPanelProps) {
         )}
       </section>
 
-      {currentView.type === "agent" ? (
+      {!isSpecialView && currentView.type === "agent" ? (
         <Composer
           agentKey={currentView.id}
           currentAgent={currentAgent}

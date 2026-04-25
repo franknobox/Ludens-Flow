@@ -14,7 +14,15 @@ export interface ViewStateFile {
   id: string;
 }
 
-export type ViewState = ViewStateAgent | ViewStateFile;
+export interface ViewStateGithub {
+  type: "github";
+}
+
+export interface ViewStateAigc {
+  type: "aigc";
+}
+
+export type ViewState = ViewStateAgent | ViewStateFile | ViewStateGithub | ViewStateAigc;
 
 export interface RenderMessage {
   role: string;

@@ -15,7 +15,7 @@
 2. 当前阶段优先完成前端壳、交互流程、状态切换、错误反馈、空状态、确认弹窗和过程展示。
 3. 如后端接口尚未完成，可以先使用 mock data、fake state、placeholder event 和 local state。
 4. 先把“用户如何看到、理解、操作这个功能”做清楚，再定义接口契约。
-5. 风格保持和现有 Ludens-Flow 一致：克制、整齐、卡片胶囊风、信息层级清楚。
+5. 风格保持和现有 Ludens-Flow 一致：克制、整齐、信息层级清楚。
 6. 不擅自重构无关页面，不大改已有正常工作的区域，只围绕当前目标功能收口。
 7. 每个功能优先补齐：loading、empty state、error state、success feedback、destructive action confirmation、process visibility。
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 import { SettingsPage } from "./features/settings/SettingsPage";
 import { WorkbenchPage } from "./features/workbench/WorkbenchPage";
@@ -8,6 +8,11 @@ type TopLevelRoute = "workbench" | "settings";
 
 export default function App() {
   const [route, setRoute] = useState<TopLevelRoute>("workbench");
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("ludens_theme") || "light";
+    document.documentElement.setAttribute("data-theme", savedTheme);
+  }, []);
 
   return (
     <ProjectRuntimeProvider>

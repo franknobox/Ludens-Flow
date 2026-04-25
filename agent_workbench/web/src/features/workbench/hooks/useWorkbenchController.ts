@@ -149,13 +149,21 @@ export function useWorkbenchController() {
   }, [activeProject, model.artifact_frozen]);
 
   const title =
-    currentView.type === "agent"
+    currentView.type === "github"
+      ? "GitHub 可视化"
+      : currentView.type === "aigc"
+      ? "外部 AIGC 集成"
+      : currentView.type === "agent"
       ? agentName(currentView.id)
       : model.files.find((item) => item.id === currentView.id)?.name ||
         currentView.id;
 
   const subtitle =
-    currentView.type === "agent"
+    currentView.type === "github"
+      ? `仓库：ludens-flow`
+      : currentView.type === "aigc"
+      ? `生成图片、声音、模型等内容，导入当前项目`
+      : currentView.type === "agent"
       ? `当前项目：${projectName} · 当前 Agent：${agentName(model.current_agent)}`
       : `正在查看 ${projectName} 内的工件`;
 
@@ -498,6 +506,10 @@ export function useWorkbenchController() {
     setCurrentView({ type: "agent", id: agent });
   };
 
+  const openAigc = () => {
+    setCurrentView({ type: "aigc" });
+  };
+
   useEffect(() => {
     if (!runtimeState) {
       return;
@@ -601,6 +613,10 @@ export function useWorkbenchController() {
     return () => window.cancelAnimationFrame(id);
   }, [currentView, historyByAgent, transientChat, model.actions]);
 
+  const openGithub = () => {
+    setCurrentView({ type: "github" });
+  };
+
   return {
     activeProject,
     activeProjects,
@@ -620,10 +636,12 @@ export function useWorkbenchController() {
     topbarSlot,
     transientChat,
     warningText,
-    createProject,
+createProject,
     handleArchiveProject,
     handleRenameProject,
+    openAigc,
     openFile,
+    openGithub,
     openProject,
     saveWorkspaceFile,
     selectAgent,

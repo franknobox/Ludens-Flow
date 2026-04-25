@@ -31,6 +31,10 @@
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
+.main.main-special-view {
+  grid-template-rows: minmax(0, 1fr);
+}
+
 .head {
   padding: 16px 18px 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
@@ -441,6 +445,8 @@
   padding: 18px 18px 8px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.52), rgba(247, 249, 252, 0.9));
   transform: translateZ(0);
+  display: flex;
+  flex-direction: column;
 }
 
 .empty {
@@ -979,4 +985,11 @@ input[type="file"] {
   font-size: 12px;
   line-height: 1.6;
   color: var(--shell-muted);
+}
+
+.special-view-container {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  overflow: hidden;
 }

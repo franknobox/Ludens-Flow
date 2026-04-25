@@ -1,0 +1,276 @@
+/* =========================================================
+   Theme: Dark / Sharp Corners / High Performance
+   ========================================================= */
+
+[data-theme="dark"] {
+  --bg: #141414;
+  --panel: #1c1c1c;
+  --line: #333333;
+  --text: #e0e0e0;
+  --muted: #888888;
+  --primary: #58a6ff;
+  --primary-soft: rgba(88, 166, 255, 0.15);
+  --shell: #0a0a0a;
+  --shell-soft: #141414;
+  --shell-text: #e0e0e0;
+  --shell-muted: #888888;
+  --danger: #f85149;
+  --warn: #d29922;
+  --warn-soft: rgba(210, 153, 34, 0.15);
+  --green: #3fb950;
+  --green-soft: rgba(63, 185, 80, 0.15);
+  --radius: 4px;
+  --shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme="dark"] body {
+  background: var(--bg);
+}
+
+[data-theme="dark"] .shell {
+  background: var(--shell) !important;
+}
+
+/* 直角和基础覆盖 */
+[data-theme="dark"] .topbar-block,
+[data-theme="dark"] .main,
+[data-theme="dark"] .project-toolbar-panel,
+[data-theme="dark"] .file-panel,
+[data-theme="dark"] .sidebar-popover,
+[data-theme="dark"] .message-actions,
+[data-theme="dark"] .tool-process-card,
+[data-theme="dark"] .status-card {
+  background: var(--panel) !important;
+  border: 1px solid var(--line) !important;
+  border-radius: var(--radius) !important;
+  box-shadow: var(--shadow) !important;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+
+
+/* 其他小组件直角和颜色覆盖 */
+[data-theme="dark"] .shell,
+[data-theme="dark"] .project-toolbar-meta,
+[data-theme="dark"] .project-toolbar-toggle,
+[data-theme="dark"] .project-toolbar-item,
+[data-theme="dark"] .project-toolbar-create-entry,
+[data-theme="dark"] .project-toolbar-create input,
+[data-theme="dark"] .project-toolbar-settings,
+[data-theme="dark"] .project-toolbar-settings-input,
+[data-theme="dark"] .topbar-tabs,
+[data-theme="dark"] .topbar-tab,
+[data-theme="dark"] .shell-btn,
+[data-theme="dark"] .btn,
+[data-theme="dark"] .btn-line,
+[data-theme="dark"] .reset-btn,
+[data-theme="dark"] .message-actions button,
+[data-theme="dark"] .create-box input,
+[data-theme="dark"] .card-corner-btn,
+[data-theme="dark"] .menu-close-btn,
+[data-theme="dark"] .item,
+[data-theme="dark"] .history-entry,
+[data-theme="dark"] .tool-process-item,
+[data-theme="dark"] .bubble,
+[data-theme="dark"] .badge,
+[data-theme="dark"] .input-row,
+[data-theme="dark"] textarea {
+  border-radius: var(--radius) !important;
+  border-color: var(--line);
+  color: var(--text);
+}
+
+[data-theme="dark"] .topbar-tabs,
+[data-theme="dark"] .project-toolbar-meta,
+[data-theme="dark"] .project-toolbar-toggle,
+[data-theme="dark"] .project-toolbar-item,
+[data-theme="dark"] .project-toolbar-create-entry,
+[data-theme="dark"] .project-toolbar-create input,
+[data-theme="dark"] .project-toolbar-settings,
+[data-theme="dark"] .project-toolbar-settings-input,
+[data-theme="dark"] .create-box input,
+[data-theme="dark"] .message-actions button,
+[data-theme="dark"] .input-row {
+  background-color: #262626 !important;
+}
+
+[data-theme="dark"] .topbar-tab.is-active,
+[data-theme="dark"] .item.active,
+[data-theme="dark"] .project-toolbar-item:hover,
+[data-theme="dark"] .project-toolbar-item.is-active {
+  background: var(--primary-soft) !important;
+  border-color: var(--primary) !important;
+  color: var(--primary) !important;
+}
+
+[data-theme="dark"] .topbar-title,
+[data-theme="dark"] .project-toolbar-meta strong,
+[data-theme="dark"] .project-toolbar-item-name,
+[data-theme="dark"] .hero-title,
+[data-theme="dark"] .item-title,
+[data-theme="dark"] .tool-process-head {
+  color: #fff !important;
+}
+
+[data-theme="dark"] .project-toolbar-item-sub {
+  color: var(--muted) !important;
+}
+
+[data-theme="dark"] .tool-process-item.is-started {
+  background: var(--primary-soft) !important;
+  border-color: var(--primary) !important;
+}
+
+[data-theme="dark"] .tool-process-item.is-completed {
+  background: var(--green-soft) !important;
+  border-color: var(--green) !important;
+}
+
+[data-theme="dark"] .tool-process-item.is-failed {
+  background: var(--warn-soft) !important;
+  border-color: var(--warn) !important;
+}
+
+[data-theme="dark"] .msg.user .bubble {
+  background: var(--primary-soft) !important;
+  border: 1px solid rgba(88, 166, 255, 0.25) !important;
+}
+
+[data-theme="dark"] .msg.agent .bubble {
+  background: #262626 !important;
+  border: 1px solid var(--line) !important;
+}
+
+[data-theme="dark"] .content,
+[data-theme="dark"] .file-editor {
+  background: transparent !important;
+}
+
+[data-theme="dark"] .file-editor {
+  color: var(--text) !important;
+}
+
+/* =========================================================
+   Settings Page Theme Overrides
+   ========================================================= */
+
+[data-theme="dark"] .settings-sidebar,
+[data-theme="dark"] .settings-pane-card,
+[data-theme="dark"] .settings-feedback {
+  background: var(--panel);
+  border-color: var(--line);
+  box-shadow: var(--shadow);
+  border-radius: var(--radius);
+}
+
+[data-theme="dark"] .settings-nav-item,
+[data-theme="dark"] .settings-inline-stat,
+[data-theme="dark"] .settings-empty,
+[data-theme="dark"] .workspace-card,
+[data-theme="dark"] .tool-card,
+[data-theme="dark"] .settings-note-item,
+[data-theme="dark"] .settings-chip,
+[data-theme="dark"] .settings-pill-button,
+[data-theme="dark"] .settings-primary-button,
+[data-theme="dark"] .settings-field input,
+[data-theme="dark"] .settings-field select,
+[data-theme="dark"] .settings-field textarea,
+[data-theme="dark"] .settings-inline-help,
+[data-theme="dark"] .settings-inline-error,
+[data-theme="dark"] .settings-toggle {
+  border-radius: var(--radius) !important;
+  border-color: var(--line) !important;
+  color: var(--text);
+  background-color: transparent;
+}
+
+[data-theme="dark"] .settings-nav-item,
+[data-theme="dark"] .settings-inline-stat,
+[data-theme="dark"] .settings-empty,
+[data-theme="dark"] .workspace-card,
+[data-theme="dark"] .tool-card,
+[data-theme="dark"] .settings-inline-help,
+[data-theme="dark"] .settings-toggle,
+[data-theme="dark"] .settings-pill-button {
+  background-color: #262626 !important;
+}
+
+[data-theme="dark"] .settings-field input,
+[data-theme="dark"] .settings-field select,
+[data-theme="dark"] .settings-field textarea,
+[data-theme="dark"] .settings-note-item,
+[data-theme="dark"] .settings-chip {
+  background-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+[data-theme="dark"] .settings-nav-item.is-active {
+  background: var(--primary-soft) !important;
+  border-color: var(--primary) !important;
+}
+
+[data-theme="dark"] .settings-primary-button {
+  background-color: var(--primary) !important;
+  color: #fff !important;
+}
+
+[data-theme="dark"] .settings-card-title,
+[data-theme="dark"] .settings-nav-label,
+[data-theme="dark"] .settings-inline-stat strong,
+[data-theme="dark"] .workspace-title-row h3,
+[data-theme="dark"] .tool-group-head h3,
+[data-theme="dark"] .tool-card-head h4 {
+  color: #fff !important;
+}
+
+[data-theme="dark"] .settings-nav-text,
+[data-theme="dark"] .settings-stat-label,
+[data-theme="dark"] .workspace-source {
+  color: var(--muted) !important;
+}
+
+/* =========================================================
+   Component Overrides (Buttons, Badges)
+   ========================================================= */
+
+[data-theme="dark"] .btn-line {
+  background-color: transparent !important;
+  color: var(--text) !important;
+  border-color: var(--line) !important;
+}
+
+[data-theme="dark"] .btn-line:hover {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+[data-theme="dark"] .badge {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  color: var(--text) !important;
+  border-color: transparent !important;
+}
+
+/* =========================================================
+   Scrollbar Overrides
+   ========================================================= */
+
+[data-theme="dark"] ::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  border: 4px solid var(--panel);
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.3);
+}
+
+[data-theme="dark"] * {
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
