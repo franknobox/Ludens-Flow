@@ -621,17 +621,20 @@
   border-radius: 16px;
   padding: 11px 13px;
   line-height: 1.6;
-  white-space: pre-wrap;
   word-break: break-word;
   box-shadow: 0 2px 6px rgba(20, 30, 45, 0.04);
 }
 
+.bubble.bubble-user,
 .msg.user .bubble {
   background: #e9f1ff;
+  white-space: pre-wrap;
 }
 
+.bubble.bubble-agent,
 .msg.agent .bubble {
   background: #f1f4f8;
+  white-space: normal;
 }
 
 .bubble.thinking {
@@ -754,6 +757,64 @@
   color: #b33a3a;
   font-size: 12px;
 }
+
+/* ── Header title group ─────────────────────────────────── */
+
+.file-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.file-mode-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  background: rgba(22, 99, 255, 0.08);
+  color: rgba(22, 99, 255, 0.8);
+  border: 1px solid rgba(22, 99, 255, 0.15);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── Rendered document view ─────────────────────────────── */
+
+.file-render-view {
+  flex: 1;
+  overflow: auto;
+  padding: 24px 32px 32px;
+}
+
+.file-md-body {
+  max-width: 720px;
+}
+
+/* override MarkdownRenderer font-size for document feel */
+.file-render-view .md-body {
+  font-size: 14.5px;
+  line-height: 1.8;
+}
+
+.file-render-view .md-body h1 { font-size: 1.6em; }
+.file-render-view .md-body h2 { font-size: 1.3em; }
+.file-render-view .md-body h3 { font-size: 1.1em; }
+
+.file-render-view .md-code-block pre {
+  font-size: 13px;
+}
+
+.file-empty {
+  color: var(--muted);
+  font-size: 13px;
+  padding: 32px 0;
+  text-align: center;
+}
+
 
 .composer {
   padding: 0 18px 8px;

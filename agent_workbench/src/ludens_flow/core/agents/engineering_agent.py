@@ -263,6 +263,50 @@ class EngineeringAgent(BaseAgent):
             events=["ENG_COMMITTED"],
         )
 
+    @staticmethod
+    def _make_devlog_filter(real_handler):
+        """Wraps a stream_handler to silently suppress [DEVLOG]...[/DEVLOG] blocks."""
+        buf = [""]
+        inside = [False]
+
+        def _handle(chunk: str):
+            buf[0] += chunk
+            out = ""
+            rest = buf[0]
+            buf[0] = ""
+
+            while rest:
+                if not inside[0]:
+                    start = rest.find("[DEVLOG]")
+                    if start == -1:
+                        # No full marker; protect against a partial tail
+                        marker = "[DEVLOG]"
+                        for n in range(len(marker) - 1, 0, -1):
+                            if rest.endswith(marker[:n]):
+                                out += rest[:-n]
+                                buf[0] = rest[-n:]
+                                rest = ""
+                                break
+                        else:
+                            out += rest
+                            rest = ""
+                    else:
+                        out += rest[:start]
+                        rest = rest[start + len("[DEVLOG]"):]
+                        inside[0] = True
+                else:
+                    end = rest.find("[/DEVLOG]")
+                    if end == -1:
+                        rest = ""  # still inside block, discard
+                    else:
+                        rest = rest[end + len("[/DEVLOG]"):]
+                        inside[0] = False
+
+            if out and real_handler:
+                real_handler(out)
+
+        return _handle
+
     def coach(
         self,
         state: LudensState,
@@ -272,25 +316,41 @@ class EngineeringAgent(BaseAgent):
         stream_handler: Optional[Callable[[str], None]] = None,
         tool_event_handler=None,
     ) -> AgentResult:
+        from datetime import datetime, timezone
+
         impl_plan = read_artifact("IMPLEMENTATION_PLAN", project_id=state.project_id)
         resolved_style = self._resolve_style_preset(state, user_input)
-        style = resolved_style or state.style_preset or "常规"
+        style = resolved_style or state.style_preset or "\u5e38\u89c4"
 
         prompt_text = (
             "You are in DEV_COACHING mode. Only guide implementation work; do not modify the canonical plan.\n"
             f"Engineering style: {style}\n"
             f"Implementation plan:\n{impl_plan}\n\n"
             "Reply using this structure:\n"
-            "1. Confirm your understanding of the user's problem in 2-3 sentences.\n"
+            "1. Confirm your understanding of the user\u2019s problem in 2-3 sentences.\n"
             "2. Give the most recommended implementation path.\n"
             "3. Provide a lightweight Unity execution guide.\n"
             "4. Warn about 1-2 likely pitfalls.\n"
             "5. End by asking whether the user wants a more detailed Unity step-by-step guide or a complete coding-agent prompt.\n"
+            "\n"
+            "DEVLOG (optional):\n"
+            "If this exchange contained a meaningful technical decision, an architectural trade-off, "
+            "a key problem identified, or something worth preserving for the project record, "
+            "append a brief DEVLOG note at the very end of your reply using this exact format:\n"
+            "[DEVLOG]\n"
+            "<2-4 line note in Chinese. Start with \u300c\u51b3\u7b56\u300d\u3001\u300c\u95ee\u9898\u300d or \u300c\u7b14\u8bb0\u300d.>\n"
+            "[/DEVLOG]\n"
+            "If the exchange was routine (simple Q&A, quick clarification, no new decision), omit the block entirely.\n"
         )
         prompt = self._compose_user_prompt(
             prompt_text,
             user_input,
-            input_label="User's current problem",
+            input_label="User\u2019s current problem",
+        )
+
+        # Wrap stream_handler so [DEVLOG] blocks are silently filtered from the UI
+        filtered_handler = (
+            self._make_devlog_filter(stream_handler) if stream_handler else None
         )
 
         reply = self._call(
@@ -299,16 +359,50 @@ class EngineeringAgent(BaseAgent):
             history=state.chat_history,
             user_persona=user_persona,
             project_id=state.project_id,
-            stream_handler=stream_handler,
+            stream_handler=filtered_handler,
             tool_event_handler=tool_event_handler,
         )
         logger.info("[EngineeringAgent] Coach instruction issued.")
 
-        updates = {}
+        # Parse DEVLOG block and strip it from the stored assistant message
+        devlog_match = re.search(r"\[DEVLOG\](.*?)\[/DEVLOG\]", reply, re.DOTALL)
+        devlog_entry = devlog_match.group(1).strip() if devlog_match else None
+        clean_reply = re.sub(
+            r"\s*\[DEVLOG\].*?\[/DEVLOG\]", "", reply, flags=re.DOTALL
+        ).strip()
+
+        updates: dict = {}
         if resolved_style and resolved_style != state.style_preset:
             updates["style_preset"] = resolved_style
 
+        commit = None
+        if devlog_entry:
+            existing = read_artifact("DEVLOG", project_id=state.project_id)
+            ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+            if not existing.strip():
+                preamble = "# Dev Coaching Log\n\n"
+                separator = ""
+            else:
+                preamble = ""
+                separator = "\n\n---\n\n"
+            new_content = (
+                preamble
+                + existing.rstrip()
+                + separator
+                + f"### {ts}\n\n{devlog_entry}\n"
+            )
+            commit = CommitSpec(
+                artifact_name="DEVLOG",
+                content=new_content,
+                reason="Coach session DEVLOG entry",
+            )
+            logger.info(
+                "[EngineeringAgent] DEVLOG entry queued: %s...",
+                devlog_entry[:60],
+            )
+
         return AgentResult(
-            assistant_message=reply.strip(),
+            assistant_message=clean_reply,
             state_updates=updates,
+            commit=commit,
         )

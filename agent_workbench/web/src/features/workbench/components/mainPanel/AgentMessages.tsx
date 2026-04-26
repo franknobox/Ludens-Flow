@@ -1,5 +1,6 @@
 import { memo, useMemo } from "react";
 
+import { MarkdownRenderer } from "./MarkdownRenderer";
 import { agentName } from "../../utils";
 import type {
   AgentKey,
@@ -42,8 +43,12 @@ function renderMessageRow(agentKey: AgentKey, item: RenderMessage, index: number
               <span></span>
             </span>
           </div>
+        ) : user ? (
+          <div className="bubble bubble-user">{item.content}</div>
         ) : (
-          <div className="bubble">{item.content}</div>
+          <div className="bubble bubble-agent">
+            <MarkdownRenderer content={item.content} />
+          </div>
         )}
       </div>
     </div>

@@ -131,12 +131,14 @@
   border-color: var(--warn) !important;
 }
 
-[data-theme="dark"] .msg.user .bubble {
+[data-theme="dark"] .msg.user .bubble,
+[data-theme="dark"] .bubble.bubble-user {
   background: var(--primary-soft) !important;
   border: 1px solid rgba(88, 166, 255, 0.25) !important;
 }
 
-[data-theme="dark"] .msg.agent .bubble {
+[data-theme="dark"] .msg.agent .bubble,
+[data-theme="dark"] .bubble.bubble-agent {
   background: #262626 !important;
   border: 1px solid var(--line) !important;
 }
@@ -709,4 +711,30 @@
 
 [data-theme="dark"] .github-graph-meta {
   color: var(--muted) !important;
+}
+
+/* ── File panel dark overrides ──────────────────────────── */
+
+[data-theme="dark"] .file-panel {
+  background: var(--panel) !important;
+  border-color: var(--line) !important;
+}
+
+[data-theme="dark"] .file-render-view {
+  background: transparent !important;
+}
+
+[data-theme="dark"] .file-mode-badge {
+  background: rgba(88, 166, 255, 0.1) !important;
+  color: #58a6ff !important;
+  border-color: rgba(88, 166, 255, 0.2) !important;
+}
+
+[data-theme="dark"] .file-editor {
+  background: var(--panel) !important;
+  color: var(--text) !important;
+}
+
+[data-theme="dark"] .file-content {
+  color: var(--text) !important;
 }

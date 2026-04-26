@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { MarkdownRenderer } from "./MarkdownRenderer";
 import type { ViewState, WorkspaceFileItem } from "../../types";
 
 interface FileViewProps {
@@ -73,7 +74,12 @@ export function FileView(props: FileViewProps) {
   return (
     <div className="file-panel">
       <div className="file-header">
-        <div className="file-title">{file?.name || currentView.id}</div>
+        <div className="file-title-group">
+          <div className="file-title">{file?.name || currentView.id}</div>
+          <span className="file-mode-badge">
+            {isEditing ? "源码模式" : "渲染预览"}
+          </span>
+        </div>
         <div className="file-actions">
           {isEditing ? (
             <>
@@ -105,8 +111,12 @@ export function FileView(props: FileViewProps) {
               className="btn-line btn-file btn-file-icon"
               disabled={!canStartEdit}
               onClick={startFileEdit}
-              title={canStartEdit ? "编辑工件" : "文件加载中，暂不可编辑"}
+              title={canStartEdit ? "编辑" : "文件加载中，暂不可编辑"}
             >
+              {/* pencil icon */}
+              <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor" style={{ marginRight: 4 }}>
+                <path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61Zm.176 4.823L9.75 4.81l-6.286 6.287a.253.253 0 0 0-.064.108l-.558 1.953 1.953-.558a.253.253 0 0 0 .108-.064Zm1.238-3.763a.25.25 0 0 0-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 0 0 0-.354Z" />
+              </svg>
               编辑
             </button>
           )}
@@ -121,7 +131,17 @@ export function FileView(props: FileViewProps) {
           onChange={(event) => setFileDraftContent(event.target.value)}
         />
       ) : (
-        <pre className="file-content">{showContent}</pre>
+        <div className="file-render-view">
+          {typeof content === "string" ? (
+            content.trim() ? (
+              <MarkdownRenderer content={content} className="file-md-body" />
+            ) : (
+              <div className="file-empty">文件内容为空</div>
+            )
+          ) : (
+            <div className="file-empty">加载中...</div>
+          )}
+        </div>
       )}
 
       {fileSaveError ? <div className="file-error">{fileSaveError}</div> : null}
