@@ -48,5 +48,6 @@ export interface ProjectWorkspacesResponse {
 export interface ProjectSettingsResponse {
   project_id: string;
   agent_file_write_enabled: boolean;
+  agent_file_write_confirm_required?: boolean;
   model_routing?: Record<string, unknown>;
 }

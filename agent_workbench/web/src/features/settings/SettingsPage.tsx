@@ -165,6 +165,7 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
           : {
               project_id: runtimeState?.project_id || "",
               agent_file_write_enabled: true,
+              agent_file_write_confirm_required: false,
             },
       );
     } catch (error) {
@@ -331,6 +332,24 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
     }
   };
 
+  const handleToggleFileWriteConfirm = async (required: boolean) => {
+    setSettingsSubmitting(true);
+    clearMessages();
+    try {
+      const response = await workbenchApi.updateCurrentProjectSettings({
+        agent_file_write_confirm_required: required,
+      });
+      setProjectSettings(response);
+      setSuccessText(
+        required ? "已开启写入前确认。" : "已关闭写入前确认。",
+      );
+    } catch (error) {
+      setErrorText(toErrorMessage(error));
+    } finally {
+      setSettingsSubmitting(false);
+    }
+  };
+
   const handleSaveModelRouting = async () => {
     if (modelRoutingValidation.error || !modelRoutingValidation.parsed) {
       setErrorText(modelRoutingValidation.error || "模型路由配置无效。");
@@ -413,6 +432,9 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
               modelRoutingValidation={modelRoutingValidation}
               onToggleFileWrite={(enabled) => {
                 void handleToggleFileWrite(enabled);
+              }}
+              onToggleFileWriteConfirm={(required) => {
+                void handleToggleFileWriteConfirm(required);
               }}
               onThemeChange={handleThemeChange}
               onModelRoutingDraftChange={(value) => {

@@ -18,11 +18,103 @@ from ludens_flow.capabilities.workspaces import (
 )
 
 _ToolEventHandler = Optional[Callable[[dict[str, Any]], None]]
+_WRITE_TOOL_NAMES = {
+    "workspace_create_directory",
+    "workspace_write_text_file",
+    "workspace_patch_text_file",
+    "workspace_delete_file",
+}
 
 
-def _emit_tool_event(event_handler: _ToolEventHandler, payload: dict[str, Any]) -> None:
+def _emit_tool_event(event_handler: _ToolEventHandler, payload: dict[str, Any]) -> Any:
     if event_handler:
-        event_handler(payload)
+        return event_handler(payload)
+    return None
+
+
+def _emit_permission_event(
+    event_handler: _ToolEventHandler,
+    *,
+    event_type: str,
+    tool_name: str,
+    workspace_id: Optional[str],
+    path: str,
+    message: str,
+) -> Any:
+    return _emit_tool_event(
+        event_handler,
+        {
+            "type": event_type,
+            "tool_name": tool_name,
+            "args": {
+                "workspace_id": workspace_id,
+                "path": path,
+            },
+            "message": message,
+        },
+    )
+
+
+def _resolve_write_target_with_events(
+    *,
+    tool_name: str,
+    path: str,
+    workspace_id: Optional[str],
+    project_id: Optional[str],
+    tool_event_handler: _ToolEventHandler,
+    file_kind: str = "text",
+):
+    if tool_name in _WRITE_TOOL_NAMES:
+        approved = _emit_permission_event(
+            tool_event_handler,
+            event_type="permission_required",
+            tool_name=tool_name,
+            workspace_id=workspace_id,
+            path=path,
+            message=f"Checking write permission for: {path}",
+        )
+        if approved is False:
+            _emit_permission_event(
+                tool_event_handler,
+                event_type="permission_denied",
+                tool_name=tool_name,
+                workspace_id=workspace_id,
+                path=path,
+                message=f"User denied write permission for: {path}",
+            )
+            raise WorkspaceAccessError(
+                "PERMISSION_DENIED",
+                "User denied this workspace write operation.",
+            )
+    try:
+        target = check_workspace_write_permission(
+            project_id,
+            workspace_id=workspace_id,
+            relative_path=path,
+            file_kind=file_kind,
+        )
+    except WorkspaceAccessError as exc:
+        if tool_name in _WRITE_TOOL_NAMES:
+            _emit_permission_event(
+                tool_event_handler,
+                event_type="permission_denied",
+                tool_name=tool_name,
+                workspace_id=workspace_id,
+                path=path,
+                message=str(exc),
+            )
+        raise
+
+    if tool_name in _WRITE_TOOL_NAMES:
+        _emit_permission_event(
+            tool_event_handler,
+            event_type="permission_granted",
+            tool_name=tool_name,
+            workspace_id=target.binding.workspace.get("id"),
+            path=target.relative_path,
+            message=f"Write permission granted for: {target.relative_path}",
+        )
+    return target
 
 
 def _read_text_file(path: Path, *, max_chars: int) -> tuple[str, bool]:
@@ -126,10 +218,12 @@ def workspace_write_text_file(
     project_id: Optional[str] = None,
     tool_event_handler: _ToolEventHandler = None,
 ) -> str:
-    target = check_workspace_write_permission(
-        project_id,
+    target = _resolve_write_target_with_events(
+        tool_name="workspace_write_text_file",
+        path=path,
         workspace_id=workspace_id,
-        relative_path=path,
+        project_id=project_id,
+        tool_event_handler=tool_event_handler,
     )
     if target.target.exists() and not target.target.is_file():
         raise WorkspaceAccessError(
@@ -192,13 +286,13 @@ def workspace_create_directory(
     project_id: Optional[str] = None,
     tool_event_handler: _ToolEventHandler = None,
 ) -> str:
-    target = resolve_workspace_target(
-        project_id,
+    target = _resolve_write_target_with_events(
+        tool_name="workspace_create_directory",
+        path=path,
         workspace_id=workspace_id,
-        relative_path=path,
-        operation="create",
-        require_enabled=True,
-        require_writable=True,
+        project_id=project_id,
+        tool_event_handler=tool_event_handler,
+        file_kind="directory",
     )
     if target.target.exists() and not target.target.is_dir():
         raise WorkspaceAccessError(
@@ -255,10 +349,12 @@ def workspace_delete_file(
     project_id: Optional[str] = None,
     tool_event_handler: _ToolEventHandler = None,
 ) -> str:
-    target = check_workspace_write_permission(
-        project_id,
+    target = _resolve_write_target_with_events(
+        tool_name="workspace_delete_file",
+        path=path,
         workspace_id=workspace_id,
-        relative_path=path,
+        project_id=project_id,
+        tool_event_handler=tool_event_handler,
     )
     if not target.target.exists():
         raise WorkspaceAccessError(
@@ -324,10 +420,12 @@ def workspace_patch_text_file(
             "Provide a non-empty list of patch operations.",
         )
 
-    target = check_workspace_write_permission(
-        project_id,
+    target = _resolve_write_target_with_events(
+        tool_name="workspace_patch_text_file",
+        path=path,
         workspace_id=workspace_id,
-        relative_path=path,
+        project_id=project_id,
+        tool_event_handler=tool_event_handler,
     )
     if not target.target.exists():
         raise WorkspaceAccessError(

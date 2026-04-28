@@ -71,6 +71,7 @@ interface GeneralSettingsSectionProps {
   modelRoutingDirty: boolean;
   modelRoutingValidation: ModelRoutingValidation;
   onToggleFileWrite: (enabled: boolean) => void;
+  onToggleFileWriteConfirm: (required: boolean) => void;
   onThemeChange: (theme: string) => void;
   onModelRoutingDraftChange: (value: string) => void;
   onUseModelRoutingTemplate: () => void;
@@ -88,6 +89,7 @@ export function GeneralSettingsSection(props: GeneralSettingsSectionProps) {
     modelRoutingDirty,
     modelRoutingValidation,
     onToggleFileWrite,
+    onToggleFileWriteConfirm,
     onThemeChange,
     onModelRoutingDraftChange,
     onUseModelRoutingTemplate,
@@ -116,12 +118,34 @@ export function GeneralSettingsSection(props: GeneralSettingsSectionProps) {
             <span>允许 Agent 写入当前项目工作区中的文件</span>
           </label>
 
+          <label className="settings-toggle">
+            <input
+              type="checkbox"
+              checked={projectSettings?.agent_file_write_confirm_required ?? false}
+              disabled={
+                loading ||
+                settingsSubmitting ||
+                !(projectSettings?.agent_file_write_enabled ?? true)
+              }
+              onChange={(event) => onToggleFileWriteConfirm(event.target.checked)}
+            />
+            <span>
+              每次写入前请求确认
+              <small className="settings-toggle-hint">
+                关闭后为安全自动执行模式：通过项目总开关、工作区可写、路径边界和文件类型白名单后，Agent 可直接写入。
+              </small>
+            </span>
+          </label>
+
           <div className="settings-note-strip">
             <span className="settings-note-item">
               关闭后，创建目录、写入、补丁、删除等写入类工具会被拒绝
             </span>
             <span className="settings-note-item">
               开启后，仍然会继续受工作区可写权限约束
+            </span>
+            <span className="settings-note-item">
+              模式：{projectSettings?.agent_file_write_confirm_required ? "逐次确认" : "安全自动执行，无需逐次请求"}
             </span>
           </div>
         </div>

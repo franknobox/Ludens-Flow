@@ -56,9 +56,37 @@ function renderMessageRow(agentKey: AgentKey, item: RenderMessage, index: number
 }
 
 function toolStatusLabel(type: ToolProgressEvent["type"]): string {
+  if (type === "permission_required") return "权限校验";
+  if (type === "permission_granted") return "已授权";
+  if (type === "permission_denied") return "已拒绝";
   if (type === "tool_started") return "进行中";
+  if (type === "tool_progress") return "执行中";
+  if (type === "file_changed") return "文件变更";
   if (type === "tool_completed") return "已完成";
   return "失败";
+}
+
+function toolEventClass(type: ToolProgressEvent["type"]): string {
+  if (type === "permission_denied" || type === "tool_failed") return "failed";
+  if (
+    type === "permission_granted" ||
+    type === "file_changed" ||
+    type === "tool_completed"
+  ) {
+    return "completed";
+  }
+  return "started";
+}
+
+function toolEventDetail(event: ToolProgressEvent): string {
+  const parts = [
+    event.message,
+    event.tool_result_summary,
+    event.file_path
+      ? `文件：${event.file_path}${event.change_type ? `（${event.change_type}）` : ""}`
+      : "",
+  ].filter(Boolean);
+  return parts.join("\n");
 }
 
 function ToolProcessCard({ toolEvents }: { toolEvents: ToolProgressEvent[] }) {
@@ -69,14 +97,14 @@ function ToolProcessCard({ toolEvents }: { toolEvents: ToolProgressEvent[] }) {
         {toolEvents.map((event) => (
           <div
             key={event.id}
-            className={`tool-process-item is-${event.type.replace("tool_", "")}`}
+            className={`tool-process-item is-${toolEventClass(event.type)}`}
           >
             <div className="tool-process-head">
               <strong>{event.tool_summary}</strong>
               <span>{toolStatusLabel(event.type)}</span>
             </div>
-            {event.tool_result_summary ? (
-              <div className="tool-process-detail">{event.tool_result_summary}</div>
+            {toolEventDetail(event) ? (
+              <div className="tool-process-detail">{toolEventDetail(event)}</div>
             ) : null}
             {event.error ? <div className="tool-process-detail error">{event.error}</div> : null}
           </div>

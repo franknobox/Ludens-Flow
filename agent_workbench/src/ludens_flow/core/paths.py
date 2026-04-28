@@ -405,6 +405,9 @@ def _migrate_project_meta_payload(
         "agent_file_write_enabled": _coerce_bool(
             meta.get("agent_file_write_enabled", True)
         ),
+        "agent_file_write_confirm_required": _coerce_bool(
+            meta.get("agent_file_write_confirm_required", False)
+        ),
         "model_routing": _normalize_model_routing(meta.get("model_routing")),
         "unity_root": _first_workspace_root(workspaces, kind="unity"),
         "workspaces": workspaces,
@@ -449,6 +452,9 @@ def _build_project_meta_record(
         "agent_file_write_enabled": _coerce_bool(
             meta.get("agent_file_write_enabled", True)
         ),
+        "agent_file_write_confirm_required": _coerce_bool(
+            meta.get("agent_file_write_confirm_required", False)
+        ),
         "model_routing": _normalize_model_routing(meta.get("model_routing")),
         "unity_root": _first_workspace_root(workspaces, kind="unity"),
         "workspaces": workspaces,
@@ -468,6 +474,7 @@ def _upsert_project_meta(
     archived: Optional[bool] = None,
     last_message_preview: Optional[str] = None,
     agent_file_write_enabled: Any = _UNSET,
+    agent_file_write_confirm_required: Any = _UNSET,
     model_routing: Any = _UNSET,
     unity_root: Any = _UNSET,
     workspaces: Any = _UNSET,
@@ -508,6 +515,9 @@ def _upsert_project_meta(
         "agent_file_write_enabled": _coerce_bool(
             existing.get("agent_file_write_enabled", True)
         ),
+        "agent_file_write_confirm_required": _coerce_bool(
+            existing.get("agent_file_write_confirm_required", False)
+        ),
         "model_routing": _normalize_model_routing(existing.get("model_routing")),
         "unity_root": _first_workspace_root(existing_workspaces, kind="unity"),
         "workspaces": existing_workspaces,
@@ -521,6 +531,10 @@ def _upsert_project_meta(
         meta["last_message_preview"] = last_message_preview
     if agent_file_write_enabled is not _UNSET:
         meta["agent_file_write_enabled"] = _coerce_bool(agent_file_write_enabled)
+    if agent_file_write_confirm_required is not _UNSET:
+        meta["agent_file_write_confirm_required"] = _coerce_bool(
+            agent_file_write_confirm_required
+        )
     if model_routing is not _UNSET:
         meta["model_routing"] = _normalize_model_routing(model_routing)
     if unity_root is not _UNSET:
@@ -686,6 +700,7 @@ def create_project(
     set_active: bool = False,
     archived: Optional[bool] = None,
     agent_file_write_enabled: Any = _UNSET,
+    agent_file_write_confirm_required: Any = _UNSET,
     model_routing: Any = _UNSET,
     unity_root: Any = _UNSET,
     workspaces: Any = _UNSET,
@@ -701,6 +716,7 @@ def create_project(
         title=title,
         archived=archived,
         agent_file_write_enabled=agent_file_write_enabled,
+        agent_file_write_confirm_required=agent_file_write_confirm_required,
         model_routing=model_routing,
         unity_root=unity_root,
         workspaces=workspaces,
@@ -721,6 +737,7 @@ def touch_project(
     archived: Optional[bool] = None,
     last_message_preview: Optional[str] = None,
     agent_file_write_enabled: Any = _UNSET,
+    agent_file_write_confirm_required: Any = _UNSET,
     model_routing: Any = _UNSET,
     unity_root: Any = _UNSET,
     workspaces: Any = _UNSET,
@@ -739,6 +756,7 @@ def touch_project(
         archived=archived,
         last_message_preview=last_message_preview,
         agent_file_write_enabled=agent_file_write_enabled,
+        agent_file_write_confirm_required=agent_file_write_confirm_required,
         model_routing=model_routing,
         unity_root=unity_root,
         workspaces=workspaces,
@@ -873,6 +891,9 @@ def get_project_settings(project_id: Optional[str] = None) -> Dict[str, Any]:
         "agent_file_write_enabled": _coerce_bool(
             record.get("agent_file_write_enabled", True)
         ),
+        "agent_file_write_confirm_required": _coerce_bool(
+            record.get("agent_file_write_confirm_required", False)
+        ),
         "model_routing": _normalize_model_routing(record.get("model_routing")),
     }
 
@@ -881,6 +902,16 @@ def get_project_agent_file_write_enabled(project_id: Optional[str] = None) -> bo
     return _coerce_bool(
         get_project_settings(project_id=project_id).get(
             "agent_file_write_enabled", True
+        )
+    )
+
+
+def get_project_agent_file_write_confirm_required(
+    project_id: Optional[str] = None,
+) -> bool:
+    return _coerce_bool(
+        get_project_settings(project_id=project_id).get(
+            "agent_file_write_confirm_required", False
         )
     )
 
@@ -899,6 +930,31 @@ def set_project_agent_file_write_enabled(
         "project_id": resolved,
         "agent_file_write_enabled": _coerce_bool(
             meta.get("agent_file_write_enabled", True)
+        ),
+        "agent_file_write_confirm_required": _coerce_bool(
+            meta.get("agent_file_write_confirm_required", False)
+        ),
+        "model_routing": _normalize_model_routing(meta.get("model_routing")),
+    }
+
+
+def set_project_agent_file_write_confirm_required(
+    required: bool, *, project_id: Optional[str] = None
+) -> Dict[str, Any]:
+    resolved = resolve_project_id(project_id)
+    if not resolved:
+        raise ValueError("Project id is required.")
+    meta = touch_project(
+        resolved,
+        agent_file_write_confirm_required=_coerce_bool(required),
+    )
+    return {
+        "project_id": resolved,
+        "agent_file_write_enabled": _coerce_bool(
+            meta.get("agent_file_write_enabled", True)
+        ),
+        "agent_file_write_confirm_required": _coerce_bool(
+            meta.get("agent_file_write_confirm_required", False)
         ),
         "model_routing": _normalize_model_routing(meta.get("model_routing")),
     }
@@ -923,6 +979,9 @@ def set_project_model_routing(
         "project_id": resolved,
         "agent_file_write_enabled": _coerce_bool(
             meta.get("agent_file_write_enabled", True)
+        ),
+        "agent_file_write_confirm_required": _coerce_bool(
+            meta.get("agent_file_write_confirm_required", False)
         ),
         "model_routing": _normalize_model_routing(meta.get("model_routing")),
     }

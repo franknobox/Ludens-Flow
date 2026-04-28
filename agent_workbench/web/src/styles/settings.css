@@ -507,6 +507,18 @@
   height: 16px;
 }
 
+.settings-toggle span {
+  display: grid;
+  gap: 3px;
+}
+
+.settings-toggle-hint {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
 .settings-feedback {
   padding: 12px 16px;
   font-size: 13px;

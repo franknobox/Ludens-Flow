@@ -8,6 +8,9 @@ import type {
 const KNOWN_EVENT_TYPES = new Set<WorkbenchEventType>([
   "connected",
   "run_started",
+  "permission_required",
+  "permission_granted",
+  "permission_denied",
   "tool_started",
   "tool_completed",
   "tool_failed",
@@ -73,8 +76,10 @@ export function normalizeWorkbenchEvent(
     tool_name: asString(raw.tool_name),
     tool_summary: asString(raw.tool_summary),
     tool_result_summary: asString(raw.tool_result_summary),
+    workspace_id: asString(raw.workspace_id),
     file_path: asString(raw.file_path),
     change_type: asString(raw.change_type),
+    permission_request_id: asString(raw.permission_request_id),
   };
 }
 

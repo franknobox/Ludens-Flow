@@ -123,6 +123,7 @@ export function useWorkbenchController() {
   const contentAreaRef = useRef<HTMLElement>(null);
   const lastEventAtRef = useRef(0);
   const lastSyncedProjectIdRef = useRef("");
+  const permissionDecisionRef = useRef<Set<string>>(new Set());
 
   const historyByAgent = useMemo(() => buildHistoryByAgent(model), [model]);
   const activeProject = useMemo(
@@ -242,10 +243,32 @@ export function useWorkbenchController() {
     }
 
     if (
+      event.type === "permission_required" ||
+      event.type === "permission_granted" ||
+      event.type === "permission_denied" ||
       event.type === "tool_started" ||
+      event.type === "tool_progress" ||
+      event.type === "file_changed" ||
       event.type === "tool_completed" ||
       event.type === "tool_failed"
     ) {
+      if (event.type === "permission_required" && event.permission_request_id) {
+        const requestId = event.permission_request_id;
+        if (!permissionDecisionRef.current.has(requestId)) {
+          permissionDecisionRef.current.add(requestId);
+          const approved = window.confirm(
+            `${event.tool_summary || "Agent 请求写入文件"}\n\n${
+              event.file_path ? `目标：${event.file_path}\n` : ""
+            }是否允许这次受控文件操作？`,
+          );
+          void workbenchApi
+            .submitPermissionDecision(requestId, approved)
+            .catch((error) => {
+              setErrorText("权限确认提交失败：" + toErrorMessage(error));
+            });
+        }
+      }
+
       setTransientChat((prev) => {
         const toolEventType = event.type as ToolProgressEvent["type"];
         const nextEvent: ToolProgressEvent = {
@@ -254,6 +277,10 @@ export function useWorkbenchController() {
           tool_name: event.tool_name || "tool",
           tool_summary: event.tool_summary || (event.tool_name || "工具调用"),
           tool_result_summary: event.tool_result_summary,
+          message: event.message,
+          file_path: event.file_path,
+          change_type: event.change_type,
+          permission_request_id: event.permission_request_id,
           error: event.error,
         };
 

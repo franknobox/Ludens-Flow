@@ -46,16 +46,31 @@ export interface ChatResponse {
 
 export interface ToolProgressEvent {
   id: string;
-  type: "tool_started" | "tool_completed" | "tool_failed";
+  type:
+    | "permission_required"
+    | "permission_granted"
+    | "permission_denied"
+    | "tool_started"
+    | "tool_progress"
+    | "file_changed"
+    | "tool_completed"
+    | "tool_failed";
   tool_name: string;
   tool_summary: string;
   tool_result_summary?: string;
+  message?: string;
+  file_path?: string;
+  change_type?: string;
+  permission_request_id?: string;
   error?: string;
 }
 
 export type WorkbenchEventType =
   | "connected"
   | "run_started"
+  | "permission_required"
+  | "permission_granted"
+  | "permission_denied"
   | "tool_started"
   | "tool_completed"
   | "tool_failed"
@@ -85,6 +100,8 @@ export interface WorkbenchEvent {
   tool_name?: string;
   tool_summary?: string;
   tool_result_summary?: string;
+  workspace_id?: string;
   file_path?: string;
   change_type?: string;
+  permission_request_id?: string;
 }

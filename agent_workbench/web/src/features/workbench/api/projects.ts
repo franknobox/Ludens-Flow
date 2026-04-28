@@ -17,6 +17,7 @@ export function getCurrentProjectSettings() {
 
 export function updateCurrentProjectSettings(body: {
   agent_file_write_enabled?: boolean;
+  agent_file_write_confirm_required?: boolean;
   model_routing?: Record<string, unknown>;
 }) {
   return fetchJson<ProjectSettingsResponse>("/api/projects/current/settings", {
@@ -24,6 +25,17 @@ export function updateCurrentProjectSettings(body: {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+}
+
+export function submitPermissionDecision(requestId: string, approved: boolean) {
+  return fetchJson<{ permission_request_id: string; approved: boolean }>(
+    `/api/permissions/${encodeURIComponent(requestId)}/decision`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ approved }),
+    },
+  );
 }
 
 export function createProject(body: {

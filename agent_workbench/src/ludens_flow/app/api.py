@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 import queue
+import uuid
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -41,6 +42,7 @@ from ludens_flow.core.paths import (
     resolve_project_id,
     restore_project,
     set_project_agent_file_write_enabled,
+    set_project_agent_file_write_confirm_required,
     set_project_model_routing,
     set_active_project_id,
     set_project_unity_root,
@@ -62,6 +64,8 @@ _PROJECT_LOCKS: dict[str, threading.Lock] = {}
 _PROJECT_LOCKS_GUARD = threading.Lock()
 _EVENT_SUBSCRIBERS: dict[str, list[queue.Queue[dict]]] = {}
 _EVENT_SUBSCRIBERS_GUARD = threading.Lock()
+_PERMISSION_REQUESTS: dict[str, dict] = {}
+_PERMISSION_REQUESTS_GUARD = threading.Lock()
 
 WORKBENCH_ROOT = Path(__file__).resolve().parents[3]
 WEB_DIST_DIR = WORKBENCH_ROOT / "web" / "dist"
@@ -97,7 +101,12 @@ class ProjectWorkspaceRequest(BaseModel):
 
 class ProjectSettingsRequest(BaseModel):
     agent_file_write_enabled: bool | None = None
+    agent_file_write_confirm_required: bool | None = None
     model_routing: dict | None = None
+
+
+class PermissionDecisionRequest(BaseModel):
+    approved: bool
 
 
 class ActionRequest(BaseModel):
@@ -332,8 +341,32 @@ def _summarize_tool_result(tool_name: str, result: str) -> str:
     return (text[:120] + "…") if len(text) > 120 else text
 
 
+def _request_tool_permission(project_id: str, payload: dict) -> bool:
+    if not get_project_settings(project_id=project_id).get(
+        "agent_file_write_confirm_required", False
+    ):
+        _publish_project_event(project_id, payload)
+        return True
+
+    request_id = uuid.uuid4().hex
+    decision_event = threading.Event()
+    record = {"event": decision_event, "approved": None}
+    payload = payload | {"permission_request_id": request_id}
+
+    with _PERMISSION_REQUESTS_GUARD:
+        _PERMISSION_REQUESTS[request_id] = record
+
+    _publish_project_event(project_id, payload)
+    decision_event.wait(timeout=90)
+
+    with _PERMISSION_REQUESTS_GUARD:
+        _PERMISSION_REQUESTS.pop(request_id, None)
+
+    return bool(record.get("approved"))
+
+
 def _build_tool_event_handler(project_id: str, state) -> callable:
-    def emit(event: dict) -> None:
+    def emit(event: dict):
         event_type = str(event.get("type", "") or "").strip()
         if not event_type:
             return
@@ -350,6 +383,17 @@ def _build_tool_event_handler(project_id: str, state) -> callable:
                 args if isinstance(args, dict) else {},
             ),
         }
+        if isinstance(args, dict):
+            payload["workspace_id"] = str(args.get("workspace_id", "") or "")
+            payload["file_path"] = str(
+                args.get("path", "") or args.get("relative_path", "") or ""
+            )
+        if event_type in {
+            "permission_required",
+            "permission_granted",
+            "permission_denied",
+        }:
+            payload["message"] = str(event.get("message", "") or "")
         if event_type == "tool_completed":
             payload["tool_result_summary"] = _summarize_tool_result(
                 tool_name,
@@ -363,7 +407,10 @@ def _build_tool_event_handler(project_id: str, state) -> callable:
             payload["message"] = str(event.get("summary", "") or "")
         if event_type == "tool_failed":
             payload["error"] = str(event.get("error", "") or "工具执行失败。")
+        if event_type == "permission_required":
+            return _request_tool_permission(project_id, payload)
         _publish_project_event(project_id, payload)
+        return None
 
     return emit
 
@@ -733,12 +780,22 @@ def get_current_project_settings():
 @app.post("/api/projects/current/settings")
 def post_current_project_settings(req: ProjectSettingsRequest):
     project_id = resolve_project_id()
-    if req.agent_file_write_enabled is None and req.model_routing is None:
+    if (
+        req.agent_file_write_enabled is None
+        and req.agent_file_write_confirm_required is None
+        and req.model_routing is None
+    ):
         raise HTTPException(status_code=400, detail="No settings field provided.")
 
     if req.agent_file_write_enabled is not None:
         set_project_agent_file_write_enabled(
             req.agent_file_write_enabled,
+            project_id=project_id,
+        )
+
+    if req.agent_file_write_confirm_required is not None:
+        set_project_agent_file_write_confirm_required(
+            req.agent_file_write_confirm_required,
             project_id=project_id,
         )
 
@@ -749,6 +806,18 @@ def post_current_project_settings(req: ProjectSettingsRequest):
         )
 
     return get_project_settings(project_id=project_id)
+
+
+@app.post("/api/permissions/{request_id}/decision")
+def post_permission_decision(request_id: str, req: PermissionDecisionRequest):
+    with _PERMISSION_REQUESTS_GUARD:
+        record = _PERMISSION_REQUESTS.get(request_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Permission request not found.")
+
+    record["approved"] = bool(req.approved)
+    record["event"].set()
+    return {"permission_request_id": request_id, "approved": bool(req.approved)}
 
 
 @app.get("/api/tools")

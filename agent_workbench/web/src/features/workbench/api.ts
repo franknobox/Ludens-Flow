@@ -12,6 +12,7 @@ import {
   resetCurrentProject,
   restoreProject,
   selectProject,
+  submitPermissionDecision,
   updateCurrentProjectSettings,
 } from "./api/projects";
 import { getState, postAction, postChat } from "./api/chat";
@@ -33,6 +34,7 @@ export const workbenchApi = {
   getProjects,
   createProject,
   selectProject,
+  submitPermissionDecision,
   renameProject,
   archiveProject,
   restoreProject,
