@@ -10,20 +10,28 @@ sys.path.insert(0, str(_ROOT / "src"))
 
 os.chdir(_ROOT)
 
-from ludens_flow.app.artifacts import read_artifact, write_artifact
-from ludens_flow.paths import (
+from ludens_flow.capabilities.artifacts.artifacts import read_artifact, write_artifact
+from ludens_flow.core.paths import (
+    add_project_workspace,
     clear_project_unity_root,
     create_project,
     get_active_project_id,
     get_project_dir,
+    get_project_workspace,
     get_project_unity_root,
     get_workspace_root_dir,
+    list_project_workspaces,
     list_projects,
+    remove_project_workspace,
     set_project_unity_root,
     set_active_project_id,
 )
-from ludens_flow.state import init_workspace, load_state, save_state
-from ludens_flow.context.user_profile import _profile_path, load_profile, update_profile
+from ludens_flow.core.state import init_workspace, load_state, save_state
+from ludens_flow.capabilities.context.user_profile import (
+    _profile_path,
+    load_profile,
+    update_profile,
+)
 
 
 class MultiProjectWorkspaceTests(unittest.TestCase):
@@ -238,13 +246,15 @@ class MultiProjectWorkspaceTests(unittest.TestCase):
             else:
                 os.environ["LUDENS_PROJECT_ID"] = previous_project
 
-    def test_project_can_bind_and_unbind_unity_root(self):
+    def test_project_can_manage_workspace_list_and_legacy_unity_binding(self):
         previous_workspace = os.environ.get("LUDENS_WORKSPACE_DIR")
         previous_project = os.environ.get("LUDENS_PROJECT_ID")
         workspace_root = (_ROOT / "workspace_test_unity_binding").resolve()
         unity_root = (_ROOT / "unity_test_project").resolve()
+        generic_root = (_ROOT / "generic_test_workspace").resolve()
         shutil.rmtree(workspace_root, ignore_errors=True)
         shutil.rmtree(unity_root, ignore_errors=True)
+        shutil.rmtree(generic_root, ignore_errors=True)
 
         try:
             os.environ["LUDENS_WORKSPACE_DIR"] = str(workspace_root)
@@ -252,6 +262,7 @@ class MultiProjectWorkspaceTests(unittest.TestCase):
 
             (unity_root / "Assets").mkdir(parents=True, exist_ok=True)
             (unity_root / "ProjectSettings").mkdir(parents=True, exist_ok=True)
+            generic_root.mkdir(parents=True, exist_ok=True)
 
             create_project("alpha", set_active=True)
             bound_meta = set_project_unity_root(str(unity_root), project_id="alpha")
@@ -261,13 +272,92 @@ class MultiProjectWorkspaceTests(unittest.TestCase):
                 get_project_unity_root(project_id="alpha"), str(unity_root)
             )
             self.assertEqual(list_projects()[0]["unity_root"], str(unity_root))
+            self.assertEqual(
+                list_project_workspaces(project_id="alpha", kind="unity")[0]["id"],
+                "unity-main",
+            )
+
+            generic_meta = add_project_workspace(
+                str(generic_root),
+                project_id="alpha",
+                kind="generic",
+                workspace_id="docs-workspace",
+                label="Docs Workspace",
+                writable=True,
+            )
+            generic_workspace = get_project_workspace(
+                "alpha", workspace_id="docs-workspace"
+            )
+            self.assertIsNotNone(generic_workspace)
+            self.assertEqual(generic_workspace["label"], "Docs Workspace")
+            self.assertTrue(generic_workspace["writable"])
+            self.assertEqual(len(generic_meta["workspaces"]), 2)
+
+            removed_meta = remove_project_workspace(
+                "docs-workspace", project_id="alpha"
+            )
+            self.assertEqual(
+                [item["id"] for item in removed_meta["workspaces"]], ["unity-main"]
+            )
 
             cleared_meta = clear_project_unity_root(project_id="alpha")
             self.assertEqual(cleared_meta["unity_root"], "")
             self.assertIsNone(get_project_unity_root(project_id="alpha"))
+            self.assertEqual(
+                list_project_workspaces(project_id="alpha", kind="unity"), []
+            )
         finally:
             shutil.rmtree(workspace_root, ignore_errors=True)
             shutil.rmtree(unity_root, ignore_errors=True)
+            shutil.rmtree(generic_root, ignore_errors=True)
+            if previous_workspace is None:
+                os.environ.pop("LUDENS_WORKSPACE_DIR", None)
+            else:
+                os.environ["LUDENS_WORKSPACE_DIR"] = previous_workspace
+            if previous_project is None:
+                os.environ.pop("LUDENS_PROJECT_ID", None)
+            else:
+                os.environ["LUDENS_PROJECT_ID"] = previous_project
+
+    def test_clear_project_unity_root_preserves_user_managed_unity_workspaces(self):
+        previous_workspace = os.environ.get("LUDENS_WORKSPACE_DIR")
+        previous_project = os.environ.get("LUDENS_PROJECT_ID")
+        workspace_root = (_ROOT / "workspace_test_unity_clear").resolve()
+        unity_main_root = (_ROOT / "fake_unity_legacy").resolve()
+        unity_custom_root = (_ROOT / "fake_unity_custom").resolve()
+        shutil.rmtree(workspace_root, ignore_errors=True)
+        shutil.rmtree(unity_main_root, ignore_errors=True)
+        shutil.rmtree(unity_custom_root, ignore_errors=True)
+
+        try:
+            os.environ["LUDENS_WORKSPACE_DIR"] = str(workspace_root)
+            os.environ["LUDENS_PROJECT_ID"] = "alpha"
+            for root in (unity_main_root, unity_custom_root):
+                (root / "Assets").mkdir(parents=True, exist_ok=True)
+                (root / "ProjectSettings").mkdir(parents=True, exist_ok=True)
+
+            create_project("alpha", set_active=True)
+            set_project_unity_root(str(unity_main_root), project_id="alpha")
+            add_project_workspace(
+                str(unity_custom_root),
+                project_id="alpha",
+                kind="unity",
+                workspace_id="unity-workspace",
+                label="Custom Unity Workspace",
+                writable=True,
+            )
+
+            cleared_meta = clear_project_unity_root(project_id="alpha")
+
+            self.assertEqual(cleared_meta["unity_root"], str(unity_custom_root))
+            remaining_unity = list_project_workspaces(project_id="alpha", kind="unity")
+            self.assertEqual(len(remaining_unity), 1)
+            self.assertEqual(remaining_unity[0]["id"], "unity-workspace")
+            self.assertEqual(remaining_unity[0]["root"], str(unity_custom_root))
+        finally:
+            shutil.rmtree(workspace_root, ignore_errors=True)
+            shutil.rmtree(unity_main_root, ignore_errors=True)
+            shutil.rmtree(unity_custom_root, ignore_errors=True)
             if previous_workspace is None:
                 os.environ.pop("LUDENS_WORKSPACE_DIR", None)
             else:

@@ -8,13 +8,13 @@ export const AGENTS: AgentDef[] = [
 ];
 
 export const PHASE_LABEL: Record<string, string> = {
-  GDD_DISCUSS: "GDD Discuss",
-  GDD_COMMIT: "GDD Commit",
-  PM_DISCUSS: "PM Discuss",
-  PM_COMMIT: "PM Commit",
-  ENG_DISCUSS: "ENG Discuss",
-  ENG_COMMIT: "ENG Commit",
-  REVIEW: "Review",
-  POST_REVIEW_DECISION: "Post Review Decision",
-  DEV_COACHING: "Dev Coaching",
+  GDD_DISCUSS: "GDD 讨论",
+  GDD_COMMIT: "GDD 定稿",
+  PM_DISCUSS: "PM 讨论",
+  PM_COMMIT: "PM 定稿",
+  ENG_DISCUSS: "工程讨论",
+  ENG_COMMIT: "工程定稿",
+  REVIEW: "评审",
+  POST_REVIEW_DECISION: "评审后决策",
+  DEV_COACHING: "持续开发辅导",
 };

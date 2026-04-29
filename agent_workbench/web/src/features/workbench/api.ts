@@ -1,117 +1,55 @@
-import type {
-  ChatResponse,
-  ProjectsResponse,
-  StateResponse,
-  WorkspaceFileContent,
-  WorkspaceFilesResponse,
-} from "./types";
+// 文件功能：Workbench 前端 API 访问层，统一封装所有 HTTP 请求。
+// 核心内容：提供状态、项目、会话、工作区文件与设置接口调用方法。
+// 核心内容：内部按域拆分为 chat/projects/workspace/tools/events 子模块。
 
-async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(path, options);
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.detail || data.error || `Request failed: ${response.status}`);
-  }
-  return data as T;
-}
+import {
+  archiveProject,
+  createProject,
+  deleteProject,
+  getCurrentProjectSettings,
+  getModelProfiles,
+  getProjects,
+  renameProject,
+  resetCurrentProject,
+  restoreProject,
+  selectProject,
+  submitPermissionDecision,
+  updateCurrentProjectSettings,
+} from "./api/projects";
+import { getState, postAction, postChat } from "./api/chat";
+import {
+  addCurrentWorkspace,
+  deleteCurrentWorkspace,
+  getCurrentWorkspaces,
+  getWorkspaceFileContent,
+  getWorkspaceFiles,
+  updateWorkspaceFileContent,
+} from "./api/workspace";
+import { getTools } from "./api/tools";
+import { openProjectEvents } from "./api/events";
 
 export const workbenchApi = {
-  getState() {
-    return fetchJson<StateResponse>("/api/state");
-  },
-
-  getProjects() {
-    return fetchJson<ProjectsResponse>("/api/projects");
-  },
-
-  getWorkspaceFiles() {
-    return fetchJson<WorkspaceFilesResponse>("/api/workspace/files");
-  },
-
-  getWorkspaceFileContent(fileId: string) {
-    return fetchJson<WorkspaceFileContent>(
-      `/api/workspace/files/${encodeURIComponent(fileId)}/content`,
-    );
-  },
-
-  postChat(body: { message: string; images?: string[] }) {
-    return fetchJson<ChatResponse>("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-  },
-
-  postAction(action: string) {
-    return fetchJson<ChatResponse>("/api/actions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action }),
-    });
-  },
-
-  createProject(body: { project_id: string; display_name?: string | null }) {
-    return fetchJson<{ project: { id: string } }>("/api/projects", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-  },
-
-  selectProject(projectId: string) {
-    return fetchJson<{ active_project: string }>(
-      `/api/projects/${encodeURIComponent(projectId)}/select`,
-      {
-        method: "POST",
-      },
-    );
-  },
-
-  resetCurrentProject() {
-    return fetchJson<StateResponse>("/api/projects/current/reset", {
-      method: "POST",
-    });
-  },
-
-  renameProject(projectId: string, display_name: string) {
-    return fetchJson<ProjectsResponse>(
-      `/api/projects/${encodeURIComponent(projectId)}/rename`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ display_name }),
-      },
-    );
-  },
-
-  archiveProject(projectId: string) {
-    return fetchJson<ProjectsResponse>(
-      `/api/projects/${encodeURIComponent(projectId)}/archive`,
-      {
-        method: "POST",
-      },
-    );
-  },
-
-  restoreProject(projectId: string, setActive = false) {
-    return fetchJson<ProjectsResponse>(
-      `/api/projects/${encodeURIComponent(projectId)}/restore`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ set_active: setActive }),
-      },
-    );
-  },
-
-  deleteProject(projectId: string) {
-    return fetchJson<{
-      deleted_project: string;
-      active_project: string;
-      active_projects: ProjectsResponse["active_projects"];
-      archived_projects: ProjectsResponse["archived_projects"];
-    }>(`/api/projects/${encodeURIComponent(projectId)}`, {
-      method: "DELETE",
-    });
-  },
+  getState,
+  postChat,
+  postAction,
+  getProjects,
+  createProject,
+  selectProject,
+  submitPermissionDecision,
+  renameProject,
+  archiveProject,
+  restoreProject,
+  deleteProject,
+  resetCurrentProject,
+  getCurrentProjectSettings,
+  getModelProfiles,
+  updateCurrentProjectSettings,
+  getWorkspaceFiles,
+  getWorkspaceFileContent,
+  updateWorkspaceFileContent,
+  getCurrentWorkspaces,
+  addCurrentWorkspace,
+  deleteCurrentWorkspace,
+  getTools,
+  openProjectEvents,
 };

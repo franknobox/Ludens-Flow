@@ -12,8 +12,8 @@ sys.path.insert(0, str(_ROOT / "src"))
 
 os.chdir(_ROOT)
 
-from ludens_flow.paths import get_images_dir, get_logs_dir, get_state_file
-from ludens_flow.state import (
+from ludens_flow.core.paths import get_images_dir, get_logs_dir, get_state_file
+from ludens_flow.core.state import (
     LudensState,
     StateConflictError,
     init_workspace,

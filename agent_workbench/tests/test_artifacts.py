@@ -10,14 +10,14 @@ sys.path.insert(0, str(_ROOT / "src"))
 
 os.chdir(_ROOT)
 
-from ludens_flow.app.artifacts import (
+from ludens_flow.capabilities.artifacts.artifacts import (
     artifact_exists,
     read_artifact,
     write_artifact,
     write_dev_note,
     write_patch,
 )
-from ludens_flow.state import init_workspace, load_state, save_state
+from ludens_flow.core.state import init_workspace, load_state, save_state
 
 
 class ArtifactTests(unittest.TestCase):

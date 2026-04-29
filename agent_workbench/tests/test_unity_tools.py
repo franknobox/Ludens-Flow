@@ -10,9 +10,13 @@ sys.path.insert(0, str(_ROOT / "src"))
 
 os.chdir(_ROOT)
 
-from ludens_flow.paths import set_project_unity_root
-from ludens_flow.state import init_workspace
-from ludens_flow.tools.unity_files import unity_list_dir, unity_read_file
+from ludens_flow.core.paths import set_project_unity_root
+from ludens_flow.core.state import init_workspace
+from ludens_flow.capabilities.tools.unity_files import (
+    UnityToolError,
+    unity_list_dir,
+    unity_read_file,
+)
 
 
 class UnityToolsTests(unittest.TestCase):
@@ -59,8 +63,9 @@ class UnityToolsTests(unittest.TestCase):
         self.assertIn("public class Player", output)
 
     def test_unity_read_file_blocks_path_escape(self):
-        with self.assertRaises(RuntimeError):
+        with self.assertRaises(UnityToolError) as ctx:
             unity_read_file("../secret.txt", project_id="alpha")
+        self.assertEqual(ctx.exception.code, "PATH_ESCAPE")
 
 
 if __name__ == "__main__":

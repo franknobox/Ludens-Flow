@@ -29,6 +29,49 @@ LLM_BASE_URL=https://api.moonshot.cn/v1
 LLM_TEMPERATURE=0.2
 ```
 
+说明：
+
+- `.env` 仍是全局保底模型配置。
+- 当项目未配置模型路由时，所有 Agent 默认回退到 `.env`。
+- 部分 provider 支持专用密钥环境变量（如 `OPENAI_API_KEY`、`OPENROUTER_API_KEY`、`DEEPSEEK_API_KEY`、`GROQ_API_KEY`、`TOGETHER_API_KEY`、`XAI_API_KEY`、`OLLAMA_API_KEY`）。
+
+如果需要在 Web 设置页里给不同 Agent 选择不同 provider，可以额外配置 Provider Profile。真实 key 仍然放在独立环境变量里，Profile 只引用 key 的变量名：
+
+```env
+OPENAI_API_KEY=your_openai_key
+DEEPSEEK_API_KEY=your_deepseek_key
+LUDENS_MODEL_PROFILES={"openai_main":{"provider":"openai","base_url":"https://api.openai.com/v1","api_key_env":"OPENAI_API_KEY"},"deepseek_main":{"provider":"openai_compatible","base_url":"https://api.deepseek.com/v1","api_key_env":"DEEPSEEK_API_KEY"}}
+```
+
+### 1.1 多模型路由配置（项目级）
+
+当前已支持按项目配置不同 Agent / 不同能力使用不同模型，推荐在 Web 设置页进行维护：
+
+- 进入 `设置 -> 通用设置 -> 模型路由`
+- 选择 Provider Profile、模型和温度后保存
+
+优先级规则：
+
+`agent_capabilities > capabilities > agents > global > .env`
+
+示例：
+
+```json
+{
+  "agents": {
+    "design": { "profile": "openai_main", "model": "gpt-4o" },
+    "review": { "profile": "openai_main", "model": "o4-mini" }
+  },
+  "agent_capabilities": {
+    "design": {
+      "copywriting": { "profile": "deepseek_main", "model": "deepseek-chat", "temperature": 0.7 }
+    }
+  }
+}
+```
+
+也可通过 API 更新：`POST /api/projects/current/settings`（字段：`model_routing`）。
+
 ### 2. 安装依赖
 
 推荐使用可编辑安装（同时安装依赖并注册 CLI 入口）：
@@ -51,12 +94,6 @@ pip install -e ./agent_workbench
 
 ```bash
 ludensflow
-```
-
-兼容命令（老入口）：
-
-```bash
-python agent_workbench/run_agents.py
 ```
 
 常用命令：

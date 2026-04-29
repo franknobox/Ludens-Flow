@@ -11,24 +11,39 @@ sys.path.insert(0, str(_ROOT / "src"))
 
 os.chdir(_ROOT)
 
-import ludens_flow.state as st
-from ludens_flow.agents.base import AgentResult, CommitSpec
-from ludens_flow.agents.design_agent import DesignAgent
-from ludens_flow.agents.engineering_agent import EngineeringAgent
-from ludens_flow.agents.pm_agent import PMAgent
-from ludens_flow.agents.review_agent import ReviewAgent
-from ludens_flow.graph import graph_step, run_agent_step
-from ludens_flow.router import Phase
+import ludens_flow.core.state as st
+from ludens_flow.core.agents.base import AgentResult, CommitSpec
+from ludens_flow.core.agents.design_agent import DesignAgent
+from ludens_flow.core.agents.engineering_agent import EngineeringAgent
+from ludens_flow.core.agents.pm_agent import PMAgent
+from ludens_flow.core.agents.review_agent import ReviewAgent
+from ludens_flow.core.graph import graph_step, run_agent_step
+from ludens_flow.core.router import Phase
 
 
-def mock_design_discuss(self, state, user_input, cfg=None, user_persona=None):
+def mock_design_discuss(
+    self,
+    state,
+    user_input,
+    cfg=None,
+    user_persona=None,
+    stream_handler=None,
+    tool_event_handler=None,
+):
     return AgentResult(
         assistant_message="design ok",
         state_updates={"drafts": {"gdd": {"core_loop": "combat"}}},
     )
 
 
-def mock_design_commit(self, state, user_input, cfg=None, user_persona=None):
+def mock_design_commit(
+    self,
+    state,
+    user_input,
+    cfg=None,
+    user_persona=None,
+    tool_event_handler=None,
+):
     return AgentResult(
         assistant_message="",
         commit=CommitSpec(artifact_name="GDD", content="gdd\n", reason="test"),
@@ -36,11 +51,26 @@ def mock_design_commit(self, state, user_input, cfg=None, user_persona=None):
     )
 
 
-def mock_pm_discuss(self, state, user_input, cfg=None, user_persona=None):
+def mock_pm_discuss(
+    self,
+    state,
+    user_input,
+    cfg=None,
+    user_persona=None,
+    stream_handler=None,
+    tool_event_handler=None,
+):
     return AgentResult(assistant_message="pm ok", state_updates={})
 
 
-def mock_pm_commit(self, state, user_input, cfg=None, user_persona=None):
+def mock_pm_commit(
+    self,
+    state,
+    user_input,
+    cfg=None,
+    user_persona=None,
+    tool_event_handler=None,
+):
     return AgentResult(
         assistant_message="",
         commit=CommitSpec(
@@ -52,14 +82,29 @@ def mock_pm_commit(self, state, user_input, cfg=None, user_persona=None):
     )
 
 
-def mock_eng_discuss(self, state, user_input, cfg=None, user_persona=None):
+def mock_eng_discuss(
+    self,
+    state,
+    user_input,
+    cfg=None,
+    user_persona=None,
+    stream_handler=None,
+    tool_event_handler=None,
+):
     return AgentResult(
         assistant_message="eng ok",
         state_updates={"style_preset": "OOP"},
     )
 
 
-def mock_eng_commit(self, state, user_input, cfg=None, user_persona=None):
+def mock_eng_commit(
+    self,
+    state,
+    user_input,
+    cfg=None,
+    user_persona=None,
+    tool_event_handler=None,
+):
     return AgentResult(
         assistant_message="",
         commit=CommitSpec(
@@ -71,7 +116,15 @@ def mock_eng_commit(self, state, user_input, cfg=None, user_persona=None):
     )
 
 
-def mock_eng_coach(self, state, user_input, cfg=None, user_persona=None):
+def mock_eng_coach(
+    self,
+    state,
+    user_input,
+    cfg=None,
+    user_persona=None,
+    stream_handler=None,
+    tool_event_handler=None,
+):
     return AgentResult(assistant_message="coach", state_updates={})
 
 
@@ -100,7 +153,14 @@ class Step5GraphEngineTests(unittest.TestCase):
     def test_main_flow_handles_review_backflow_and_reaches_dev_coaching(self):
         review_counter = {"count": 0}
 
-        def review_commit(self, state, user_input, cfg=None, user_persona=None):
+        def review_commit(
+            self,
+            state,
+            user_input,
+            cfg=None,
+            user_persona=None,
+            tool_event_handler=None,
+        ):
             if review_counter["count"] == 0:
                 review_counter["count"] += 1
                 gate = {

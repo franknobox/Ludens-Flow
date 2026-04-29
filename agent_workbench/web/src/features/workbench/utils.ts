@@ -1,6 +1,7 @@
 import { AGENTS } from "./constants";
 import type {
   AgentKey,
+  ComposerAttachment,
   HistoryByAgent,
   HistoryEntry,
   ProjectMeta,
@@ -37,16 +38,54 @@ export function agentName(key: AgentKey): string {
 }
 
 export function projectUpdated(project: ProjectMeta | undefined): string {
-  return project?.updated_at
-    ? String(project.updated_at).replace("T", " ").replace("Z", "")
-    : "No activity";
+  if (!project?.updated_at) {
+    return "暂无活动";
+  }
+
+  const raw = String(project.updated_at).replace("T", " ").replace("Z", "").trim();
+  const date = new Date(project.updated_at);
+  if (isNaN(date.getTime())) {
+    return raw || "暂无活动";
+  }
+
+  const diffMs = Date.now() - date.getTime();
+  if (diffMs < 60 * 1000) {
+    return "刚刚";
+  }
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hour = String(date.getHours()).padStart(2, "0");
+  const minute = String(date.getMinutes()).padStart(2, "0");
+
+  const now = new Date();
+  if (year === now.getFullYear() && month === String(now.getMonth() + 1).padStart(2, "0") && day === String(now.getDate()).padStart(2, "0")) {
+    return `${hour}:${minute}`;
+  }
+
+  return `${year}-${month}-${day} ${hour}:${minute}`;
 }
 
-export function transientMessageText(text: string, imageCount: number): string {
+export function transientMessageText(
+  text: string,
+  attachments: ComposerAttachment[],
+): string {
   const clean = text.trim();
-  if (clean && imageCount) return `${clean}\n[${imageCount} image${imageCount > 1 ? "s" : ""}]`;
+  const imageCount = attachments.filter((item) => item.kind === "image").length;
+  const fileCount = attachments.filter((item) => item.kind === "file").length;
+  const parts: string[] = [];
+  if (imageCount) {
+    parts.push(`${imageCount} image${imageCount > 1 ? "s" : ""}`);
+  }
+  if (fileCount) {
+    parts.push(`${fileCount} file${fileCount > 1 ? "s" : ""}`);
+  }
+  const attachmentSummary = parts.length ? `[${parts.join(" + ")}]` : "";
+
+  if (clean && attachmentSummary) return `${clean}\n${attachmentSummary}`;
   if (clean) return clean;
-  if (imageCount) return `[${imageCount} image${imageCount > 1 ? "s" : ""}]`;
+  if (attachmentSummary) return attachmentSummary;
   return "";
 }
 

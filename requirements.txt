@@ -11,3 +11,6 @@ ddgs>=9.11.2
 
 # Multimodal image preprocessing (recommended for stable image-token size)
 Pillow>=10.0.0
+
+# Attachment ingestion
+pypdf>=4.2.0

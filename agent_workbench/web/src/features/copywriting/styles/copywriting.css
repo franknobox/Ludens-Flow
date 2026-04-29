@@ -1,0 +1,447 @@
+.copywriting-page {
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr) 300px;
+  gap: 14px;
+  padding: 16px;
+  overflow: hidden;
+  color: var(--text);
+}
+
+.copywriting-rail,
+.copywriting-workbench,
+.copywriting-codex {
+  min-height: 0;
+}
+
+.copywriting-rail,
+.copywriting-codex {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(29, 39, 52, 0.08);
+  border-radius: 24px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 253, 0.82));
+  box-shadow: 0 18px 44px rgba(34, 49, 70, 0.08);
+  overflow: hidden;
+}
+
+.copywriting-rail-head,
+.copywriting-codex-head {
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid rgba(29, 39, 52, 0.08);
+}
+
+.copywriting-rail-head strong,
+.copywriting-codex-head strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.copywriting-codex-head p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.copywriting-kicker {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.copywriting-type-list {
+  flex: 1;
+  min-height: 0;
+  padding: 12px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.copywriting-type-card {
+  width: 100%;
+  padding: 14px 14px;
+  border: 1px solid transparent;
+  border-radius: 18px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: border 0.16s ease, background 0.16s ease, transform 0.16s ease;
+}
+
+.copywriting-type-card span {
+  display: block;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.copywriting-type-card small {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.copywriting-type-card:hover {
+  background: rgba(22, 99, 255, 0.04);
+  transform: translateX(2px);
+}
+
+.copywriting-type-card.is-active {
+  border-color: rgba(22, 99, 255, 0.24);
+  background: linear-gradient(135deg, rgba(22, 99, 255, 0.12), rgba(255, 255, 255, 0.86));
+}
+
+.copywriting-workbench {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow: hidden;
+}
+
+.copywriting-panel {
+  border: 1px solid rgba(29, 39, 52, 0.08);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 18px 44px rgba(34, 49, 70, 0.07);
+}
+
+.copywriting-hero {
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.copywriting-hero-compact {
+  margin-bottom: 18px;
+}
+
+.copywriting-hero h2 {
+  margin: 4px 0 6px;
+  font-size: 26px;
+  line-height: 1.1;
+  font-weight: 950;
+}
+
+.copywriting-hero p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.copywriting-hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  max-width: 320px;
+}
+
+.copywriting-hero-meta span,
+.copywriting-example-strip span {
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(22, 99, 255, 0.18);
+  background: rgba(22, 99, 255, 0.08);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.copywriting-panel {
+  border-radius: 24px;
+  padding: 18px;
+}
+
+.copywriting-brief-panel {
+  flex-shrink: 0;
+}
+
+.copywriting-result-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.copywriting-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.copywriting-section-head h3 {
+  margin: 2px 0 0;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.copywriting-form-grid,
+.copywriting-constraint-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.copywriting-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.copywriting-field-wide {
+  grid-column: 1 / -1;
+}
+
+.copywriting-field span,
+.copywriting-choice-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.copywriting-field input,
+.copywriting-field textarea {
+  width: 100%;
+  border: 1px solid rgba(29, 39, 52, 0.12);
+  border-radius: 16px;
+  background: rgba(248, 250, 253, 0.92);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+  transition: border 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+
+.copywriting-field input {
+  height: 42px;
+  padding: 0 12px;
+}
+
+.copywriting-field textarea {
+  min-height: 84px;
+  resize: vertical;
+  padding: 12px;
+  line-height: 1.55;
+}
+
+.copywriting-field input:focus,
+.copywriting-field textarea:focus {
+  border-color: rgba(22, 99, 255, 0.48);
+  background: #fff;
+  box-shadow: 0 0 0 4px rgba(22, 99, 255, 0.08);
+}
+
+.copywriting-choice-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 14px;
+  margin: 14px 0;
+}
+
+.copywriting-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.copywriting-chip,
+.copywriting-ghost-btn,
+.copywriting-result-actions button {
+  border: 1px solid rgba(29, 39, 52, 0.12);
+  border-radius: 999px;
+  background: rgba(248, 250, 253, 0.96);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.copywriting-chip {
+  height: 32px;
+  padding: 0 11px;
+  cursor: pointer;
+}
+
+.copywriting-chip.is-active {
+  background: var(--primary-soft);
+  border-color: rgba(22, 99, 255, 0.28);
+  color: var(--primary);
+}
+
+.copywriting-ghost-btn,
+.copywriting-result-actions button {
+  height: 34px;
+  padding: 0 12px;
+}
+
+.copywriting-actions {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.copywriting-action-note {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.copywriting-primary-btn {
+  height: 40px;
+  padding: 0 18px;
+  border: none;
+  border-radius: 999px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.copywriting-primary-btn:disabled,
+.copywriting-result-actions button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.copywriting-result-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.copywriting-empty-result {
+  flex: 1;
+  min-height: 180px;
+  border: 1px dashed rgba(29, 39, 52, 0.16);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 20% 15%, rgba(22, 99, 255, 0.08), transparent 32%),
+    rgba(248, 250, 253, 0.72);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 8px;
+  padding: 24px;
+}
+
+.copywriting-empty-result strong {
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.copywriting-empty-result span {
+  max-width: 420px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.copywriting-example-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 14px 16px 0;
+}
+
+.copywriting-codex-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.copywriting-codex-item {
+  padding: 13px;
+  border: 1px solid rgba(29, 39, 52, 0.1);
+  border-radius: 18px;
+  background: rgba(248, 250, 253, 0.82);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.copywriting-codex-item.is-active {
+  border-color: rgba(22, 99, 255, 0.2);
+  background: rgba(22, 99, 255, 0.06);
+}
+
+.copywriting-codex-item strong,
+.copywriting-codex-item span,
+.copywriting-codex-item small {
+  display: block;
+}
+
+.copywriting-codex-item strong {
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.copywriting-codex-item span {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.copywriting-codex-item small {
+  flex-shrink: 0;
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.copywriting-codex-note {
+  margin: 0 16px 16px;
+  padding: 14px;
+  border-radius: 18px;
+  background: #1f2b3c;
+  color: #fff;
+}
+
+.copywriting-codex-note strong,
+.copywriting-codex-note span {
+  display: block;
+}
+
+.copywriting-codex-note strong {
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.copywriting-codex-note span {
+  margin-top: 6px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+@media (max-width: 1280px) {
+  .copywriting-page {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+
+  .copywriting-codex {
+    display: none;
+  }
+}

@@ -89,6 +89,25 @@ function Start-UvicornForeground([hashtable]$runner) {
     }
 }
 
+function Stop-BackendOnPort {
+    $connections = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+    if (-not $connections) {
+        return
+    }
+
+    $processIds = $connections | Select-Object -ExpandProperty OwningProcess -Unique
+    foreach ($processId in $processIds) {
+        try {
+            Stop-Process -Id $processId -Force -ErrorAction Stop
+        }
+        catch {
+            Write-Host "Failed to stop existing backend process on port $Port (PID $processId): $($_.Exception.Message)"
+        }
+    }
+
+    Start-Sleep -Milliseconds 800
+}
+
 function Start-UvicornBackground([hashtable]$runner) {
     $common = @{
         PassThru         = $true
@@ -104,7 +123,8 @@ function Start-UvicornBackground([hashtable]$runner) {
             "--app-dir", "agent_workbench/src",
             "--host", $BindHost,
             "--port", $Port,
-            "--reload"
+            "--reload",
+            "--reload-dir", "agent_workbench/src"
         ) @common
     }
 
@@ -113,7 +133,8 @@ function Start-UvicornBackground([hashtable]$runner) {
         "--app-dir", "agent_workbench/src",
         "--host", $BindHost,
         "--port", $Port,
-        "--reload"
+        "--reload",
+        "--reload-dir", "agent_workbench/src"
     ) @common
 }
 
@@ -121,6 +142,7 @@ $pythonRunner = Resolve-PythonRunner
 $effectiveMode = if ($Mode -eq "serve") { "product" } else { $Mode }
 
 if ($effectiveMode -eq "product") {
+    Stop-BackendOnPort
     Build-WebApp
     Write-Host "Starting Ludens-Flow web workbench at http://$BindHost`:$Port/ (mode: product)"
     Write-Host "Repo root: $repoRoot"
@@ -137,6 +159,7 @@ Write-Host "Starting Ludens-Flow backend at http://$BindHost`:$Port/ and Vite at
 Write-Host "Repo root: $repoRoot"
 Write-Host "Mode: dev"
 
+Stop-BackendOnPort
 $backend = Start-UvicornBackground $pythonRunner
 Write-Host "Backend PID: $($backend.Id)"
 
