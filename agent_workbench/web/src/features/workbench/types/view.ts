@@ -22,6 +22,10 @@ export interface ViewStateAigc {
   type: "aigc";
 }
 
+export interface ViewStateCopywriting {
+  type: "copywriting";
+}
+
 export interface ViewStateGameModel {
   type: "game-model";
 }
@@ -33,7 +37,14 @@ export interface ViewStateMcp {
   tool: McpTool;
 }
 
-export type ViewState = ViewStateAgent | ViewStateFile | ViewStateGithub | ViewStateAigc | ViewStateGameModel | ViewStateMcp;
+export type ViewState =
+  | ViewStateAgent
+  | ViewStateFile
+  | ViewStateGithub
+  | ViewStateAigc
+  | ViewStateCopywriting
+  | ViewStateGameModel
+  | ViewStateMcp;
 
 export interface RenderMessage {
   role: string;

@@ -3,6 +3,7 @@ export interface AigcPlatform {
   name: string;
   description: string;
   category: string;
+  group?: string;
   url: string;
   supported_types: string[];
   status: "online" | "maintenance" | "coming_soon";

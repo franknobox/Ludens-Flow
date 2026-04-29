@@ -1,6 +1,6 @@
 """
 文件功能：模型路由解析器，按项目配置为不同 Agent/能力解析最终模型参数。
-核心内容：按 global -> agents -> capabilities -> agent_capabilities 的优先级合并路由。
+核心内容：按 global -> agents -> capabilities fallback -> agent_capabilities 的优先级合并路由。
 核心内容：结合环境默认值和项目 settings，输出可直接执行的 LLMConfig。
 关联文件：ludens_flow/core/graph.py, ludens_flow/core/paths.py, llm/provider.py
 """
@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 from typing import Any, Dict, Optional
 
+from llm.model_profiles import get_model_profile
 from llm.provider import LLMConfig, build_config
 from ludens_flow.core.paths import get_project_settings
 
@@ -19,7 +20,7 @@ def _normalize_route_entry(raw: Any) -> Dict[str, Any]:
         return {}
 
     entry: Dict[str, Any] = {}
-    for key in ("provider", "model", "base_url", "api_key_env"):
+    for key in ("profile", "provider", "model", "base_url", "api_key_env"):
         value = str(raw.get(key) or "").strip()
         if value:
             entry[key] = value
@@ -38,9 +39,22 @@ def _normalize_route_entry(raw: Any) -> Dict[str, Any]:
 
 def _merge_route(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
     merged = dict(base)
-    for key in ("provider", "model", "base_url", "temperature", "api_key_env"):
+    for key in ("profile", "provider", "model", "base_url", "temperature", "api_key_env"):
         if key in override and override[key] not in (None, ""):
             merged[key] = override[key]
+    return merged
+
+
+def _apply_profile(route: Dict[str, Any]) -> Dict[str, Any]:
+    profile_id = str(route.get("profile") or "").strip()
+    if not profile_id:
+        return route
+
+    profile = get_model_profile(profile_id)
+    if not profile:
+        return route
+
+    merged = _merge_route(profile, {k: v for k, v in route.items() if k != "profile"})
     return merged
 
 
@@ -89,15 +103,10 @@ def resolve_model_config(
     default_route: Optional[Dict[str, Any]] = None,
     capability_defaults: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> LLMConfig:
-    """Resolve provider/model with priority: default -> project global -> agent -> capability -> agent+capability."""
+    """Resolve provider/model with priority: default -> global -> agent -> capability fallback -> agent+capability."""
 
     base_cfg = build_config(strict=False)
-    route: Dict[str, Any] = {
-        "provider": base_cfg.provider,
-        "model": base_cfg.model,
-        "base_url": base_cfg.base_url,
-        "temperature": base_cfg.temperature,
-    }
+    route: Dict[str, Any] = {}
 
     route = _merge_route(route, _normalize_route_entry(default_route))
 
@@ -117,6 +126,7 @@ def resolve_model_config(
         route,
         _resolved_route_from_settings(settings, agent_key=agent_key, capability=capability),
     )
+    route = _apply_profile(route)
 
     explicit_api_key = None
     api_key_env = str(route.get("api_key_env") or "").strip()

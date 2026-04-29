@@ -102,6 +102,10 @@ def _normalize_model_route_entry(raw: Any) -> Dict[str, Any]:
 
     entry: Dict[str, Any] = {}
 
+    profile = str(raw.get("profile") or "").strip()
+    if profile:
+        entry["profile"] = profile
+
     provider = str(raw.get("provider") or "").strip().lower()
     if provider:
         entry["provider"] = provider

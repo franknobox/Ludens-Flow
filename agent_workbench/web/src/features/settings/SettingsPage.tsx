@@ -7,6 +7,7 @@ import { useProjectRuntime } from "../workbench/state/ProjectRuntimeContext";
 import { projectUpdated, toErrorMessage } from "../workbench/utils";
 import type {
   ProjectMeta,
+  ModelProfileSummary,
   ProjectSettingsResponse,
   ProjectWorkspace,
   ToolCatalogItem,
@@ -14,7 +15,6 @@ import type {
 import {
   GeneralSettingsSection,
   HistorySection,
-  MODEL_ROUTING_TEMPLATE,
   ToolsSection,
   WorkspacesSection,
 } from "./sections/SettingsSections";
@@ -57,6 +57,7 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
 
   const [workspaces, setWorkspaces] = useState<ProjectWorkspace[]>([]);
   const [tools, setTools] = useState<ToolCatalogItem[]>([]);
+  const [modelProfiles, setModelProfiles] = useState<ModelProfileSummary[]>([]);
   const [projectSettings, setProjectSettings] =
     useState<ProjectSettingsResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -144,11 +145,12 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
     try {
       await refreshRuntime();
 
-      const [workspacesResult, toolsResult, projectSettingsResult] =
+      const [workspacesResult, toolsResult, projectSettingsResult, modelProfilesResult] =
         await Promise.allSettled([
           workbenchApi.getCurrentWorkspaces(),
           workbenchApi.getTools(),
           workbenchApi.getCurrentProjectSettings(),
+          workbenchApi.getModelProfiles(),
         ]);
 
       setWorkspaces(
@@ -167,6 +169,11 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
               agent_file_write_enabled: true,
               agent_file_write_confirm_required: false,
             },
+      );
+      setModelProfiles(
+        modelProfilesResult.status === "fulfilled"
+          ? modelProfilesResult.value.profiles || []
+          : [],
       );
     } catch (error) {
       setErrorText(toErrorMessage(error));
@@ -426,6 +433,7 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
               projectSettings={projectSettings}
               loading={loading}
               settingsSubmitting={settingsSubmitting}
+              modelProfiles={modelProfiles}
               theme={theme}
               modelRoutingDraft={modelRoutingDraft}
               modelRoutingDirty={modelRoutingDirty}
@@ -440,13 +448,6 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
               onModelRoutingDraftChange={(value) => {
                 setModelRoutingDraft(value);
                 setModelRoutingDirty(true);
-              }}
-              onUseModelRoutingTemplate={() => {
-                setModelRoutingDraft(
-                  JSON.stringify(MODEL_ROUTING_TEMPLATE, null, 2),
-                );
-                setModelRoutingDirty(true);
-                clearMessages();
               }}
               onClearModelRouting={() => {
                 setModelRoutingDraft("{}");

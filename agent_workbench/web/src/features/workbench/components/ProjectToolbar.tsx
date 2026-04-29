@@ -29,6 +29,7 @@ interface ProjectToolbarProps {
   onCreateProject: (title: string) => Promise<boolean | void> | boolean | void;
   onOpenGithub?: () => void;
   onOpenAigc?: () => void;
+  onOpenCopywriting?: () => void;
   onOpenGameModel?: () => void;
   onOpenMcp?: (tool: McpTool) => void;
 }
@@ -48,6 +49,7 @@ export function ProjectToolbar(props: ProjectToolbarProps) {
     onCreateProject,
     onOpenGithub,
     onOpenAigc,
+    onOpenCopywriting,
     onOpenGameModel,
     onOpenMcp,
   } = props;
@@ -200,6 +202,23 @@ export function ProjectToolbar(props: ProjectToolbarProps) {
             {/* Phosphor Icons: magic-wand-fill */}
             <svg viewBox="0 0 256 256" width="15" height="15" fill="currentColor">
               <path d="M248,152a8,8,0,0,1-8,8H224v16a8,8,0,0,1-16,0V160H192a8,8,0,0,1,0-16h16V128a8,8,0,0,1,16,0v16h16A8,8,0,0,1,248,152ZM56,72H72V88a8,8,0,0,0,16,0V72h16a8,8,0,0,0,0-16H88V40a8,8,0,0,0-16,0V56H56a8,8,0,0,0,0,16ZM184,192h-8v-8a8,8,0,0,0-16,0v8h-8a8,8,0,0,0,0,16h8v8a8,8,0,0,0,16,0v-8h8a8,8,0,0,0,0-16ZM219.31,80,80,219.31a16,16,0,0,1-22.62,0L36.68,198.63a16,16,0,0,1,0-22.63L176,36.69a16,16,0,0,1,22.63,0l20.68,20.68A16,16,0,0,1,219.31,80ZM208,68.69,187.31,48l-32,32L176,100.69Z" />
+            </svg>
+          </button>
+        ) : null}
+
+        {onOpenCopywriting ? (
+          <button
+            type="button"
+            className="project-toolbar-settings"
+            onClick={() => {
+              closeProjectPanel();
+              closeSettingsPanel();
+              onOpenCopywriting();
+            }}
+            title="文案加工台"
+          >
+            <svg viewBox="0 0 256 256" width="15" height="15" fill="currentColor">
+              <path d="M227.31,73.37,182.63,28.68a16,16,0,0,0-22.63,0L36.69,152A15.86,15.86,0,0,0,32,163.31V208a16,16,0,0,0,16,16H92.69A15.86,15.86,0,0,0,104,219.31L227.31,96A16,16,0,0,0,227.31,73.37ZM92.69,208H48V163.31l88-88L180.69,120ZM192,108.69,147.31,64,171.31,40,216,84.69ZM232,216a8,8,0,0,1-8,8H136a8,8,0,0,1,0-16h88A8,8,0,0,1,232,216Z" />
             </svg>
           </button>
         ) : null}

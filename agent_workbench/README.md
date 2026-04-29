@@ -35,12 +35,20 @@ LLM_TEMPERATURE=0.2
 - 当项目未配置模型路由时，所有 Agent 默认回退到 `.env`。
 - 部分 provider 支持专用密钥环境变量（如 `OPENAI_API_KEY`、`OPENROUTER_API_KEY`、`DEEPSEEK_API_KEY`、`GROQ_API_KEY`、`TOGETHER_API_KEY`、`XAI_API_KEY`、`OLLAMA_API_KEY`）。
 
+如果需要在 Web 设置页里给不同 Agent 选择不同 provider，可以额外配置 Provider Profile。真实 key 仍然放在独立环境变量里，Profile 只引用 key 的变量名：
+
+```env
+OPENAI_API_KEY=your_openai_key
+DEEPSEEK_API_KEY=your_deepseek_key
+LUDENS_MODEL_PROFILES={"openai_main":{"provider":"openai","base_url":"https://api.openai.com/v1","api_key_env":"OPENAI_API_KEY"},"deepseek_main":{"provider":"openai_compatible","base_url":"https://api.deepseek.com/v1","api_key_env":"DEEPSEEK_API_KEY"}}
+```
+
 ### 1.1 多模型路由配置（项目级）
 
 当前已支持按项目配置不同 Agent / 不同能力使用不同模型，推荐在 Web 设置页进行维护：
 
 - 进入 `设置 -> 通用设置 -> 模型路由`
-- 直接编辑 `model_routing` JSON 并保存
+- 选择 Provider Profile、模型和温度后保存
 
 优先级规则：
 
@@ -50,17 +58,13 @@ LLM_TEMPERATURE=0.2
 
 ```json
 {
-  "global": { "provider": "openai", "model": "gpt-4o-mini" },
   "agents": {
-    "design": { "model": "gpt-4o" },
-    "review": { "model": "o4-mini" }
-  },
-  "capabilities": {
-    "review_gate": { "model": "o4-mini" }
+    "design": { "profile": "openai_main", "model": "gpt-4o" },
+    "review": { "profile": "openai_main", "model": "o4-mini" }
   },
   "agent_capabilities": {
-    "engineering": {
-      "coach": { "provider": "deepseek", "model": "deepseek-chat" }
+    "design": {
+      "copywriting": { "profile": "deepseek_main", "model": "deepseek-chat", "temperature": 0.7 }
     }
   }
 }

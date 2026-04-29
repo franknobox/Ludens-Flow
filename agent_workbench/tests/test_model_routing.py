@@ -8,6 +8,7 @@ import os
 import shutil
 import sys
 import unittest
+import json
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -31,6 +32,7 @@ class ModelRoutingTests(unittest.TestCase):
         self.previous_base_url = os.environ.get("LLM_BASE_URL")
         self.previous_temp = os.environ.get("LLM_TEMPERATURE")
         self.previous_custom_key = os.environ.get("CUSTOM_MODEL_KEY")
+        self.previous_model_profiles = os.environ.get("LUDENS_MODEL_PROFILES")
 
         self.workspace_root = (_ROOT / "workspace_test_model_routing").resolve()
         shutil.rmtree(self.workspace_root, ignore_errors=True)
@@ -88,6 +90,11 @@ class ModelRoutingTests(unittest.TestCase):
             os.environ.pop("CUSTOM_MODEL_KEY", None)
         else:
             os.environ["CUSTOM_MODEL_KEY"] = self.previous_custom_key
+
+        if self.previous_model_profiles is None:
+            os.environ.pop("LUDENS_MODEL_PROFILES", None)
+        else:
+            os.environ["LUDENS_MODEL_PROFILES"] = self.previous_model_profiles
 
     def test_resolve_model_config_uses_global_fallback_when_no_project_routing(self):
         cfg = resolve_model_config(
@@ -173,6 +180,41 @@ class ModelRoutingTests(unittest.TestCase):
         )
         self.assertEqual(cfg.model, "gpt-special")
         self.assertEqual(cfg.api_key, "special-key")
+
+    def test_resolve_model_config_supports_provider_profile(self):
+        os.environ["CUSTOM_MODEL_KEY"] = "profile-key"
+        os.environ["LUDENS_MODEL_PROFILES"] = json.dumps(
+            {
+                "writer": {
+                    "provider": "openai_compatible",
+                    "base_url": "https://writer.example/v1",
+                    "api_key_env": "CUSTOM_MODEL_KEY",
+                }
+            }
+        )
+        set_project_model_routing(
+            {
+                "agents": {
+                    "design": {
+                        "profile": "writer",
+                        "model": "writer-model",
+                        "temperature": 0.7,
+                    }
+                }
+            },
+            project_id="alpha",
+        )
+
+        cfg = resolve_model_config(
+            project_id="alpha",
+            agent_key="design",
+            capability="discuss",
+        )
+        self.assertEqual(cfg.provider, "openai_compatible")
+        self.assertEqual(cfg.model, "writer-model")
+        self.assertEqual(cfg.base_url, "https://writer.example/v1")
+        self.assertEqual(cfg.api_key, "profile-key")
+        self.assertAlmostEqual(cfg.temperature, 0.7, places=6)
 
 
 if __name__ == "__main__":

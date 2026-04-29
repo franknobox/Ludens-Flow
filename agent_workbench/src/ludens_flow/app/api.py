@@ -20,8 +20,10 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from llm.model_profiles import list_model_profile_summaries
 from ludens_flow.capabilities.ingest.attachment_ingest import build_attachment_user_input
 from ludens_flow.capabilities.artifacts.artifacts import read_artifact, write_artifact
+from ludens_flow.capabilities.copywriting.design_copywriting import generate_design_copywriting
 from ludens_flow.app.env import load_env_if_available
 from ludens_flow.capabilities.tools.registry import list_common_tools
 from ludens_flow.core.graph import graph_step
@@ -48,6 +50,7 @@ from ludens_flow.core.paths import (
     set_project_unity_root,
 )
 from ludens_flow.core.router import action_user_input, get_available_actions
+from ludens_flow.core.schemas import normalize_design_copywriting_request
 from pydantic import BaseModel
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -115,6 +118,19 @@ class ActionRequest(BaseModel):
 
 class WorkspaceFileUpdateRequest(BaseModel):
     content: str = ""
+
+
+class DesignCopywritingGenerateRequest(BaseModel):
+    copy_type: str = "dialogue"
+    brief: str = ""
+    purpose: str = ""
+    quantity: int = 5
+    style: str = "简洁直给"
+    length: str = "标准"
+    must_include: list[str] | None = None
+    must_avoid: list[str] | None = None
+    reference_ids: list[str] | None = None
+    language: str = "zh-CN"
 
 
 class ProjectExportRequest(BaseModel):
@@ -777,6 +793,11 @@ def get_current_project_settings():
     return get_project_settings(project_id=project_id)
 
 
+@app.get("/api/model-profiles")
+def get_model_profiles():
+    return {"profiles": list_model_profile_summaries()}
+
+
 @app.post("/api/projects/current/settings")
 def post_current_project_settings(req: ProjectSettingsRequest):
     project_id = resolve_project_id()
@@ -1148,6 +1169,16 @@ def put_workspace_file_content(file_id: str, req: WorkspaceFileUpdateRequest):
         }
 
     raise HTTPException(status_code=404, detail="Not found")
+
+
+@app.post("/api/projects/current/copywriting/generate")
+def post_generate_current_project_copywriting(req: DesignCopywritingGenerateRequest):
+    state = st.load_state()
+    project_id = resolve_project_id(getattr(state, "project_id", None))
+    request_data = req.dict()
+    normalized_request = normalize_design_copywriting_request(request_data)
+    response = generate_design_copywriting(normalized_request, project_id=project_id)
+    return response.to_dict()
 
 
 @app.get("/")

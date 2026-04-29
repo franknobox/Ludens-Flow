@@ -35,6 +35,7 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
     handleArchiveProject,
     handleRenameProject,
     openAigc,
+    openCopywriting,
     openFile,
     openGameModel,
     openGithub,
@@ -53,6 +54,8 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
       ? "GitHub 可视化"
       : currentView.type === "aigc"
       ? "AIGC 集成"
+      : currentView.type === "copywriting"
+      ? "文案加工台"
       : currentView.type === "game-model"
       ? "游戏内模型接入"
       : currentView.type === "mcp"
@@ -91,6 +94,7 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
           }}
           onOpenGithub={openGithub}
           onOpenAigc={openAigc}
+          onOpenCopywriting={openCopywriting}
           onOpenGameModel={openGameModel}
           onOpenMcp={openMcp}
         />

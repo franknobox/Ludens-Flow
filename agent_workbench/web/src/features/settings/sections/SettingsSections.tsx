@@ -1,4 +1,5 @@
 import type {
+  ModelProfileSummary,
   ProjectMeta,
   ProjectSettingsResponse,
   ProjectWorkspace,
@@ -11,32 +12,187 @@ export const WORKSPACE_KIND_OPTIONS = [
   { value: "blender", label: "Blender" },
 ];
 
-export const MODEL_ROUTING_TEMPLATE = {
-  global: {
-    provider: "openai",
-    model: "gpt-4o-mini",
-    temperature: 0.2,
-  },
-  agents: {
-    design: {
-      model: "gpt-4o",
-    },
-    review: {
-      model: "o4-mini",
-    },
-  },
-  capabilities: {
-    review_gate: {
-      model: "o4-mini",
-    },
-  },
-};
-
 type ModelRoutingValidation = {
   parsed: Record<string, unknown> | null;
   normalized: string;
   error: string;
 };
+
+type RouteTarget =
+  | { scope: "global" }
+  | { scope: "agent"; agent: string }
+  | { scope: "agent_capability"; agent: string; capability: string };
+
+const AGENT_ROUTE_ROWS = [
+  { key: "design", label: "策划 Agent", hint: "GDD、设定讨论、文案等设计相关能力" },
+  { key: "pm", label: "项目 Agent", hint: "排期、范围、里程碑和计划收敛" },
+  { key: "engineering", label: "工程 Agent", hint: "工程讨论、实现指导、文件与 MCP 能力" },
+  { key: "review", label: "评审 Agent", hint: "Review Gate、质量检查和风险判断" },
+];
+
+const CAPABILITY_ROUTE_ROWS = [
+  {
+    agent: "design",
+    capability: "copywriting",
+    label: "文案能力",
+    hint: "归属策划 Agent；单独填写后覆盖策划 Agent 默认模型",
+  },
+  {
+    agent: "engineering",
+    capability: "mcp",
+    label: "MCP 能力",
+    hint: "归属工程 Agent；单独填写后覆盖工程 Agent 默认模型",
+  },
+];
+
+function parseRoutingDraft(draft: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(draft || "{}") as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    // Keep the form usable even when the advanced JSON editor is temporarily invalid.
+  }
+  return {};
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? { ...(value as Record<string, unknown>) }
+    : {};
+}
+
+function cleanRouteEntry(entry: Record<string, unknown>): Record<string, unknown> {
+  const cleaned: Record<string, unknown> = {};
+  for (const key of ["profile", "provider", "model", "base_url", "api_key_env"]) {
+    const value = String(entry[key] || "").trim();
+    if (value) cleaned[key] = value;
+  }
+  if (entry.temperature !== undefined && entry.temperature !== "") {
+    const temperature = Number(entry.temperature);
+    if (Number.isFinite(temperature)) cleaned.temperature = temperature;
+  }
+  return cleaned;
+}
+
+function getRouteEntry(routing: Record<string, unknown>, target: RouteTarget): Record<string, unknown> {
+  if (target.scope === "global") {
+    return asRecord(routing.global);
+  }
+  if (target.scope === "agent") {
+    return asRecord(asRecord(routing.agents)[target.agent]);
+  }
+  return asRecord(
+    asRecord(asRecord(routing.agent_capabilities)[target.agent])[target.capability],
+  );
+}
+
+function updateRouteEntry(
+  routing: Record<string, unknown>,
+  target: RouteTarget,
+  nextEntry: Record<string, unknown>,
+): Record<string, unknown> {
+  const next = { ...routing };
+  const cleaned = cleanRouteEntry(nextEntry);
+  const hasValue = Object.keys(cleaned).length > 0;
+
+  if (target.scope === "global") {
+    if (hasValue) next.global = cleaned;
+    else delete next.global;
+    return pruneRouting(next);
+  }
+
+  if (target.scope === "agent") {
+    const agents = asRecord(next.agents);
+    if (hasValue) agents[target.agent] = cleaned;
+    else delete agents[target.agent];
+    if (Object.keys(agents).length) next.agents = agents;
+    else delete next.agents;
+    return pruneRouting(next);
+  }
+
+  const agentCapabilities = asRecord(next.agent_capabilities);
+  const capabilityMap = asRecord(agentCapabilities[target.agent]);
+  if (hasValue) capabilityMap[target.capability] = cleaned;
+  else delete capabilityMap[target.capability];
+
+  if (Object.keys(capabilityMap).length) agentCapabilities[target.agent] = capabilityMap;
+  else delete agentCapabilities[target.agent];
+
+  if (Object.keys(agentCapabilities).length) next.agent_capabilities = agentCapabilities;
+  else delete next.agent_capabilities;
+  return pruneRouting(next);
+}
+
+function pruneRouting(routing: Record<string, unknown>): Record<string, unknown> {
+  const next = { ...routing };
+  for (const key of ["global", "agents", "capabilities", "agent_capabilities"]) {
+    const value = next[key];
+    if (value && typeof value === "object" && !Array.isArray(value) && !Object.keys(value).length) {
+      delete next[key];
+    }
+  }
+  return next;
+}
+
+function routeValue(routing: Record<string, unknown>, target: RouteTarget, field: string): string {
+  const value = getRouteEntry(routing, target)[field];
+  return value === undefined || value === null ? "" : String(value);
+}
+
+function ModelRouteRow(props: {
+  title: string;
+  hint: string;
+  routing: Record<string, unknown>;
+  target: RouteTarget;
+  modelProfiles: ModelProfileSummary[];
+  disabled: boolean;
+  onChange: (target: RouteTarget, field: string, value: string) => void;
+}) {
+  const { title, hint, routing, target, modelProfiles, disabled, onChange } = props;
+  const currentProfile = routeValue(routing, target, "profile");
+  const profileExists = modelProfiles.some((profile) => profile.id === currentProfile);
+  return (
+    <div className="model-route-row">
+      <div className="model-route-meta">
+        <strong>{title}</strong>
+        <span>{hint}</span>
+      </div>
+      <select
+        className="model-route-control"
+        value={currentProfile}
+        onChange={(event) => onChange(target, "profile", event.target.value)}
+        disabled={disabled}
+      >
+        <option value="">使用默认</option>
+        {currentProfile && !profileExists ? (
+          <option value={currentProfile}>{currentProfile}</option>
+        ) : null}
+        {modelProfiles.map((profile) => (
+          <option key={profile.id} value={profile.id}>
+            {profile.id}
+            {profile.provider ? ` · ${profile.provider}` : ""}
+          </option>
+        ))}
+      </select>
+      <input
+        className="model-route-control"
+        value={routeValue(routing, target, "model")}
+        onChange={(event) => onChange(target, "model", event.target.value)}
+        disabled={disabled}
+        placeholder="模型"
+      />
+      <input
+        className="model-route-control"
+        value={routeValue(routing, target, "temperature")}
+        onChange={(event) => onChange(target, "temperature", event.target.value)}
+        disabled={disabled}
+        placeholder="Temp"
+      />
+    </div>
+  );
+}
 
 function kindLabel(kind: string): string {
   if (kind === "unity") return "Unity";
@@ -66,6 +222,7 @@ interface GeneralSettingsSectionProps {
   projectSettings: ProjectSettingsResponse | null;
   loading: boolean;
   settingsSubmitting: boolean;
+  modelProfiles: ModelProfileSummary[];
   theme: string;
   modelRoutingDraft: string;
   modelRoutingDirty: boolean;
@@ -74,7 +231,6 @@ interface GeneralSettingsSectionProps {
   onToggleFileWriteConfirm: (required: boolean) => void;
   onThemeChange: (theme: string) => void;
   onModelRoutingDraftChange: (value: string) => void;
-  onUseModelRoutingTemplate: () => void;
   onClearModelRouting: () => void;
   onSaveModelRouting: () => void;
 }
@@ -84,6 +240,7 @@ export function GeneralSettingsSection(props: GeneralSettingsSectionProps) {
     projectSettings,
     loading,
     settingsSubmitting,
+    modelProfiles,
     theme,
     modelRoutingDraft,
     modelRoutingDirty,
@@ -92,13 +249,22 @@ export function GeneralSettingsSection(props: GeneralSettingsSectionProps) {
     onToggleFileWriteConfirm,
     onThemeChange,
     onModelRoutingDraftChange,
-    onUseModelRoutingTemplate,
     onClearModelRouting,
     onSaveModelRouting,
   } = props;
+  const modelRoutingObject = parseRoutingDraft(modelRoutingDraft);
+  const updateModelRoute = (target: RouteTarget, field: string, value: string) => {
+    const currentEntry = getRouteEntry(modelRoutingObject, target);
+    const nextEntry = {
+      ...currentEntry,
+      [field]: field === "temperature" ? value.trim() : value,
+    };
+    const nextRouting = updateRouteEntry(modelRoutingObject, target, nextEntry);
+    onModelRoutingDraftChange(JSON.stringify(nextRouting, null, 2));
+  };
 
   return (
-    <div className="settings-detail-stack">
+    <div className="settings-detail-stack general-settings-stack">
       <section className="settings-pane-card settings-pane-card-main">
         <div className="settings-card-head">
           <h2 className="settings-card-title">通用设置</h2>
@@ -108,6 +274,7 @@ export function GeneralSettingsSection(props: GeneralSettingsSectionProps) {
         </div>
 
         <div className="settings-form">
+          <div className="settings-toggle-row">
           <label className="settings-toggle">
             <input
               type="checkbox"
@@ -136,6 +303,8 @@ export function GeneralSettingsSection(props: GeneralSettingsSectionProps) {
               </small>
             </span>
           </label>
+
+          </div>
 
           <div className="settings-note-strip">
             <span className="settings-note-item">
@@ -211,7 +380,7 @@ export function GeneralSettingsSection(props: GeneralSettingsSectionProps) {
         </div>
       </section>
 
-      <section className="settings-pane-card settings-pane-card-main">
+      <section className="settings-pane-card settings-pane-card-main settings-model-routing-card">
         <div className="settings-card-head">
           <h2 className="settings-card-title">模型路由</h2>
           <span className="settings-chip">
@@ -219,7 +388,7 @@ export function GeneralSettingsSection(props: GeneralSettingsSectionProps) {
           </span>
         </div>
 
-        <div className="settings-form">
+        <div className="settings-form settings-model-routing-form">
           <div className="settings-note-strip">
             <span className="settings-note-item">优先级：agent_capabilities</span>
             <span className="settings-note-item">
@@ -228,60 +397,78 @@ export function GeneralSettingsSection(props: GeneralSettingsSectionProps) {
             <span className="settings-note-item">最后回退到 .env 默认模型</span>
           </div>
 
-          <div className="settings-route-actions">
+          <div className="model-route-table">
+            <div className="model-route-tgroup">
+              <span>Agent 默认模型</span>
+              <span>Profile</span>
+              <span>Model</span>
+              <span>Temp</span>
+            </div>
+            {AGENT_ROUTE_ROWS.map((agent) => (
+              <ModelRouteRow
+                key={agent.key}
+                title={agent.label}
+                hint={agent.hint}
+                routing={modelRoutingObject}
+                target={{ scope: "agent", agent: agent.key }}
+                modelProfiles={modelProfiles}
+                disabled={settingsSubmitting}
+                onChange={updateModelRoute}
+              />
+            ))}
+            <div className="model-route-tgroup">
+              <span>专项能力覆盖</span>
+              <span>Profile</span>
+              <span>Model</span>
+              <span>Temp</span>
+            </div>
+            {CAPABILITY_ROUTE_ROWS.map((capability) => (
+              <ModelRouteRow
+                key={`${capability.agent}:${capability.capability}`}
+                title={capability.label}
+                hint={capability.hint}
+                routing={modelRoutingObject}
+                target={{
+                  scope: "agent_capability",
+                  agent: capability.agent,
+                  capability: capability.capability,
+                }}
+                modelProfiles={modelProfiles}
+                disabled={settingsSubmitting}
+                onChange={updateModelRoute}
+              />
+            ))}
+          </div>
+
+          {modelRoutingValidation.error ? (
+            <div className="settings-inline-error">
+              {modelRoutingValidation.error}
+            </div>
+          ) : null}
+
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <button
               type="button"
-              className="settings-pill-button"
-              disabled={settingsSubmitting}
-              onClick={onUseModelRoutingTemplate}
+              className="settings-primary-button"
+              disabled={
+                settingsSubmitting ||
+                !modelRoutingDirty ||
+                Boolean(modelRoutingValidation.error)
+              }
+              onClick={onSaveModelRouting}
             >
-              填入推荐模板
+              保存模型路由
             </button>
             <button
               type="button"
               className="settings-pill-button"
               disabled={settingsSubmitting}
               onClick={onClearModelRouting}
+              style={{ padding: "0 10px", height: 30, fontSize: 12, fontWeight: 600 }}
             >
-              清空为全局默认
+              清空项目路由
             </button>
           </div>
-
-          <label className="settings-field">
-            <span>model_routing（JSON）</span>
-            <textarea
-              className={`settings-json-editor${
-                modelRoutingValidation.error ? " is-invalid" : ""
-              }`}
-              value={modelRoutingDraft}
-              onChange={(event) => onModelRoutingDraftChange(event.target.value)}
-              spellCheck={false}
-              placeholder='例如：{"global":{"provider":"openai","model":"gpt-4o-mini"}}'
-            />
-          </label>
-
-          {modelRoutingValidation.error ? (
-            <div className="settings-inline-error">
-              {modelRoutingValidation.error}
-            </div>
-          ) : (
-            <div className="settings-inline-help">
-              支持字段：`global` / `agents` / `capabilities` / `agent_capabilities`。
-            </div>
-          )}
-
-          <button
-            type="button"
-            className="settings-primary-button"
-            disabled={
-              settingsSubmitting ||
-              !modelRoutingDirty ||
-              Boolean(modelRoutingValidation.error)
-            }
-            onClick={onSaveModelRouting}
-          >
-            保存模型路由
-          </button>
         </div>
       </section>
     </div>
@@ -424,75 +611,77 @@ export function WorkspacesSection(props: WorkspacesSectionProps) {
   })();
 
   return (
-    <div className="settings-detail-stack">
-      <section className="settings-workspace-layout">
-        <article className="settings-pane-card settings-pane-card-main">
-          <div className="settings-card-head">
-            <h2 className="settings-card-title">当前工作区</h2>
-            <span className="settings-chip">{workspaces.length} 项</span>
+    <div className="settings-detail-stack settings-detail-stack--fill">
+      <article className="settings-pane-card settings-workspace-whole">
+        <div className="settings-workspace-split">
+          <div className="settings-workspace-left">
+            <div className="settings-card-head">
+              <h2 className="settings-card-title">当前工作区</h2>
+              <span className="settings-chip">{workspaces.length} 项</span>
+            </div>
+            {workspaceList}
           </div>
-          {workspaceList}
-        </article>
 
-        <article className="settings-pane-card settings-pane-card-side">
-          <div className="settings-card-head compact">
-            <h2 className="settings-card-title">添加工作区</h2>
-          </div>
-          <div className="settings-form">
-            <label className="settings-field">
-              <span>显示名称</span>
-              <input
-                type="text"
-                value={labelInput}
-                onChange={(event) => onLabelChange(event.target.value)}
-                placeholder="例如：主 Unity 工程"
-              />
-            </label>
+          <div className="settings-workspace-right">
+            <div className="settings-card-head compact">
+              <h2 className="settings-card-title">添加工作区</h2>
+            </div>
+            <div className="settings-form">
+              <label className="settings-field">
+                <span>显示名称</span>
+                <input
+                  type="text"
+                  value={labelInput}
+                  onChange={(event) => onLabelChange(event.target.value)}
+                  placeholder="例如：主 Unity 工程"
+                />
+              </label>
 
-            <label className="settings-field">
-              <span>工作区类型</span>
-              <select
-                value={kindInput}
-                onChange={(event) => onKindChange(event.target.value)}
+              <label className="settings-field">
+                <span>工作区类型</span>
+                <select
+                  value={kindInput}
+                  onChange={(event) => onKindChange(event.target.value)}
+                >
+                  {WORKSPACE_KIND_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="settings-field">
+                <span>目录路径</span>
+                <input
+                  type="text"
+                  value={pathInput}
+                  onChange={(event) => onPathChange(event.target.value)}
+                  placeholder="输入本地目录绝对路径"
+                />
+              </label>
+
+              <label className="settings-toggle">
+                <input
+                  type="checkbox"
+                  checked={writableInput}
+                  onChange={(event) => onWritableChange(event.target.checked)}
+                />
+                <span>允许后续受控写入</span>
+              </label>
+
+              <button
+                type="button"
+                className="settings-primary-button"
+                disabled={submitting}
+                onClick={onAddWorkspace}
               >
-                {WORKSPACE_KIND_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="settings-field">
-              <span>目录路径</span>
-              <input
-                type="text"
-                value={pathInput}
-                onChange={(event) => onPathChange(event.target.value)}
-                placeholder="输入本地目录绝对路径"
-              />
-            </label>
-
-            <label className="settings-toggle">
-              <input
-                type="checkbox"
-                checked={writableInput}
-                onChange={(event) => onWritableChange(event.target.checked)}
-              />
-              <span>允许后续受控写入</span>
-            </label>
-
-            <button
-              type="button"
-              className="settings-primary-button"
-              disabled={submitting}
-              onClick={onAddWorkspace}
-            >
-              添加工作区
-            </button>
+                添加工作区
+              </button>
+            </div>
           </div>
-        </article>
-      </section>
+        </div>
+      </article>
     </div>
   );
 }
@@ -509,8 +698,8 @@ export function HistorySection(props: HistorySectionProps) {
     props;
 
   return (
-    <div className="settings-detail-stack">
-      <section className="settings-pane-card settings-pane-card-main">
+    <div className="settings-detail-stack settings-detail-stack--fill">
+      <section className="settings-pane-card settings-pane-card-main settings-history-whole">
         <div className="settings-card-head">
           <h2 className="settings-card-title">项目历史</h2>
           <span className="settings-chip">{archivedProjects.length} 项</span>

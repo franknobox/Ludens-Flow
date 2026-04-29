@@ -102,6 +102,17 @@
   margin-bottom: 32px;
 }
 
+.aigc-platform-group {
+  margin-bottom: 26px;
+}
+
+.aigc-group-title {
+  margin: 0 0 12px;
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 800;
+}
+
 .aigc-card {
   background-color: var(--panel);
   border: 1px solid var(--line);

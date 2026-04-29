@@ -155,6 +155,8 @@ export function useWorkbenchController() {
       ? "GitHub 可视化"
       : currentView.type === "aigc"
       ? "外部 AIGC 集成"
+      : currentView.type === "copywriting"
+      ? "文案加工台"
       : currentView.type === "game-model"
       ? "游戏内模型接入"
       : currentView.type === "mcp"
@@ -169,6 +171,8 @@ export function useWorkbenchController() {
       ? `仓库：ludens-flow`
       : currentView.type === "aigc"
       ? `生成图片、声音、模型等内容，导入当前项目`
+      : currentView.type === "copywriting"
+      ? `面向当前项目的策划文案加工入口`
       : currentView.type === "game-model"
       ? `配置大模型能力，接入 Unity / REST 游戏运行时`
       : currentView.type === "mcp"
@@ -546,6 +550,10 @@ export function useWorkbenchController() {
     setCurrentView({ type: "aigc" });
   };
 
+  const openCopywriting = () => {
+    setCurrentView({ type: "copywriting" });
+  };
+
   const openGameModel = () => {
     setCurrentView({ type: "game-model" });
   };
@@ -684,6 +692,7 @@ createProject,
     handleArchiveProject,
     handleRenameProject,
     openAigc,
+    openCopywriting,
     openGameModel,
     openMcp,
     openFile,

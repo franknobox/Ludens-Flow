@@ -51,3 +51,14 @@ export interface ProjectSettingsResponse {
   agent_file_write_confirm_required?: boolean;
   model_routing?: Record<string, unknown>;
 }
+
+export interface ModelProfileSummary {
+  id: string;
+  provider?: string;
+  base_url?: string;
+  has_api_key?: boolean;
+}
+
+export interface ModelProfilesResponse {
+  profiles: ModelProfileSummary[];
+}

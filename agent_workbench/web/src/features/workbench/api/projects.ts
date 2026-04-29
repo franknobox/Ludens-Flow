@@ -1,5 +1,6 @@
 import type {
   ProjectCreateResponse,
+  ModelProfilesResponse,
   ProjectSettingsResponse,
   ProjectSelectResponse,
   ProjectsResponse,
@@ -13,6 +14,10 @@ export function getProjects() {
 
 export function getCurrentProjectSettings() {
   return fetchJson<ProjectSettingsResponse>("/api/projects/current/settings");
+}
+
+export function getModelProfiles() {
+  return fetchJson<ModelProfilesResponse>("/api/model-profiles");
 }
 
 export function updateCurrentProjectSettings(body: {
