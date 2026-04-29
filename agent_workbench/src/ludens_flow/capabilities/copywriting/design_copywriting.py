@@ -2,15 +2,18 @@ from __future__ import annotations
 
 from typing import Iterable
 
+from llm.modelrouter import resolve_model_config
+from llm.provider import generate
 from ludens_flow.capabilities.artifacts.artifacts import read_artifact
 from ludens_flow.core.paths import resolve_project_id
 from ludens_flow.core.schemas import (
     COPYWRITING_RESPONSE_SCHEMA_TEXT,
-    DesignCopywritingCandidate,
     DesignCopywritingContext,
     DesignCopywritingContextItem,
     DesignCopywritingRequest,
     DesignCopywritingResponse,
+    normalize_design_copywriting_response,
+    parse_design_copywriting_response,
 )
 
 _ARTIFACT_REFERENCES = {
@@ -19,6 +22,7 @@ _ARTIFACT_REFERENCES = {
     "implementation_plan": ("IMPLEMENTATION_PLAN", "IMPLEMENTATION_PLAN.md"),
     "review_report": ("REVIEW_REPORT", "REVIEW_REPORT.md"),
     "devlog": ("DEVLOG", "dev_notes/DEVLOG.md"),
+    "notes": ("NOTES", "dev_notes/NOTES.md"),
 }
 
 _DEFAULT_REFERENCE_IDS = ["gdd", "project_plan"]
@@ -101,32 +105,43 @@ def generate_design_copywriting(
     project_id: str | None = None,
 ) -> DesignCopywritingResponse:
     normalized = request.normalized()
-    context = load_design_copywriting_context(project_id, normalized.reference_ids)
+    resolved_project_id = resolve_project_id(project_id)
+    context = load_design_copywriting_context(resolved_project_id, normalized.reference_ids)
     prompt = build_design_copywriting_prompt(normalized, context)
 
-    candidates = [
-        DesignCopywritingCandidate(
-            id=f"mock-{index + 1}",
-            text=_mock_candidate_text(normalized, index),
-            notes=["mock result; replace with Design Agent generation in the next integration phase"],
-            tags=[normalized.copy_type, normalized.style, normalized.length],
-        )
-        for index in range(normalized.quantity)
-    ]
-
-    return DesignCopywritingResponse(
-        request=normalized,
-        candidates=candidates,
-        context=context,
-        prompt_preview=prompt,
-        status="mock",
+    cfg = resolve_model_config(
+        project_id=resolved_project_id,
+        agent_key="design",
+        capability="copywriting",
+        default_route={"temperature": 0.7},
+    )
+    raw = generate(
+        system=(
+            "You are Dam / Design, the design agent of Ludens-Flow. "
+            "Generate concise, usable game copywriting and return only the requested JSON object."
+        ),
+        user=prompt,
+        cfg=cfg,
     )
 
+    response, _ = parse_design_copywriting_response(
+        str(raw or ""),
+        request=normalized,
+        context=context,
+        prompt_preview=prompt,
+    )
+    if response and response.candidates:
+        return response
 
-def _mock_candidate_text(request: DesignCopywritingRequest, index: int) -> str:
-    purpose = f"用于{request.purpose}" if request.purpose else "用于当前项目"
-    brief = f"：{request.brief}" if request.brief else ""
-    return f"[{request.copy_type} / {request.style} / {request.length}] 候选 {index + 1}，{purpose}{brief}"
+    # If the model ignored the JSON contract, keep the feature usable by wrapping
+    # the raw text as one candidate instead of discarding the generation.
+    return normalize_design_copywriting_response(
+        {"candidates": [{"id": "c1", "text": str(raw or "").strip()}]},
+        request=normalized,
+        context=context,
+        prompt_preview=prompt,
+        status="generated",
+    )
 
 
 def _truncate_context(content: str) -> str:

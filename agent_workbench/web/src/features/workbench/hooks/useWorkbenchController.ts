@@ -433,6 +433,21 @@ export function useWorkbenchController() {
     }
   };
 
+  const uploadWorkspaceFileAsset = async (
+    fileId: string,
+    name: string,
+    dataUrl: string,
+  ) => {
+    try {
+      return await workbenchApi.uploadWorkspaceFileAsset(fileId, {
+        name,
+        data_url: dataUrl,
+      });
+    } catch (error) {
+      throw new Error(`上传失败：${toErrorMessage(error)}`);
+    }
+  };
+
   const createProject = async (title: string): Promise<boolean> => {
     const displayName = title.trim();
     if (!displayName) {
@@ -699,6 +714,7 @@ createProject,
     openGithub,
     openProject,
     saveWorkspaceFile,
+    uploadWorkspaceFileAsset,
     selectAgent,
     sendAction,
     sendMessage,

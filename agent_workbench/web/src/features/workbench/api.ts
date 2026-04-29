@@ -4,6 +4,7 @@
 
 import {
   archiveProject,
+  checkCurrentMcpConnections,
   createProject,
   deleteProject,
   getCurrentProjectSettings,
@@ -23,6 +24,7 @@ import {
   getCurrentWorkspaces,
   getWorkspaceFileContent,
   getWorkspaceFiles,
+  uploadWorkspaceFileAsset,
   updateWorkspaceFileContent,
 } from "./api/workspace";
 import { getTools } from "./api/tools";
@@ -38,6 +40,7 @@ export const workbenchApi = {
   submitPermissionDecision,
   renameProject,
   archiveProject,
+  checkCurrentMcpConnections,
   restoreProject,
   deleteProject,
   resetCurrentProject,
@@ -46,6 +49,7 @@ export const workbenchApi = {
   updateCurrentProjectSettings,
   getWorkspaceFiles,
   getWorkspaceFileContent,
+  uploadWorkspaceFileAsset,
   updateWorkspaceFileContent,
   getCurrentWorkspaces,
   addCurrentWorkspace,

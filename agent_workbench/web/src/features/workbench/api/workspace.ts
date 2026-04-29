@@ -1,5 +1,6 @@
 import type {
   ProjectWorkspacesResponse,
+  WorkspaceFileAssetUploadResponse,
   WorkspaceFileContent,
   WorkspaceFilesResponse,
   WorkspaceFileUpdateResponse,
@@ -23,6 +24,20 @@ export function updateWorkspaceFileContent(fileId: string, content: string) {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content }),
+    },
+  );
+}
+
+export function uploadWorkspaceFileAsset(fileId: string, body: {
+  name: string;
+  data_url: string;
+}) {
+  return fetchJson<WorkspaceFileAssetUploadResponse>(
+    `/api/workspace/files/${encodeURIComponent(fileId)}/assets`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
     },
   );
 }

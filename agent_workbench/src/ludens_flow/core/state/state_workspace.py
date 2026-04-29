@@ -15,6 +15,7 @@ from ludens_flow.core.paths import (
     PROJECT_META_FILE_NAME,
     create_project,
     get_artifact_paths,
+    get_dev_notes_assets_dir,
     get_dev_notes_dir,
     get_images_dir,
     get_logs_dir,
@@ -123,6 +124,7 @@ def init_workspace(project_id: Optional[str] = None) -> None:
     memory_dir = get_memory_dir(resolved)
     images_dir = get_images_dir(resolved)
     dev_notes_dir = get_dev_notes_dir(resolved)
+    dev_notes_assets_dir = get_dev_notes_assets_dir(resolved)
     patches_dir = get_patches_dir(resolved)
     artifact_paths = get_artifact_paths(resolved)
 
@@ -132,6 +134,7 @@ def init_workspace(project_id: Optional[str] = None) -> None:
         memory_dir,
         images_dir,
         dev_notes_dir,
+        dev_notes_assets_dir,
         patches_dir,
     ]:
         directory.mkdir(parents=True, exist_ok=True)
@@ -159,14 +162,6 @@ def clear_images_dir(project_id: Optional[str] = None) -> Path:
 def _clear_artifact_files(project_id: Optional[str] = None) -> None:
     """将所有工件文件清空（重置为空文件），并清理 dev_notes 和 patches 目录。"""
     resolved = resolve_project_id(project_id)
-    artifact_paths = get_artifact_paths(resolved)
-    for path in artifact_paths.values():
-        if path.exists():
-            path.write_text("", encoding="utf-8")
-        else:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.touch()
-
     for directory in [get_dev_notes_dir(resolved), get_patches_dir(resolved)]:
         if directory.exists():
             for entry in directory.iterdir():
@@ -174,6 +169,13 @@ def _clear_artifact_files(project_id: Optional[str] = None) -> None:
                     shutil.rmtree(entry, ignore_errors=True)
                 else:
                     entry.unlink(missing_ok=True)
+
+    artifact_paths = get_artifact_paths(resolved)
+    for path in artifact_paths.values():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("", encoding="utf-8")
+
+    get_dev_notes_assets_dir(resolved).mkdir(parents=True, exist_ok=True)
 
 
 # 项目级 reset 入口：委托给 StateStore 统一处理。
@@ -222,6 +224,11 @@ def export_project_bundle(
         project_dir / "USER_PROFILE.md",
         *artifact_paths.values(),
     ]
+    assets_dir = get_dev_notes_assets_dir(resolved)
+    if assets_dir.exists():
+        included_files.extend(
+            path for path in assets_dir.rglob("*") if path.is_file()
+        )
 
     manifest = {
         "bundle_schema_version": 1,

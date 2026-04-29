@@ -25,6 +25,13 @@ export interface WorkspaceFileUpdateResponse extends WorkspaceFileContent {
   state?: StateResponse;
 }
 
+export interface WorkspaceFileAssetUploadResponse {
+  file_id: string;
+  name: string;
+  url: string;
+  markdown: string;
+}
+
 export interface ToolsResponse {
   tools: ToolCatalogItem[];
 }

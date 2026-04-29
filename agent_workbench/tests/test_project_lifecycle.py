@@ -29,6 +29,7 @@ from ludens_flow.core.paths import (
     create_project,
     delete_project,
     get_active_project_id,
+    get_dev_notes_assets_dir,
     get_logs_dir,
     get_project_dir,
     get_project_meta_file,
@@ -192,6 +193,61 @@ class ProjectLifecycleTests(unittest.TestCase):
             read_artifact("GDD", project_id="alpha"),
             "# GDD\nEdited by user\n",
         )
+
+    def test_api_exposes_notes_artifact_and_uploads_note_assets(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+
+        files = api.list_workspace_files()["files"]
+        self.assertTrue(any(item["id"] == "notes" for item in files))
+
+        response = api.put_workspace_file_content(
+            "notes",
+            api.WorkspaceFileUpdateRequest(content="free note"),
+        )
+        self.assertEqual(response["id"], "notes")
+        self.assertEqual(read_artifact("NOTES", project_id="alpha"), "free note\n")
+
+        data_url = "data:image/png;base64," + base64.b64encode(b"png-bytes").decode("ascii")
+        upload = api.upload_workspace_file_asset(
+            "notes",
+            api.WorkspaceFileAssetUploadRequest(
+                name="sketch.png",
+                data_url=data_url,
+            ),
+        )
+
+        self.assertEqual(get_dev_notes_assets_dir("alpha").name, "assets")
+        self.assertEqual(get_dev_notes_assets_dir("alpha").parent.name, "dev_notes")
+        self.assertIn("/api/workspace/files/notes/assets/", upload["markdown"])
+        self.assertTrue((get_dev_notes_assets_dir("alpha") / upload["name"]).exists())
+
+    def test_api_saves_mcp_connections_and_checks_status(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+
+        settings = api.post_current_project_settings(
+            api.ProjectSettingsRequest(
+                mcp_connections=[
+                    {
+                        "id": "unity-mcp",
+                        "engine": "unity",
+                        "label": "Unity MCP",
+                        "command": "",
+                        "args": [],
+                        "enabled": True,
+                    }
+                ]
+            )
+        )
+
+        self.assertEqual(settings["mcp_connections"][0]["id"], "unity-mcp")
+        self.assertEqual(settings["mcp_connections"][0]["engine"], "unity")
+
+        health = api.post_check_current_project_mcp_connections(
+            api.McpConnectionCheckRequest(connection_id="unity-mcp")
+        )
+
+        self.assertEqual(health["connections"][0]["status"], "not_configured")
+        self.assertEqual(health["connections"][0]["tool_count"], 0)
 
     def test_api_allows_manual_workspace_edit_when_artifacts_are_frozen(self):
         api.post_project(api.ProjectRequest(project_id="alpha"))

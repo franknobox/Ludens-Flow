@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ClipboardEvent } from "react";
 
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import type { ViewState, WorkspaceFileItem } from "../../types";
@@ -10,6 +10,20 @@ interface FileViewProps {
   fileCache: Record<string, string>;
   fileEditable: boolean;
   onSaveFile: (fileId: string, content: string) => Promise<void>;
+  onUploadFileAsset: (
+    fileId: string,
+    name: string,
+    dataUrl: string,
+  ) => Promise<{ markdown: string }>;
+}
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error || new Error("读取图片失败"));
+    reader.readAsDataURL(file);
+  });
 }
 
 export function FileView(props: FileViewProps) {
@@ -20,6 +34,7 @@ export function FileView(props: FileViewProps) {
     fileCache,
     fileEditable,
     onSaveFile,
+    onUploadFileAsset,
   } = props;
 
   const [editingFileId, setEditingFileId] = useState<string | null>(null);
@@ -48,6 +63,7 @@ export function FileView(props: FileViewProps) {
   const showContent = typeof content === "string" ? content || "（空）" : "加载中...";
   const canStartEdit = fileEditable && typeof content === "string";
   const isEditing = editingFileId === currentView.id;
+  const supportsImagePaste = currentView.id === "notes";
 
   const startFileEdit = () => {
     if (typeof content !== "string") {
@@ -68,6 +84,47 @@ export function FileView(props: FileViewProps) {
       setFileSaveError(error instanceof Error ? error.message : String(error));
     } finally {
       setFileSaveInFlight(false);
+    }
+  };
+
+  const handleEditorPaste = async (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    if (!supportsImagePaste) {
+      return;
+    }
+    const imageFiles = Array.from(event.clipboardData.files || []).filter((item) =>
+      item.type.startsWith("image/"),
+    );
+    if (!imageFiles.length) {
+      return;
+    }
+
+    event.preventDefault();
+    setFileSaveError("");
+
+    const textarea = event.currentTarget;
+    const start = textarea.selectionStart ?? fileDraftContent.length;
+    const end = textarea.selectionEnd ?? start;
+
+    try {
+      const markdownItems: string[] = [];
+      for (const image of imageFiles) {
+        const dataUrl = await fileToDataUrl(image);
+        const uploaded = await onUploadFileAsset(currentView.id, image.name || "pasted-image.png", dataUrl);
+        markdownItems.push(uploaded.markdown);
+      }
+
+      const insertion = markdownItems.join("\n\n");
+      setFileDraftContent((previous) => {
+        const next = `${previous.slice(0, start)}${insertion}${previous.slice(end)}`;
+        window.requestAnimationFrame(() => {
+          const cursor = start + insertion.length;
+          textarea.selectionStart = cursor;
+          textarea.selectionEnd = cursor;
+        });
+        return next;
+      });
+    } catch (error) {
+      setFileSaveError(error instanceof Error ? error.message : String(error));
     }
   };
 
@@ -129,6 +186,10 @@ export function FileView(props: FileViewProps) {
           value={fileDraftContent}
           disabled={fileSaveInFlight}
           onChange={(event) => setFileDraftContent(event.target.value)}
+          onPaste={(event) => {
+            void handleEditorPaste(event);
+          }}
+          placeholder={supportsImagePaste ? "可以直接粘贴图片，图片会保存到 dev_notes/assets/。" : undefined}
         />
       ) : (
         <div className="file-render-view">

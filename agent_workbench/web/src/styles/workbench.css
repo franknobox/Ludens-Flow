@@ -804,6 +804,12 @@
 .file-render-view .md-body h2 { font-size: 1.3em; }
 .file-render-view .md-body h3 { font-size: 1.1em; }
 
+.file-render-view .md-body img {
+  max-width: 100%;
+  border-radius: 14px;
+  border: 1px solid rgba(29, 39, 52, 0.1);
+}
+
 .file-render-view .md-code-block pre {
   font-size: 13px;
 }
@@ -847,7 +853,7 @@
 textarea {
   flex: 1;
   min-height: 44px;
-  max-height: 140px;
+  max-height: 240px;
   resize: none;
   padding: 10px 14px;
   border-radius: 16px;
@@ -856,6 +862,8 @@ textarea {
   font: inherit;
   outline: none;
   box-shadow: none;
+  line-height: 1.6;
+  overflow: hidden;
 }
 
 textarea:focus {

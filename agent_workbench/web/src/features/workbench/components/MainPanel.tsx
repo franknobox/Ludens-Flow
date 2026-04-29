@@ -42,6 +42,11 @@ interface MainPanelProps {
   onSend: (message: string, attachments: ComposerAttachment[]) => Promise<void>;
   onAction: (actionId: string) => void;
   onSaveFile: (fileId: string, content: string) => Promise<void>;
+  onUploadFileAsset: (
+    fileId: string,
+    name: string,
+    dataUrl: string,
+  ) => Promise<{ markdown: string }>;
 }
 
 export function MainPanel(props: MainPanelProps) {
@@ -68,6 +73,7 @@ export function MainPanel(props: MainPanelProps) {
     onSend,
     onAction,
     onSaveFile,
+    onUploadFileAsset,
   } = props;
 
   const isSpecialView =
@@ -131,6 +137,7 @@ export function MainPanel(props: MainPanelProps) {
             fileCache={fileCache}
             fileEditable={fileEditable}
             onSaveFile={onSaveFile}
+            onUploadFileAsset={onUploadFileAsset}
           />
         )}
       </section>

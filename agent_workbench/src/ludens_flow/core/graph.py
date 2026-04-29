@@ -106,6 +106,38 @@ def _user_input_to_text(user_input: Any) -> str:
     return str(user_input)
 
 
+def _maybe_append_notes_context(user_input: Any, state: LudensState) -> Any:
+    text = _user_input_to_text(user_input).lower()
+    triggers = ["notes", "note", "笔记", "参考资料", "参考 notes", "notes.md"]
+    if not any(trigger in text for trigger in triggers):
+        return user_input
+
+    try:
+        from ludens_flow.capabilities.artifacts.artifacts import read_artifact
+
+        notes = read_artifact("NOTES", project_id=state.project_id).strip()
+    except Exception as exc:
+        logger.debug("Failed to load NOTES context: %s", exc)
+        return user_input
+
+    if not notes:
+        return user_input
+
+    context_block = (
+        "\n\n[User NOTES.md reference]\n"
+        "The user explicitly asked to reference their free-form notes for this turn.\n"
+        f"{notes[:6000]}"
+    )
+    if isinstance(user_input, str):
+        return user_input + context_block
+    if isinstance(user_input, list):
+        return [
+            *user_input,
+            {"type": "text", "text": context_block.strip()},
+        ]
+    return str(user_input) + context_block
+
+
 def _append_transcript(
     state: LudensState, role: str, content: str, phase: str, agent: str
 ) -> None:
@@ -196,6 +228,7 @@ def run_agent_step(
     logger.debug("run_agent_step -> agent=%s mode=%s", node_name, mode)
 
     try:
+        effective_user_input = _maybe_append_notes_context(user_input, state)
         orig_prompt = getattr(agent, "system_prompt", "") or ""
         profile_text = ""
         profile_instruction = (
@@ -270,7 +303,7 @@ def run_agent_step(
             if mode == "DISCUSS":
                 result: AgentResult = agent.discuss(
                     agent_state_snapshot,
-                    user_input,
+                    effective_user_input,
                     cfg=resolved_cfg,
                     user_persona=user_persona_block,
                     stream_handler=stream_handler,
@@ -279,7 +312,7 @@ def run_agent_step(
             elif mode == "COMMIT":
                 result: AgentResult = agent.commit(
                     agent_state_snapshot,
-                    user_input,
+                    effective_user_input,
                     cfg=resolved_cfg,
                     user_persona=user_persona_block,
                     tool_event_handler=tool_event_handler,
@@ -287,7 +320,7 @@ def run_agent_step(
             elif mode == "PLAN_DISCUSS":
                 result: AgentResult = getattr(agent, "plan_discuss")(
                     agent_state_snapshot,
-                    user_input,
+                    effective_user_input,
                     resolved_cfg,
                     user_persona=user_persona_block,
                     stream_handler=stream_handler,
@@ -296,7 +329,7 @@ def run_agent_step(
             elif mode == "PLAN_COMMIT":
                 result: AgentResult = getattr(agent, "plan_commit")(
                     agent_state_snapshot,
-                    user_input,
+                    effective_user_input,
                     resolved_cfg,
                     user_persona=user_persona_block,
                     tool_event_handler=tool_event_handler,
@@ -304,7 +337,7 @@ def run_agent_step(
             elif mode == "COACH":
                 result: AgentResult = getattr(agent, "coach")(
                     agent_state_snapshot,
-                    user_input,
+                    effective_user_input,
                     resolved_cfg,
                     user_persona=user_persona_block,
                     stream_handler=stream_handler,

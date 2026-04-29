@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type {
   ChangeEvent,
   ClipboardEvent,
@@ -174,7 +174,24 @@ export function Composer(props: ComposerProps) {
   const [dragActive, setDragActive] = useState(false);
   const [localWarningText, setLocalWarningText] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const combinedWarningText = [warningText, localWarningText].filter(Boolean).join("\n");
+
+  const MAX_TEXTAREA_HEIGHT = 240;
+
+  const adjustTextareaHeight = () => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    const newHeight = Math.min(textarea.scrollHeight, MAX_TEXTAREA_HEIGHT);
+    textarea.style.height = `${newHeight}px`;
+    textarea.style.overflowY =
+      textarea.scrollHeight > MAX_TEXTAREA_HEIGHT ? "auto" : "hidden";
+  };
+
+  useLayoutEffect(() => {
+    adjustTextareaHeight();
+  }, [inputText]);
 
   const processIncomingAttachments = async (
     files: File[],
@@ -324,7 +341,7 @@ export function Composer(props: ComposerProps) {
 
       <div className="input-row">
         <textarea
-          rows={1}
+          ref={textareaRef}
           value={inputText}
           disabled={readOnly || requestInFlight}
           onChange={(event) => setInputText(event.target.value)}

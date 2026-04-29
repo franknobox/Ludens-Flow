@@ -26,6 +26,7 @@ PROJECT_META_SCHEMA_VERSION = 4
 _UNSET = object()
 DEFAULT_UNITY_WORKSPACE_ID = "unity-main"
 SUPPORTED_WORKSPACE_KINDS = {"unity", "generic", "blender"}
+SUPPORTED_MCP_ENGINES = {"unity", "godot", "blender", "unreal"}
 
 # 统一管理仓库根目录、工作区根目录和项目级路径。
 # 运行时总是落在某个项目目录下；首次启动时自动创建第一个项目。
@@ -191,6 +192,83 @@ def _normalize_model_routing(raw: Any) -> Dict[str, Any]:
             normalized["agent_capabilities"] = agent_capabilities
 
     return normalized
+
+
+def _normalize_mcp_engine(engine: Optional[str]) -> str:
+    raw = str(engine or "").strip().lower()
+    if raw == "ue":
+        raw = "unreal"
+    if raw not in SUPPORTED_MCP_ENGINES:
+        raise ValueError(
+            f"Unsupported MCP engine '{raw}'. Supported engines: {', '.join(sorted(SUPPORTED_MCP_ENGINES))}."
+        )
+    return raw
+
+
+def _normalize_mcp_connection_id(connection_id: Optional[str], fallback: str) -> str:
+    normalized = _normalize_project_id(connection_id or fallback)
+    if not normalized:
+        raise ValueError("MCP connection id is required.")
+    return normalized
+
+
+def _normalize_mcp_env(raw: Any) -> Dict[str, str]:
+    if not isinstance(raw, dict):
+        return {}
+    env: Dict[str, str] = {}
+    for key, value in raw.items():
+        name = str(key or "").strip()
+        if not name:
+            continue
+        env[name] = str(value or "")
+    return env
+
+
+def _normalize_mcp_args(raw: Any) -> List[str]:
+    if not isinstance(raw, list):
+        return []
+    return [str(item) for item in raw if str(item).strip()]
+
+
+def _normalize_mcp_connections(raw: Any) -> List[Dict[str, Any]]:
+    if not isinstance(raw, list):
+        return []
+
+    entries: List[Dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    for index, item in enumerate(raw):
+        if not isinstance(item, dict):
+            continue
+        try:
+            engine = _normalize_mcp_engine(item.get("engine"))
+            connection_id = _normalize_mcp_connection_id(
+                item.get("id"),
+                f"{engine}-mcp",
+            )
+        except ValueError:
+            continue
+
+        if connection_id in seen_ids:
+            connection_id = _normalize_mcp_connection_id(
+                f"{connection_id}-{index + 1}",
+                f"{engine}-mcp-{index + 1}",
+            )
+        seen_ids.add(connection_id)
+
+        label = str(item.get("label") or "").strip() or f"{engine.title()} MCP"
+        command = str(item.get("command") or "").strip()
+        entries.append(
+            {
+                "id": connection_id,
+                "engine": engine,
+                "label": label,
+                "command": command,
+                "args": _normalize_mcp_args(item.get("args")),
+                "env": _normalize_mcp_env(item.get("env")),
+                "enabled": _coerce_bool(item.get("enabled", True)),
+            }
+        )
+    return entries
 
 
 def _normalize_workspace_id(workspace_id: Optional[str], fallback: str) -> str:
@@ -413,6 +491,7 @@ def _migrate_project_meta_payload(
             meta.get("agent_file_write_confirm_required", False)
         ),
         "model_routing": _normalize_model_routing(meta.get("model_routing")),
+        "mcp_connections": _normalize_mcp_connections(meta.get("mcp_connections")),
         "unity_root": _first_workspace_root(workspaces, kind="unity"),
         "workspaces": workspaces,
     }
@@ -460,6 +539,7 @@ def _build_project_meta_record(
             meta.get("agent_file_write_confirm_required", False)
         ),
         "model_routing": _normalize_model_routing(meta.get("model_routing")),
+        "mcp_connections": _normalize_mcp_connections(meta.get("mcp_connections")),
         "unity_root": _first_workspace_root(workspaces, kind="unity"),
         "workspaces": workspaces,
     }
@@ -480,6 +560,7 @@ def _upsert_project_meta(
     agent_file_write_enabled: Any = _UNSET,
     agent_file_write_confirm_required: Any = _UNSET,
     model_routing: Any = _UNSET,
+    mcp_connections: Any = _UNSET,
     unity_root: Any = _UNSET,
     workspaces: Any = _UNSET,
 ) -> Dict[str, Any]:
@@ -523,6 +604,7 @@ def _upsert_project_meta(
             existing.get("agent_file_write_confirm_required", False)
         ),
         "model_routing": _normalize_model_routing(existing.get("model_routing")),
+        "mcp_connections": _normalize_mcp_connections(existing.get("mcp_connections")),
         "unity_root": _first_workspace_root(existing_workspaces, kind="unity"),
         "workspaces": existing_workspaces,
     }
@@ -541,6 +623,8 @@ def _upsert_project_meta(
         )
     if model_routing is not _UNSET:
         meta["model_routing"] = _normalize_model_routing(model_routing)
+    if mcp_connections is not _UNSET:
+        meta["mcp_connections"] = _normalize_mcp_connections(mcp_connections)
     if unity_root is not _UNSET:
         if str(unity_root or "").strip():
             next_workspaces = [
@@ -706,6 +790,7 @@ def create_project(
     agent_file_write_enabled: Any = _UNSET,
     agent_file_write_confirm_required: Any = _UNSET,
     model_routing: Any = _UNSET,
+    mcp_connections: Any = _UNSET,
     unity_root: Any = _UNSET,
     workspaces: Any = _UNSET,
 ) -> Dict[str, Any]:
@@ -722,6 +807,7 @@ def create_project(
         agent_file_write_enabled=agent_file_write_enabled,
         agent_file_write_confirm_required=agent_file_write_confirm_required,
         model_routing=model_routing,
+        mcp_connections=mcp_connections,
         unity_root=unity_root,
         workspaces=workspaces,
     )
@@ -743,6 +829,7 @@ def touch_project(
     agent_file_write_enabled: Any = _UNSET,
     agent_file_write_confirm_required: Any = _UNSET,
     model_routing: Any = _UNSET,
+    mcp_connections: Any = _UNSET,
     unity_root: Any = _UNSET,
     workspaces: Any = _UNSET,
 ) -> Dict[str, Any]:
@@ -762,6 +849,7 @@ def touch_project(
         agent_file_write_enabled=agent_file_write_enabled,
         agent_file_write_confirm_required=agent_file_write_confirm_required,
         model_routing=model_routing,
+        mcp_connections=mcp_connections,
         unity_root=unity_root,
         workspaces=workspaces,
     )
@@ -899,6 +987,7 @@ def get_project_settings(project_id: Optional[str] = None) -> Dict[str, Any]:
             record.get("agent_file_write_confirm_required", False)
         ),
         "model_routing": _normalize_model_routing(record.get("model_routing")),
+        "mcp_connections": _normalize_mcp_connections(record.get("mcp_connections")),
     }
 
 
@@ -939,6 +1028,7 @@ def set_project_agent_file_write_enabled(
             meta.get("agent_file_write_confirm_required", False)
         ),
         "model_routing": _normalize_model_routing(meta.get("model_routing")),
+        "mcp_connections": _normalize_mcp_connections(meta.get("mcp_connections")),
     }
 
 
@@ -961,6 +1051,7 @@ def set_project_agent_file_write_confirm_required(
             meta.get("agent_file_write_confirm_required", False)
         ),
         "model_routing": _normalize_model_routing(meta.get("model_routing")),
+        "mcp_connections": _normalize_mcp_connections(meta.get("mcp_connections")),
     }
 
 
@@ -988,6 +1079,35 @@ def set_project_model_routing(
             meta.get("agent_file_write_confirm_required", False)
         ),
         "model_routing": _normalize_model_routing(meta.get("model_routing")),
+        "mcp_connections": _normalize_mcp_connections(meta.get("mcp_connections")),
+    }
+
+
+def get_project_mcp_connections(project_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    return _normalize_mcp_connections(
+        get_project_settings(project_id=project_id).get("mcp_connections")
+    )
+
+
+def set_project_mcp_connections(
+    connections: Any, *, project_id: Optional[str] = None
+) -> Dict[str, Any]:
+    resolved = resolve_project_id(project_id)
+    if not resolved:
+        raise ValueError("Project id is required.")
+
+    normalized = _normalize_mcp_connections(connections)
+    meta = touch_project(resolved, mcp_connections=normalized)
+    return {
+        "project_id": resolved,
+        "agent_file_write_enabled": _coerce_bool(
+            meta.get("agent_file_write_enabled", True)
+        ),
+        "agent_file_write_confirm_required": _coerce_bool(
+            meta.get("agent_file_write_confirm_required", False)
+        ),
+        "model_routing": _normalize_model_routing(meta.get("model_routing")),
+        "mcp_connections": _normalize_mcp_connections(meta.get("mcp_connections")),
     }
 
 
@@ -1191,6 +1311,10 @@ def get_dev_notes_dir(project_id: Optional[str] = None) -> Path:
     return get_project_dir(project_id) / "dev_notes"
 
 
+def get_dev_notes_assets_dir(project_id: Optional[str] = None) -> Path:
+    return get_dev_notes_dir(project_id) / "assets"
+
+
 def get_patches_dir(project_id: Optional[str] = None) -> Path:
     return get_project_dir(project_id) / "patches"
 
@@ -1209,4 +1333,5 @@ def get_artifact_paths(project_id: Optional[str] = None) -> Dict[str, Path]:
         "eng": workspace_dir / "IMPLEMENTATION_PLAN.md",
         "review": workspace_dir / "REVIEW_REPORT.md",
         "devlog": dev_notes_dir / "DEVLOG.md",
+        "notes": dev_notes_dir / "NOTES.md",
     }

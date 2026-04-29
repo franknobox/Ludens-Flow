@@ -45,6 +45,7 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
     selectAgent,
     sendAction,
     sendMessage,
+    uploadWorkspaceFileAsset,
   } = controller;
 
   const phaseLabel = PHASE_LABEL[model.phase] || model.phase || "-";
@@ -131,6 +132,7 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
           onSaveFile={async (fileId, content) => {
             await saveWorkspaceFile(fileId, content);
           }}
+          onUploadFileAsset={uploadWorkspaceFileAsset}
         />
       </div>
 
