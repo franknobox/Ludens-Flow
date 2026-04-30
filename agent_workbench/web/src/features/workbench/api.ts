@@ -8,6 +8,7 @@ import {
   createProject,
   deleteProject,
   getCurrentProjectSettings,
+  getCurrentUserProfile,
   getModelProfiles,
   getProjects,
   renameProject,
@@ -16,6 +17,7 @@ import {
   selectProject,
   submitPermissionDecision,
   updateCurrentProjectSettings,
+  updateCurrentUserProfile,
 } from "./api/projects";
 import { getState, postAction, postChat } from "./api/chat";
 import {
@@ -45,8 +47,10 @@ export const workbenchApi = {
   deleteProject,
   resetCurrentProject,
   getCurrentProjectSettings,
+  getCurrentUserProfile,
   getModelProfiles,
   updateCurrentProjectSettings,
+  updateCurrentUserProfile,
   getWorkspaceFiles,
   getWorkspaceFileContent,
   uploadWorkspaceFileAsset,

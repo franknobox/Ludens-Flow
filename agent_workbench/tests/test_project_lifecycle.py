@@ -22,6 +22,7 @@ import ludens_flow.core.state as st
 import ludens_flow.app.api as api
 from fastapi import HTTPException
 from ludens_flow.capabilities.artifacts.artifacts import read_artifact, write_artifact
+from ludens_flow.capabilities.tools.registry import dispatch_tool_call, list_common_tools
 from ludens_flow.core.paths import (
     PROJECT_META_SCHEMA_VERSION,
     add_project_workspace,
@@ -248,6 +249,90 @@ class ProjectLifecycleTests(unittest.TestCase):
 
         self.assertEqual(health["connections"][0]["status"], "not_configured")
         self.assertEqual(health["connections"][0]["tool_count"], 0)
+
+    def test_api_can_import_enable_and_delete_external_skill(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+        self.assertEqual(api.get_skill_catalog()["skills"], [])
+
+        imported = api.post_import_skill(
+            api.SkillImportRequest(
+                manifest={
+                    "id": "external-unity-helper",
+                    "name": "External Unity Helper",
+                    "description": "External skill for Unity workflows.",
+                    "version": "0.2.0",
+                    "agents": ["engineering"],
+                    "tags": ["Unity", "External"],
+                },
+                prompt="Use this helper for Unity tasks.",
+            )
+        )
+
+        self.assertIn(
+            "external-unity-helper",
+            {item["id"] for item in imported["skills"]},
+        )
+        skill_dir = self.workspace_root / "skills" / "installed" / "external-unity-helper"
+        self.assertTrue((skill_dir / "skill.json").exists())
+        self.assertTrue((skill_dir / "prompt.md").exists())
+
+        project_skills = api.post_current_project_skill_toggle(
+            "external-unity-helper",
+            api.ProjectSkillToggleRequest(enabled=True),
+        )
+        self.assertIn("external-unity-helper", project_skills["enabled_skill_ids"])
+
+        deleted = api.delete_installed_skill("external-unity-helper")
+        self.assertEqual(deleted["deleted_skill"], "external-unity-helper")
+        self.assertFalse(skill_dir.exists())
+        self.assertNotIn(
+            "external-unity-helper",
+            api.get_current_project_skills()["enabled_skill_ids"],
+        )
+
+    def test_api_returns_404_when_deleting_missing_skill(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+
+        with self.assertRaises(HTTPException) as ctx:
+            api.delete_installed_skill("missing-skill")
+
+        self.assertEqual(ctx.exception.status_code, 404)
+
+    def test_api_can_read_and_update_user_profile(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+
+        profile = api.get_current_user_profile()
+        self.assertEqual(profile["project_id"], "alpha")
+        self.assertTrue(profile["path"].endswith("USER_PROFILE.md"))
+        self.assertIn("# USER_PROFILE", profile["content"])
+
+        updated = api.post_current_user_profile(
+            api.UserProfileUpdateRequest(
+                content="# USER_PROFILE\n\n## Core Identity\n- nickname: Tester\n"
+            )
+        )
+
+        self.assertIn("- nickname: Tester", updated["content"])
+        profile_path = self.workspace_root / "projects" / "alpha" / "USER_PROFILE.md"
+        self.assertIn("- nickname: Tester", profile_path.read_text(encoding="utf-8"))
+
+    def test_engine_mcp_tools_are_whitelisted_not_raw_tools(self):
+        tool_names = {item["name"] for item in list_common_tools()}
+
+        self.assertIn("engine_list_scene", tool_names)
+        self.assertIn("engine_create_script", tool_names)
+        self.assertNotIn("create_script", tool_names)
+        self.assertNotIn("add_node", tool_names)
+
+    def test_engine_mcp_adapter_requires_configured_connection(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+
+        with self.assertRaisesRegex(Exception, "No enabled unity MCP connection"):
+            dispatch_tool_call(
+                "engine_list_scene",
+                {"engine": "unity"},
+                project_id="alpha",
+            )
 
     def test_api_allows_manual_workspace_edit_when_artifacts_are_frozen(self):
         api.post_project(api.ProjectRequest(project_id="alpha"))

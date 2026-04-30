@@ -217,6 +217,42 @@ def load_profile(max_chars: int = 2000, project_id: Optional[str] = None) -> str
         return _TEMPLATE[:max_chars]
 
 
+def read_profile_file(project_id: Optional[str] = None) -> dict[str, str]:
+    """Read the full USER_PROFILE.md content for UI editing."""
+    path = _profile_path(project_id)
+    if not path.exists():
+        try:
+            path.write_text(_TEMPLATE, encoding="utf-8")
+            logger.info("Created new USER_PROFILE at %s", path)
+        except Exception as exc:
+            logger.error("Failed to create profile template: %s", exc)
+            return {"path": str(path), "content": _TEMPLATE}
+
+    try:
+        text = path.read_text(encoding="utf-8")
+        if not text.strip():
+            path.write_text(_TEMPLATE, encoding="utf-8")
+            text = _TEMPLATE
+        return {"path": str(path), "content": text}
+    except Exception as exc:
+        logger.error("Failed to read profile file: %s", exc)
+        return {"path": str(path), "content": _TEMPLATE}
+
+
+def write_profile_file(content: str, project_id: Optional[str] = None) -> dict[str, str]:
+    """Replace USER_PROFILE.md content from the settings editor."""
+    path = _profile_path(project_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = str(content or "").strip()
+    if not text:
+        text = _TEMPLATE.rstrip()
+    text = text.rstrip() + "\n"
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    tmp.replace(path)
+    return {"path": str(path), "content": text}
+
+
 def format_profile_for_prompt(profile_text: str) -> str:
     """Turn USER_PROFILE markdown into a compact prompt-friendly context block."""
     if not profile_text or not profile_text.strip():

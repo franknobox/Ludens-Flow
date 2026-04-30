@@ -7,6 +7,7 @@ import type {
   ProjectSelectResponse,
   ProjectsResponse,
   StateResponse,
+  UserProfileResponse,
 } from "../types";
 import { fetchJson } from "./http";
 
@@ -20,6 +21,18 @@ export function getCurrentProjectSettings() {
 
 export function getModelProfiles() {
   return fetchJson<ModelProfilesResponse>("/api/model-profiles");
+}
+
+export function getCurrentUserProfile() {
+  return fetchJson<UserProfileResponse>("/api/projects/current/user-profile");
+}
+
+export function updateCurrentUserProfile(content: string) {
+  return fetchJson<UserProfileResponse>("/api/projects/current/user-profile", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content }),
+  });
 }
 
 export function updateCurrentProjectSettings(body: {

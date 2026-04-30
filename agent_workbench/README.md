@@ -9,6 +9,7 @@ Agent Workbench 是 Ludens-Flow 的多智能体工作流执行层。
 
 - 工作区根目录是 `workspace/`
 - 每个项目的数据单独落在 `workspace/projects/<project_id>/`
+- 外部 Skills 全局安装在 `workspace/skills/installed/<skill_id>/`，项目只保存启用关系
 - 首次启动时会自动创建第一个项目 `project-1`
 - 如果旧版本数据还在 `workspace/` 根目录，首次启动会自动迁移到 `workspace/projects/project-1/`
 - CLI 和 Web 都基于“当前项目”运行
@@ -71,6 +72,26 @@ LUDENS_MODEL_PROFILES={"openai_main":{"provider":"openai","base_url":"https://ap
 ```
 
 也可通过 API 更新：`POST /api/projects/current/settings`（字段：`model_routing`）。
+
+### 1.2 用户画像与 Skills
+
+当前项目的用户画像文件位于：
+
+```text
+workspace/projects/<project_id>/USER_PROFILE.md
+```
+
+可以在 Web 设置页的 `用户画像` 中直接查看、编辑和保存。Agent 在涉及用户身份、偏好、项目目标和约束时会读取该文件作为上下文。
+
+外部 Skills 使用全局安装、项目启用的方式管理：
+
+```text
+workspace/skills/installed/<skill_id>/
+├── skill.json
+└── prompt.md
+```
+
+可以在 Web 设置页的 `Skills` 中导入、删除和管理 Skill，并在工作台的 Skills 页面为当前项目启用或关闭。当前阶段已完成外部导入与项目级开关；已启用 Skill 接入 Agent 运行时加载仍在后续开发中。
 
 ### 2. 安装依赖
 
@@ -156,6 +177,11 @@ ludensflow
 ```text
 workspace/
 ├── .active_project
+├── skills/
+│   └── installed/
+│       └── <skill_id>/
+│           ├── skill.json
+│           └── prompt.md
 └── projects/
     ├── project-1/
     │   ├── state.json

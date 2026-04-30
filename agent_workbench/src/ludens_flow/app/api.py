@@ -25,8 +25,19 @@ from llm.model_profiles import list_model_profile_summaries
 from ludens_flow.capabilities.ingest.attachment_ingest import build_attachment_user_input
 from ludens_flow.capabilities.artifacts.artifacts import read_artifact, write_artifact
 from ludens_flow.capabilities.copywriting.design_copywriting import generate_design_copywriting
+from ludens_flow.capabilities.context.user_profile import (
+    read_profile_file,
+    write_profile_file,
+)
 from ludens_flow.app.env import load_env_if_available
 from ludens_flow.capabilities.mcp.health import check_mcp_connections
+from ludens_flow.capabilities.skills.registry import (
+    delete_skill,
+    get_project_skills,
+    import_external_skill,
+    list_skills,
+    set_project_skill_enabled,
+)
 from ludens_flow.capabilities.tools.registry import list_common_tools
 from ludens_flow.core.graph import graph_step
 from ludens_flow.core.paths import (
@@ -121,6 +132,19 @@ class McpConnectionCheckRequest(BaseModel):
 
 class PermissionDecisionRequest(BaseModel):
     approved: bool
+
+
+class SkillImportRequest(BaseModel):
+    manifest: dict
+    prompt: str | None = None
+
+
+class ProjectSkillToggleRequest(BaseModel):
+    enabled: bool
+
+
+class UserProfileUpdateRequest(BaseModel):
+    content: str = ""
 
 
 class ActionRequest(BaseModel):
@@ -353,6 +377,10 @@ def _summarize_tool_call(tool_name: str, args: dict) -> str:
         pattern = str(args.get("pattern", "*.cs") or "*.cs").strip()
         relative_path = str(args.get("relative_path", "") or "").strip() or "/"
         return f"查找文件：{relative_path} 内匹配 {pattern}"
+    if tool_name.startswith("engine_"):
+        engine = str(args.get("engine", "") or "").strip() or "engine"
+        label = tool_name.replace("engine_", "engine.")
+        return f"{engine} MCP: {label}"
     if tool_name == "web_search":
         query = str(args.get("query", "") or "").strip() or "(未提供关键词)"
         return f"搜索网络：{query}"
@@ -367,6 +395,8 @@ def _summarize_tool_result(tool_name: str, result: str) -> str:
         "unity_list_dir",
         "unity_find_files",
         "workspace_read_files_batch",
+        "engine_list_scene",
+        "engine_read_console",
     }:
         lines = [line for line in text.splitlines() if line.strip()]
         return f"共返回 {len(lines)} 行结果"
@@ -814,6 +844,28 @@ def get_model_profiles():
     return {"profiles": list_model_profile_summaries()}
 
 
+@app.get("/api/projects/current/user-profile")
+def get_current_user_profile():
+    project_id = resolve_project_id()
+    profile = read_profile_file(project_id=project_id)
+    return {
+        "project_id": project_id,
+        "path": profile["path"],
+        "content": profile["content"],
+    }
+
+
+@app.post("/api/projects/current/user-profile")
+def post_current_user_profile(req: UserProfileUpdateRequest):
+    project_id = resolve_project_id()
+    profile = write_profile_file(req.content, project_id=project_id)
+    return {
+        "project_id": project_id,
+        "path": profile["path"],
+        "content": profile["content"],
+    }
+
+
 @app.post("/api/projects/current/settings")
 def post_current_project_settings(req: ProjectSettingsRequest):
     project_id = resolve_project_id()
@@ -890,6 +942,54 @@ def get_tool_catalog():
     return {
         "tools": list_common_tools(),
     }
+
+
+@app.get("/api/skills")
+def get_skill_catalog():
+    return {"skills": list_skills()}
+
+
+@app.post("/api/skills/import")
+def post_import_skill(req: SkillImportRequest):
+    try:
+        skill = import_external_skill(req.manifest, prompt=req.prompt)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"skill": skill, "skills": list_skills()}
+
+
+@app.delete("/api/skills/{skill_id}")
+def delete_installed_skill(skill_id: str):
+    try:
+        deleted = delete_skill(skill_id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"deleted_skill": deleted, "skills": list_skills()}
+
+
+@app.get("/api/projects/current/skills")
+def get_current_project_skills():
+    project_id = resolve_project_id()
+    return get_project_skills(project_id)
+
+
+@app.post("/api/projects/current/skills/{skill_id}")
+def post_current_project_skill_toggle(skill_id: str, req: ProjectSkillToggleRequest):
+    project_id = resolve_project_id()
+    try:
+        return set_project_skill_enabled(
+            skill_id,
+            req.enabled,
+            project_id=project_id,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/api/projects/current/workspaces")

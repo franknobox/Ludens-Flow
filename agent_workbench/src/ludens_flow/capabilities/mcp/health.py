@@ -17,6 +17,10 @@ MCP_PROTOCOL_VERSION = "2024-11-05"
 DEFAULT_TIMEOUT_SECONDS = 8
 
 
+class McpClientError(RuntimeError):
+    pass
+
+
 def _jsonrpc_request(message_id: int, method: str, params: dict | None = None) -> dict:
     payload: dict[str, Any] = {
         "jsonrpc": "2.0",
@@ -58,6 +62,30 @@ def _build_stdio_input() -> str:
     tools_list = _jsonrpc_request(2, "tools/list", {})
     return "".join(
         [_frame_message(initialize), _frame_message(initialized), _frame_message(tools_list)]
+    )
+
+
+def _build_tool_call_input(tool_name: str, arguments: dict | None = None) -> str:
+    initialize = _jsonrpc_request(
+        1,
+        "initialize",
+        {
+            "protocolVersion": MCP_PROTOCOL_VERSION,
+            "capabilities": {},
+            "clientInfo": {"name": "Ludens-Flow", "version": "0.1.0"},
+        },
+    )
+    initialized = _jsonrpc_notification("notifications/initialized")
+    tool_call = _jsonrpc_request(
+        2,
+        "tools/call",
+        {
+            "name": tool_name,
+            "arguments": arguments or {},
+        },
+    )
+    return "".join(
+        [_frame_message(initialize), _frame_message(initialized), _frame_message(tool_call)]
     )
 
 
@@ -230,3 +258,67 @@ def _first_error_message(messages: Iterable[dict]) -> str:
 def check_mcp_connections(configs: Iterable[dict]) -> List[dict]:
     return [check_mcp_connection(config) for config in configs]
 
+
+def call_mcp_tool(
+    config: dict,
+    tool_name: str,
+    arguments: dict | None = None,
+    *,
+    timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+) -> dict:
+    command = str(config.get("command") or "").strip()
+    if not bool(config.get("enabled", True)):
+        raise McpClientError("MCP connection is disabled.")
+    if not command:
+        raise McpClientError("MCP command is empty.")
+
+    args = [str(item) for item in config.get("args", []) if str(item).strip()]
+    env = os.environ.copy()
+    raw_env = config.get("env", {})
+    if isinstance(raw_env, dict):
+        env.update({str(key): str(value) for key, value in raw_env.items()})
+
+    try:
+        completed = subprocess.run(
+            [command, *args],
+            input=_build_tool_call_input(tool_name, arguments),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout_seconds,
+            env=env,
+            shell=False,
+        )
+        output = f"{completed.stdout or ''}\n{completed.stderr or ''}"
+    except FileNotFoundError as exc:
+        raise McpClientError(f"Command not found: {command}") from exc
+    except subprocess.TimeoutExpired as exc:
+        output = (exc.stdout or "") + "\n" + (exc.stderr or "")
+        messages = _parse_mcp_messages(output)
+        result = _result_from_messages(messages)
+        if result is not None:
+            return result
+        raise McpClientError("MCP tool call timed out.") from exc
+
+    messages = _parse_mcp_messages(output)
+    result = _result_from_messages(messages)
+    if result is not None:
+        return result
+
+    error_message = _first_error_message(messages)
+    if not error_message:
+        error_message = (completed.stderr or completed.stdout or "No MCP response.").strip()
+    raise McpClientError(error_message[:500])
+
+
+def _result_from_messages(messages: Iterable[dict]) -> dict | None:
+    for message in messages:
+        if message.get("id") != 2:
+            continue
+        if "result" in message and isinstance(message.get("result"), dict):
+            return message["result"]
+        error = message.get("error")
+        if isinstance(error, dict):
+            raise McpClientError(str(error.get("message") or error))
+    return None

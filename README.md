@@ -41,6 +41,7 @@ Instead of treating the agent as a free-form assistant, Ludens-Flow puts it back
 - Provides a web workbench with project switching, settings, file views, chat, streaming feedback, and tool progress.
 - Supports project-scoped workspaces, structured tool execution, and controlled file operations.
 - Integrates multimodal input such as images, text files, code files, and PDFs.
+- Supports project profiles and externally imported Skills that can be enabled per project.
 - Builds toward practical engine workflows, starting with Unity and expanding to broader game-development ecosystems.
 
 ## What It Is Not
@@ -61,6 +62,7 @@ Ludens-Flow is currently focused on:
 
 - stabilizing the multi-agent workflow core
 - improving workspace-safe tool execution
+- connecting imported Skills and project profiles more deeply into agent runtime behavior
 - expanding Unity-oriented engineering assistance
 - polishing the workbench UX and settings flow
 

@@ -53,6 +53,12 @@ export interface ProjectSettingsResponse {
   mcp_connections?: McpConnectionConfig[];
 }
 
+export interface UserProfileResponse {
+  project_id: string;
+  path: string;
+  content: string;
+}
+
 export interface ModelProfileSummary {
   id: string;
   provider?: string;

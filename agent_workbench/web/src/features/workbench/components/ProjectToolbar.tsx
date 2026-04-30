@@ -31,6 +31,7 @@ interface ProjectToolbarProps {
   onOpenAigc?: () => void;
   onOpenCopywriting?: () => void;
   onOpenGameModel?: () => void;
+  onOpenSkills?: () => void;
   onOpenMcp?: (tool: McpTool) => void;
 }
 
@@ -51,6 +52,7 @@ export function ProjectToolbar(props: ProjectToolbarProps) {
     onOpenAigc,
     onOpenCopywriting,
     onOpenGameModel,
+    onOpenSkills,
     onOpenMcp,
   } = props;
 
@@ -142,6 +144,32 @@ export function ProjectToolbar(props: ProjectToolbarProps) {
       </div>
 
       <div className="project-toolbar-menu">
+        {onOpenSkills ? (
+          <button
+            type="button"
+            className="project-toolbar-settings project-toolbar-skills-btn"
+            onClick={() => {
+              closeProjectPanel();
+              closeSettingsPanel();
+              onOpenSkills();
+            }}
+            title="Skills 能力"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="16"
+              height="16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M8.8 3.8h3.1a2.1 2.1 0 1 0 4.2 0h2.1a2 2 0 0 1 2 2v4.1h-2a2.1 2.1 0 1 0 0 4.2h2v4.1a2 2 0 0 1-2 2h-4.1v-2a2.1 2.1 0 1 0-4.2 0v2H5.8a2 2 0 0 1-2-2v-3.1a2.1 2.1 0 1 0 0-4.2V5.8a2 2 0 0 1 2-2h3z" />
+            </svg>
+          </button>
+        ) : null}
+
         {onOpenMcp ? (
           <>
             {([

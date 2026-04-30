@@ -5,6 +5,7 @@ import { ProjectToolbar } from "../workbench/components/ProjectToolbar";
 import { PHASE_LABEL } from "../workbench/constants";
 import { useProjectRuntime } from "../workbench/state/ProjectRuntimeContext";
 import { projectUpdated, toErrorMessage } from "../workbench/utils";
+import { SkillsSettingsSection } from "../skills/components/SkillsSettingsSection";
 import type {
   ProjectMeta,
   McpConnectionConfig,
@@ -13,17 +14,21 @@ import type {
   ProjectSettingsResponse,
   ProjectWorkspace,
   ToolCatalogItem,
+  UserProfileResponse,
 } from "../workbench/types";
 import {
   EngineConnectionsSection,
   GeneralSettingsSection,
   HistorySection,
   ToolsSection,
+  UserProfileSection,
   WorkspacesSection,
 } from "./sections/SettingsSections";
 
 const SETTINGS_SECTIONS = [
   { id: "general", label: "通用设置", hint: "写入与模型" },
+  { id: "profile", label: "用户画像", hint: "身份与偏好" },
+  { id: "skills", label: "Skills", hint: "导入与管理" },
   { id: "tools", label: "工具", hint: "能力目录" },
   { id: "engines", label: "引擎连接", hint: "MCP 健康检查" },
   { id: "workspaces", label: "工作区清单", hint: "目录与权限" },
@@ -116,6 +121,9 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
   const [modelProfiles, setModelProfiles] = useState<ModelProfileSummary[]>([]);
   const [projectSettings, setProjectSettings] =
     useState<ProjectSettingsResponse | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfileResponse | null>(null);
+  const [userProfileDraft, setUserProfileDraft] = useState("");
+  const [userProfileDirty, setUserProfileDirty] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [settingsSubmitting, setSettingsSubmitting] = useState(false);
@@ -207,12 +215,19 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
     try {
       await refreshRuntime();
 
-      const [workspacesResult, toolsResult, projectSettingsResult, modelProfilesResult] =
+      const [
+        workspacesResult,
+        toolsResult,
+        projectSettingsResult,
+        modelProfilesResult,
+        userProfileResult,
+      ] =
         await Promise.allSettled([
           workbenchApi.getCurrentWorkspaces(),
           workbenchApi.getTools(),
           workbenchApi.getCurrentProjectSettings(),
           workbenchApi.getModelProfiles(),
+          workbenchApi.getCurrentUserProfile(),
         ]);
 
       setWorkspaces(
@@ -250,6 +265,11 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
           ? modelProfilesResult.value.profiles || []
           : [],
       );
+      if (userProfileResult.status === "fulfilled") {
+        setUserProfile(userProfileResult.value);
+        setUserProfileDraft(userProfileResult.value.content || "");
+        setUserProfileDirty(false);
+      }
     } catch (error) {
       setErrorText(toErrorMessage(error));
     } finally {
@@ -554,6 +574,35 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
     }
   };
 
+  const handleReloadUserProfile = async () => {
+    clearMessages();
+    try {
+      const response = await workbenchApi.getCurrentUserProfile();
+      setUserProfile(response);
+      setUserProfileDraft(response.content || "");
+      setUserProfileDirty(false);
+      setSuccessText("用户画像已重新读取。");
+    } catch (error) {
+      setErrorText(toErrorMessage(error));
+    }
+  };
+
+  const handleSaveUserProfile = async () => {
+    setSettingsSubmitting(true);
+    clearMessages();
+    try {
+      const response = await workbenchApi.updateCurrentUserProfile(userProfileDraft);
+      setUserProfile(response);
+      setUserProfileDraft(response.content || "");
+      setUserProfileDirty(false);
+      setSuccessText("用户画像已保存。新一轮 Agent 回复会读取更新后的画像。");
+    } catch (error) {
+      setErrorText(toErrorMessage(error));
+    } finally {
+      setSettingsSubmitting(false);
+    }
+  };
+
   const handleThemeChange = (nextTheme: string) => {
     setTheme(nextTheme);
     document.documentElement.setAttribute("data-theme", nextTheme);
@@ -630,9 +679,29 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
               }}
             />
           ) : null}
+          {activeSection === "profile" ? (
+            <UserProfileSection
+              profile={userProfile}
+              draft={userProfileDraft}
+              dirty={userProfileDirty}
+              loading={loading}
+              submitting={settingsSubmitting}
+              onDraftChange={(value) => {
+                setUserProfileDraft(value);
+                setUserProfileDirty(true);
+              }}
+              onReload={() => {
+                void handleReloadUserProfile();
+              }}
+              onSave={() => {
+                void handleSaveUserProfile();
+              }}
+            />
+          ) : null}
           {activeSection === "tools" ? (
             <ToolsSection tools={tools} toolsByCategory={toolsByCategory} />
           ) : null}
+          {activeSection === "skills" ? <SkillsSettingsSection /> : null}
           {activeSection === "engines" ? (
             <EngineConnectionsSection
               loading={loading}

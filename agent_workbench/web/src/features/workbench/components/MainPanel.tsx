@@ -15,6 +15,7 @@ import { AigcPage } from "../../aigc/components/AigcPage";
 import { CopywritingPage } from "../../copywriting/components/CopywritingPage";
 import { GameModelPage } from "../../game-model/components/GameModelPage";
 import { McpPage } from "../../mcp/components/McpPage";
+import { SkillsWorkbenchPage } from "../../skills/components/SkillsWorkbenchPage";
 import { AgentMessages } from "./mainPanel/AgentMessages";
 import { Composer } from "./mainPanel/Composer";
 import { FileView } from "./mainPanel/FileView";
@@ -81,6 +82,7 @@ export function MainPanel(props: MainPanelProps) {
     currentView.type === "aigc" ||
     currentView.type === "copywriting" ||
     currentView.type === "game-model" ||
+    currentView.type === "skills" ||
     currentView.type === "mcp";
 
   return (
@@ -114,6 +116,8 @@ export function MainPanel(props: MainPanelProps) {
               <CopywritingPage />
             ) : currentView.type === "mcp" ? (
               <McpPage tool={currentView.tool} />
+            ) : currentView.type === "skills" ? (
+              <SkillsWorkbenchPage projectId={currentProjectId} />
             ) : (
               <GameModelPage />
             )}
