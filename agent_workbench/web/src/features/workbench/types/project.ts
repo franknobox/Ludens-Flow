@@ -50,6 +50,13 @@ export interface ProjectSettingsResponse {
   agent_file_write_enabled: boolean;
   agent_file_write_confirm_required?: boolean;
   model_routing?: Record<string, unknown>;
+  mcp_connections?: McpConnectionConfig[];
+}
+
+export interface UserProfileResponse {
+  project_id: string;
+  path: string;
+  content: string;
 }
 
 export interface ModelProfileSummary {
@@ -61,4 +68,36 @@ export interface ModelProfileSummary {
 
 export interface ModelProfilesResponse {
   profiles: ModelProfileSummary[];
+}
+
+export type McpEngine = "unity" | "godot" | "blender" | "unreal";
+
+export interface McpConnectionConfig {
+  id: string;
+  engine: McpEngine;
+  label: string;
+  command: string;
+  args: string[];
+  env?: Record<string, string>;
+  enabled: boolean;
+}
+
+export interface McpConnectionStatus {
+  id: string;
+  engine: McpEngine;
+  label: string;
+  enabled: boolean;
+  configured: boolean;
+  status: "not_configured" | "configured" | "reachable" | "tools_loaded" | "failed";
+  message?: string;
+  tools: Array<{
+    name: string;
+    description?: string;
+  }>;
+  tool_count: number;
+}
+
+export interface McpConnectionCheckResponse {
+  project_id: string;
+  connections: McpConnectionStatus[];
 }

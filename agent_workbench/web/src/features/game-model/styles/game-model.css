@@ -7,11 +7,7 @@
 }
 
 .game-model-header {
-  padding: 16px 20px;
-  background: rgba(255, 255, 255, 0.84);
-  border: 1px solid rgba(255, 255, 255, 0.7);
-  border-bottom: none;
-  border-radius: 22px 22px 0 0;
+  padding: 14px 20px 6px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -52,11 +48,11 @@
 }
 
 .game-model-action-btn {
-  height: 34px;
-  padding: 0 14px;
-  border: 1px solid rgba(29, 39, 52, 0.12);
-  border-radius: 999px;
-  background: #fff;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid rgba(29, 39, 52, 0.1);
+  border-radius: 8px;
+  background: transparent;
   color: #243041;
   font-size: 12px;
   font-weight: 700;
@@ -65,47 +61,54 @@
 }
 
 .game-model-action-btn:hover {
-  background: rgba(244, 247, 252, 0.98);
+  background: rgba(29, 39, 52, 0.04);
 }
 
 .game-model-tabs {
-  padding: 0 16px;
-  background: rgba(255, 255, 255, 0.84);
-  border: 1px solid rgba(255, 255, 255, 0.7);
-  border-bottom: none;
+  padding: 0 20px;
   display: flex;
-  gap: 4px;
+  gap: 2px;
   flex-shrink: 0;
+  border-bottom: 1px solid rgba(29, 39, 52, 0.08);
 }
 
 .game-model-tab {
-  height: 44px;
+  height: 40px;
   padding: 0 14px;
   border: none;
-  border-radius: 12px;
+  border-radius: 8px 8px 0 0;
   background: transparent;
   color: #6f7e91;
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
   transition: background 0.16s ease, color 0.16s ease;
+  position: relative;
 }
 
 .game-model-tab:hover {
-  background: rgba(22, 99, 255, 0.06);
   color: #243041;
 }
 
 .game-model-tab.is-active {
-  background: rgba(22, 99, 255, 0.1);
   color: #1663ff;
+}
+
+.game-model-tab.is-active::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 8px;
+  right: 8px;
+  height: 2px;
+  background: #1663ff;
+  border-radius: 2px 2px 0 0;
 }
 
 .game-model-content {
   flex: 1;
   min-height: 0;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.52), rgba(247, 249, 252, 0.9));
-  border: 1px solid rgba(255, 255, 255, 0.7);
   border-radius: 0 0 22px 22px;
   overflow: auto;
   padding: 16px 20px;

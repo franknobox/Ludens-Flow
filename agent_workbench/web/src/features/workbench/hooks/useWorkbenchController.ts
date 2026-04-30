@@ -159,6 +159,8 @@ export function useWorkbenchController() {
       ? "文案加工台"
       : currentView.type === "game-model"
       ? "游戏内模型接入"
+      : currentView.type === "skills"
+      ? "Skills 能力"
       : currentView.type === "mcp"
       ? ({ unity: "Unity MCP", godot: "Godot MCP", ue: "Unreal Engine MCP", blender: "Blender MCP" }[currentView.tool])
       : currentView.type === "agent"
@@ -175,6 +177,8 @@ export function useWorkbenchController() {
       ? `面向当前项目的策划文案加工入口`
       : currentView.type === "game-model"
       ? `配置大模型能力，接入 Unity / REST 游戏运行时`
+      : currentView.type === "skills"
+      ? `管理当前项目启用的 Agent Skills`
       : currentView.type === "mcp"
       ? `通过 Model Context Protocol 将 AI 直接接入游戏引擎`
       : currentView.type === "agent"
@@ -433,6 +437,21 @@ export function useWorkbenchController() {
     }
   };
 
+  const uploadWorkspaceFileAsset = async (
+    fileId: string,
+    name: string,
+    dataUrl: string,
+  ) => {
+    try {
+      return await workbenchApi.uploadWorkspaceFileAsset(fileId, {
+        name,
+        data_url: dataUrl,
+      });
+    } catch (error) {
+      throw new Error(`上传失败：${toErrorMessage(error)}`);
+    }
+  };
+
   const createProject = async (title: string): Promise<boolean> => {
     const displayName = title.trim();
     if (!displayName) {
@@ -556,6 +575,10 @@ export function useWorkbenchController() {
 
   const openGameModel = () => {
     setCurrentView({ type: "game-model" });
+  };
+
+  const openSkills = () => {
+    setCurrentView({ type: "skills" });
   };
 
   const openMcp = (tool: McpTool) => {
@@ -694,11 +717,13 @@ createProject,
     openAigc,
     openCopywriting,
     openGameModel,
+    openSkills,
     openMcp,
     openFile,
     openGithub,
     openProject,
     saveWorkspaceFile,
+    uploadWorkspaceFileAsset,
     selectAgent,
     sendAction,
     sendMessage,

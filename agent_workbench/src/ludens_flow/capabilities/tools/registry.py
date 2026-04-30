@@ -6,6 +6,11 @@
 
 from typing import Any, Callable, Dict, List, Optional
 
+from ludens_flow.capabilities.mcp.adapter import (
+    ENGINE_TOOL_SCHEMAS,
+    dispatch_engine_tool_call,
+)
+from ludens_flow.capabilities.mcp.health import McpClientError
 from ludens_flow.capabilities.tools.search import SEARCH_TOOL_SCHEMA, web_search
 from ludens_flow.capabilities.tools.unity_files import (
     UNITY_FIND_FILES_TOOL_SCHEMA,
@@ -41,6 +46,7 @@ COMMON_TOOL_SCHEMAS: List[Dict[str, Any]] = [
     UNITY_LIST_DIR_TOOL_SCHEMA,
     UNITY_READ_FILE_TOOL_SCHEMA,
     UNITY_FIND_FILES_TOOL_SCHEMA,
+    *ENGINE_TOOL_SCHEMAS,
 ]
 
 
@@ -72,6 +78,15 @@ def list_common_tools() -> List[Dict[str, Any]]:
             category = "unity"
             workspace_kind = "unity"
             requires_workspace = True
+        elif name.startswith("engine_"):
+            category = "engine_mcp"
+            writes_files = name in {
+                "engine_create_object",
+                "engine_move_object",
+                "engine_save_scene",
+                "engine_run_project",
+                "engine_create_script",
+            }
 
         catalog.append(
             {
@@ -179,7 +194,15 @@ def dispatch_tool_call(
                 project_id=project_id,
                 workspace_id=args.get("workspace_id"),
             )
-    except (UnityToolError, WorkspaceAccessError):
+
+        if tool_name.startswith("engine_"):
+            return dispatch_engine_tool_call(
+                tool_name,
+                args,
+                project_id=project_id,
+                tool_event_handler=tool_event_handler,
+            )
+    except (UnityToolError, WorkspaceAccessError, McpClientError):
         raise
 
     raise RuntimeError(f"[TOOL_ERROR:TOOL_NOT_FOUND] Tool '{tool_name}' not found.")

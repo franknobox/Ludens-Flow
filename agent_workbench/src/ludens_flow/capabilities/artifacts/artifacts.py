@@ -44,6 +44,7 @@ def _artifact_registry(
         },
         "REVIEW_REPORT": {"path": artifact_paths["review"], "owner": "ReviewAgent"},
         "DEVLOG": {"path": artifact_paths["devlog"], "owner": "EngineeringAgent"},
+        "NOTES": {"path": artifact_paths["notes"], "owner": "User"},
     }
 
 
@@ -145,6 +146,7 @@ def write_artifact(
         "IMPLEMENTATION_PLAN": "eng",
         "REVIEW_REPORT": "review",
         "DEVLOG": "devlog",
+        "NOTES": "notes",
     }
     state_key = state_key_map[name]
     meta: ArtifactMeta = state.artifacts.get(state_key)

@@ -115,10 +115,180 @@
   padding: 18px 20px;
 }
 
+.settings-card-subtitle {
+  margin: 6px 0 0;
+  color: #6b7b8f;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 .settings-pane-card-main,
 .settings-pane-card-side {
   width: 100%;
   max-width: none;
+}
+
+.settings-profile-card {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 12px;
+  overflow: hidden;
+}
+
+.settings-profile-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.settings-profile-path {
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(29, 39, 52, 0.08);
+  background: rgba(247, 250, 253, 0.78);
+  color: #6b7b8f;
+  font: 12px/1.45 var(--mono);
+  word-break: break-all;
+}
+
+.settings-profile-editor {
+  min-height: 0;
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: stretch;
+}
+
+.settings-profile-editor textarea {
+  min-height: 0;
+  height: 100%;
+  align-self: stretch;
+  resize: none;
+}
+
+.settings-skills-whole {
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.settings-skills-layout {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
+  gap: 14px;
+}
+
+.settings-skills-list-area,
+.settings-skills-import-area {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.settings-skills-list-area {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.settings-skill-groups {
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  overflow: auto;
+}
+
+.settings-skill-group {
+  display: grid;
+  gap: 10px;
+}
+
+.settings-skill-list {
+  display: grid;
+  gap: 10px;
+}
+
+.settings-skill-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(29, 39, 52, 0.08);
+  background: rgba(247, 250, 253, 0.9);
+}
+
+.settings-skill-card h3 {
+  margin: 0;
+  color: #1f2b3c;
+  font-size: 15px;
+}
+
+.settings-skill-card p {
+  margin: 7px 0 0;
+  color: #6b7b8f;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.settings-skill-agent-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.settings-skill-import-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.settings-skill-format,
+.settings-skill-message {
+  border-radius: 16px;
+  border: 1px solid rgba(29, 39, 52, 0.08);
+  background: rgba(247, 250, 253, 0.78);
+}
+
+.settings-skill-format {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.settings-skill-format strong {
+  color: #1f2b3c;
+  font-size: 13px;
+}
+
+.settings-skill-format code {
+  white-space: pre-wrap;
+  color: #52637a;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.settings-skill-message {
+  padding: 10px 12px;
+  color: #52637a;
+  font-size: 13px;
+}
+
+@media (max-width: 1180px) {
+  .settings-skills-layout {
+    grid-template-columns: 1fr;
+    overflow: auto;
+  }
+
+  .settings-skills-list-area,
+  .settings-skills-import-area {
+    overflow: visible;
+  }
 }
 
 .settings-card-head {
@@ -249,6 +419,32 @@
   background: rgba(242, 245, 249, 0.96);
   border-color: rgba(29, 39, 52, 0.08);
   color: #5f6e82;
+}
+
+.settings-chip.ok {
+  background: rgba(216, 247, 232, 0.96);
+  border-color: rgba(22, 163, 106, 0.18);
+  color: #087247;
+}
+
+.settings-chip.danger {
+  background: rgba(255, 235, 232, 0.96);
+  border-color: rgba(197, 58, 47, 0.18);
+  color: #9b2f26;
+}
+
+.settings-chip.muted,
+.settings-chip.neutral {
+  background: rgba(242, 245, 249, 0.96);
+  border-color: rgba(29, 39, 52, 0.08);
+  color: #637083;
+}
+
+.settings-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
 }
 
 .settings-pill-button,
@@ -501,6 +697,114 @@
   background: #fff;
 }
 
+.settings-engine-whole {
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-engine-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(340px, 0.75fr);
+  gap: 14px;
+}
+
+.settings-engine-list {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.settings-engine-card,
+.settings-engine-form {
+  border-radius: 22px;
+  border: 1px solid rgba(29, 39, 52, 0.08);
+  background: rgba(247, 250, 253, 0.88);
+  padding: 18px;
+}
+
+.settings-engine-card.is-empty {
+  background: rgba(247, 250, 253, 0.48);
+  border-style: dashed;
+}
+
+.settings-engine-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.settings-engine-card-head h3 {
+  margin: 0;
+  color: #1d2734;
+  font-size: 18px;
+}
+
+.settings-engine-card-head span {
+  color: #7a8798;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.settings-engine-command {
+  display: grid;
+  gap: 5px;
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(29, 39, 52, 0.07);
+}
+
+.settings-engine-command code {
+  color: #223047;
+  font-size: 13px;
+  word-break: break-word;
+}
+
+.settings-engine-command small,
+.settings-engine-message {
+  color: #6b7a90;
+  font-size: 12px;
+  line-height: 1.55;
+  word-break: break-word;
+}
+
+.settings-engine-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.settings-engine-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 14px;
+}
+
+.settings-toggle.compact {
+  min-height: 36px;
+  padding: 0 12px;
+}
+
+.settings-engine-form {
+  min-height: 0;
+  overflow: auto;
+}
+
+.settings-engine-form .settings-field textarea {
+  min-height: 92px;
+}
+
 .settings-json-editor.is-invalid {
   border-color: rgba(197, 58, 47, 0.36);
   box-shadow: 0 0 0 3px rgba(197, 58, 47, 0.12);
@@ -516,10 +820,10 @@
 .model-route-table {
   display: flex;
   flex-direction: column;
-  border: 1px solid rgba(29, 39, 52, 0.08);
+  border: 1px solid var(--line);
   border-radius: 14px;
   overflow: hidden;
-  background: #fff;
+  background: var(--panel);
 }
 
 .model-route-tgroup {
@@ -527,15 +831,15 @@
   grid-template-columns: 1.6fr 1fr 1fr 72px;
   gap: 8px;
   padding: 10px 12px;
-  background: rgba(248, 250, 253, 0.92);
+  background: var(--bg);
   font-size: 11px;
   font-weight: 700;
-  color: #5f6e82;
-  border-bottom: 1px solid rgba(29, 39, 52, 0.08);
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
 }
 
 .model-route-tgroup span:first-child {
-  color: #1d2734;
+  color: var(--text);
 }
 
 .model-route-row {
@@ -544,7 +848,7 @@
   gap: 8px;
   align-items: center;
   padding: 11px 12px;
-  border-bottom: 1px solid rgba(29, 39, 52, 0.05);
+  border-bottom: 1px solid var(--line);
 }
 
 .model-route-row:last-child {
@@ -561,23 +865,23 @@
 
 .model-route-meta strong {
   font-size: 13px;
-  color: #1d2734;
+  color: var(--text);
   font-weight: 600;
 }
 
 .model-route-meta span {
   font-size: 11px;
-  color: #7b8798;
+  color: var(--muted);
 }
 
 .model-route-control {
   height: 28px;
   padding: 0 8px;
   border-radius: 8px;
-  border: 1px solid rgba(29, 39, 52, 0.1);
-  background: #fff;
+  border: 1px solid var(--line);
+  background: var(--bg);
   font-size: 12px;
-  color: #243041;
+  color: var(--text);
   min-width: 0;
   width: 100%;
 }
@@ -691,6 +995,10 @@
   .workspace-card,
   .workspace-card-head {
     flex-direction: column;
+  }
+
+  .settings-engine-grid {
+    grid-template-columns: 1fr;
   }
 
   .workspace-actions {
@@ -875,6 +1183,24 @@
 }
 
 [data-theme="dark"] .theme-option-label {
+  color: var(--text) !important;
+}
+
+[data-theme="aurora"] .theme-option {
+  background: rgba(0, 212, 255, 0.04) !important;
+  border-color: transparent !important;
+}
+
+[data-theme="aurora"] .theme-option:hover {
+  border-color: rgba(0, 212, 255, 0.3) !important;
+  background: rgba(0, 212, 255, 0.07) !important;
+}
+
+[data-theme="aurora"] .theme-option.is-active {
+  border-color: #00d4ff !important;
+}
+
+[data-theme="aurora"] .theme-option-label {
   color: var(--text) !important;
 }
 

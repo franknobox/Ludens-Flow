@@ -108,6 +108,7 @@ def _artifact_owner_map() -> Dict[str, str]:
         "eng": "EngineeringAgent",
         "review": "ReviewAgent",
         "devlog": "EngineeringAgent",
+        "notes": "User",
     }
 
 
@@ -155,6 +156,7 @@ def init_state(project_id: Optional[str] = None) -> LudensState:
             "devlog": ArtifactMeta(
                 path=str(artifact_paths["devlog"]), owner="EngineeringAgent"
             ),
+            "notes": ArtifactMeta(path=str(artifact_paths["notes"]), owner="User"),
         },
     )
     return _sync_artifact_meta(state, resolved)

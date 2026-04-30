@@ -1,10 +1,13 @@
 import type {
   ProjectCreateResponse,
+  McpConnectionCheckResponse,
+  McpConnectionConfig,
   ModelProfilesResponse,
   ProjectSettingsResponse,
   ProjectSelectResponse,
   ProjectsResponse,
   StateResponse,
+  UserProfileResponse,
 } from "../types";
 import { fetchJson } from "./http";
 
@@ -20,16 +23,43 @@ export function getModelProfiles() {
   return fetchJson<ModelProfilesResponse>("/api/model-profiles");
 }
 
+export function getCurrentUserProfile() {
+  return fetchJson<UserProfileResponse>("/api/projects/current/user-profile");
+}
+
+export function updateCurrentUserProfile(content: string) {
+  return fetchJson<UserProfileResponse>("/api/projects/current/user-profile", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content }),
+  });
+}
+
 export function updateCurrentProjectSettings(body: {
   agent_file_write_enabled?: boolean;
   agent_file_write_confirm_required?: boolean;
   model_routing?: Record<string, unknown>;
+  mcp_connections?: McpConnectionConfig[];
 }) {
   return fetchJson<ProjectSettingsResponse>("/api/projects/current/settings", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+}
+
+export function checkCurrentMcpConnections(body: {
+  connection_id?: string | null;
+  engine?: string | null;
+} = {}) {
+  return fetchJson<McpConnectionCheckResponse>(
+    "/api/projects/current/mcp-connections/check",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
 }
 
 export function submitPermissionDecision(requestId: string, approved: boolean) {

@@ -58,6 +58,7 @@
 [data-theme="dark"] .project-toolbar-create input,
 [data-theme="dark"] .project-toolbar-settings,
 [data-theme="dark"] .project-toolbar-settings-input,
+[data-theme="dark"] .project-toolbar-github,
 [data-theme="dark"] .topbar-tabs,
 [data-theme="dark"] .topbar-tab,
 [data-theme="dark"] .shell-btn,
@@ -171,6 +172,7 @@
 [data-theme="dark"] .workspace-card,
 [data-theme="dark"] .tool-card,
 [data-theme="dark"] .settings-note-item,
+[data-theme="dark"] .settings-profile-path,
 [data-theme="dark"] .settings-chip,
 [data-theme="dark"] .settings-pill-button,
 [data-theme="dark"] .settings-primary-button,
@@ -192,6 +194,7 @@
 [data-theme="dark"] .workspace-card,
 [data-theme="dark"] .tool-card,
 [data-theme="dark"] .settings-inline-help,
+[data-theme="dark"] .settings-profile-path,
 [data-theme="dark"] .settings-toggle,
 [data-theme="dark"] .settings-pill-button {
   background-color: #262626 !important;
@@ -225,8 +228,66 @@
 }
 
 [data-theme="dark"] .settings-nav-text,
+[data-theme="dark"] .settings-card-subtitle,
 [data-theme="dark"] .settings-stat-label,
 [data-theme="dark"] .workspace-source {
+  color: var(--muted) !important;
+}
+
+/* =========================================================
+   Engine Connection Settings Overrides
+   ========================================================= */
+
+[data-theme="dark"] .settings-engine-card,
+[data-theme="dark"] .settings-engine-form {
+  background: var(--panel) !important;
+  border-color: var(--line) !important;
+  border-radius: var(--radius) !important;
+}
+
+[data-theme="dark"] .settings-engine-card.is-empty {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border-color: var(--line) !important;
+}
+
+[data-theme="dark"] .settings-engine-card-head h3 {
+  color: var(--text) !important;
+}
+
+[data-theme="dark"] .settings-engine-card-head span {
+  color: var(--muted) !important;
+}
+
+[data-theme="dark"] .settings-engine-command {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: var(--line) !important;
+}
+
+[data-theme="dark"] .settings-engine-command code {
+  color: var(--text) !important;
+}
+
+[data-theme="dark"] .settings-engine-command small,
+[data-theme="dark"] .settings-engine-message {
+  color: var(--muted) !important;
+}
+
+[data-theme="dark"] .settings-chip.ok {
+  background: var(--green-soft) !important;
+  border-color: var(--green) !important;
+  color: var(--green) !important;
+}
+
+[data-theme="dark"] .settings-chip.danger {
+  background: var(--warn-soft) !important;
+  border-color: var(--danger) !important;
+  color: var(--danger) !important;
+}
+
+[data-theme="dark"] .settings-chip.muted,
+[data-theme="dark"] .settings-chip.neutral {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: var(--line) !important;
   color: var(--muted) !important;
 }
 
@@ -281,12 +342,6 @@
    Game Model Page Overrides
    ========================================================= */
 
-[data-theme="dark"] .game-model-header,
-[data-theme="dark"] .game-model-tabs {
-  background: var(--panel) !important;
-  border-color: var(--line) !important;
-}
-
 [data-theme="dark"] .game-model-title {
   color: var(--text) !important;
 }
@@ -297,12 +352,11 @@
 
 [data-theme="dark"] .game-model-content {
   background: var(--bg) !important;
-  border-color: var(--line) !important;
   border-radius: 0 0 var(--radius) var(--radius) !important;
 }
 
-[data-theme="dark"] .game-model-header {
-  border-radius: var(--radius) var(--radius) 0 0 !important;
+[data-theme="dark"] .game-model-tabs {
+  border-bottom-color: var(--line) !important;
 }
 
 [data-theme="dark"] .game-model-tab {
@@ -310,23 +364,25 @@
 }
 
 [data-theme="dark"] .game-model-tab:hover {
-  background: rgba(255, 255, 255, 0.06) !important;
   color: var(--text) !important;
 }
 
 [data-theme="dark"] .game-model-tab.is-active {
-  background: var(--primary-soft) !important;
   color: var(--primary) !important;
 }
 
+[data-theme="dark"] .game-model-tab.is-active::after {
+  background: var(--primary) !important;
+}
+
 [data-theme="dark"] .game-model-action-btn {
-  background: var(--panel) !important;
+  background: transparent !important;
   border-color: var(--line) !important;
   color: var(--text) !important;
 }
 
 [data-theme="dark"] .game-model-action-btn:hover {
-  background: rgba(255, 255, 255, 0.08) !important;
+  background: rgba(255, 255, 255, 0.06) !important;
 }
 
 [data-theme="dark"] .game-model-filter-btn {
@@ -514,18 +570,42 @@
   color: var(--green) !important;
 }
 
+/* 游戏模型页面统一小圆角 */
+[data-theme="dark"] .game-model-card,
+[data-theme="dark"] .game-model-filter-btn,
+[data-theme="dark"] .game-model-badge,
+[data-theme="dark"] .game-model-cat-chip,
+[data-theme="dark"] .game-model-strength-tag,
+[data-theme="dark"] .game-model-recommended-tag,
+[data-theme="dark"] .game-model-detail-param,
+[data-theme="dark"] .game-model-detail-btn,
+[data-theme="dark"] .game-scene-btn,
+[data-theme="dark"] .game-export-copy-btn,
+[data-theme="dark"] .game-export-format-tab,
+[data-theme="dark"] .game-scene-cat-chip,
+[data-theme="dark"] .game-scene-model-badge,
+[data-theme="dark"] .game-scene-param,
+[data-theme="dark"] .game-scenes-add-btn,
+[data-theme="dark"] .game-model-detail-recommended-tag {
+  border-radius: var(--radius) !important;
+}
+
 /* =========================================================
    GitHub Page Overrides
    ========================================================= */
 
-/* Toolbar button in topbar */
-[data-theme="dark"] .project-toolbar-github {
-  background: #1c1c1c !important;
+/* Toolbar buttons in topbar */
+[data-theme="dark"] .project-toolbar-github,
+[data-theme="dark"] .project-toolbar-settings {
+  background: #262626 !important;
   border-color: var(--line) !important;
   color: var(--muted) !important;
+  border-radius: var(--radius) !important;
 }
 
-[data-theme="dark"] .project-toolbar-github:hover {
+[data-theme="dark"] .project-toolbar-github:hover,
+[data-theme="dark"] .project-toolbar-settings:hover,
+[data-theme="dark"] .project-toolbar-settings.is-active {
   background: rgba(255, 255, 255, 0.08) !important;
   border-color: var(--primary) !important;
   color: var(--primary) !important;
@@ -737,4 +817,203 @@
 
 [data-theme="dark"] .file-content {
   color: var(--text) !important;
+}
+
+/* ── Copywriting page dark overrides ─────────────────────── */
+
+[data-theme="dark"] .copywriting-rail,
+[data-theme="dark"] .copywriting-codex {
+  border-radius: var(--radius) !important;
+  box-shadow: var(--shadow) !important;
+}
+
+[data-theme="dark"] .copywriting-type-card.is-active {
+  border-color: var(--primary) !important;
+  background: var(--primary-soft) !important;
+}
+
+[data-theme="dark"] .copywriting-codex-note {
+  background: var(--bg) !important;
+  color: var(--text) !important;
+}
+
+[data-theme="dark"] .copywriting-codex-note span {
+  color: var(--muted) !important;
+}
+
+[data-theme="dark"] .copywriting-chip.is-active,
+[data-theme="dark"] .copywriting-ghost-btn.is-active,
+[data-theme="dark"] .copywriting-copy-btn {
+  border-color: var(--primary) !important;
+  background: var(--primary-soft) !important;
+  color: var(--primary) !important;
+}
+
+[data-theme="dark"] .copywriting-result-tags span {
+  background: var(--primary-soft) !important;
+  color: var(--primary) !important;
+}
+
+[data-theme="dark"] .copywriting-result-card {
+  background: var(--panel) !important;
+  border-color: var(--line) !important;
+}
+
+[data-theme="dark"] .copywriting-empty-result {
+  background: var(--bg) !important;
+  border-color: var(--line) !important;
+}
+
+[data-theme="dark"] .copywriting-codex-item.is-active {
+  border-color: var(--primary) !important;
+  background: var(--primary-soft) !important;
+}
+
+[data-theme="dark"] .copywriting-primary-btn {
+  background: var(--primary) !important;
+}
+
+/* MCP console dark overrides */
+[data-theme="dark"] .mcp-console-page {
+  color: var(--text) !important;
+}
+
+[data-theme="dark"] .mcp-console-hero,
+[data-theme="dark"] .mcp-panel {
+  background: var(--panel) !important;
+  border-color: var(--line) !important;
+  border-radius: var(--radius) !important;
+  box-shadow: var(--shadow) !important;
+}
+
+[data-theme="dark"] .mcp-console-icon {
+  background: #202225 !important;
+  box-shadow: inset 0 0 0 1px var(--line) !important;
+}
+
+[data-theme="dark"] .mcp-console-kicker,
+[data-theme="dark"] .mcp-hero-status span,
+[data-theme="dark"] .mcp-panel-head span,
+[data-theme="dark"] .mcp-status-list span {
+  color: var(--muted) !important;
+}
+
+[data-theme="dark"] .mcp-console-hero h1,
+[data-theme="dark"] .mcp-hero-status strong,
+[data-theme="dark"] .mcp-hero-status code,
+[data-theme="dark"] .mcp-panel-head h2,
+[data-theme="dark"] .mcp-capability-card h3,
+[data-theme="dark"] .mcp-capability-map strong,
+[data-theme="dark"] .mcp-status-list strong,
+[data-theme="dark"] .mcp-status-list code,
+[data-theme="dark"] .mcp-tool-list strong {
+  color: var(--text) !important;
+}
+
+[data-theme="dark"] .mcp-console-button,
+[data-theme="dark"] .mcp-status-chip,
+[data-theme="dark"] .mcp-mini-chip {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: var(--line) !important;
+  color: var(--text) !important;
+}
+
+[data-theme="dark"] .mcp-status-chip.ok,
+[data-theme="dark"] .mcp-mini-chip.ok {
+  background: var(--green-soft) !important;
+  border-color: rgba(63, 185, 128, 0.22) !important;
+  color: var(--green) !important;
+}
+
+[data-theme="dark"] .mcp-status-chip.danger,
+[data-theme="dark"] .mcp-mini-chip.danger {
+  background: var(--danger-soft, rgba(220, 80, 70, 0.12)) !important;
+  border-color: rgba(220, 80, 70, 0.22) !important;
+  color: var(--danger, #e05252) !important;
+}
+
+[data-theme="dark"] .mcp-status-chip.muted,
+[data-theme="dark"] .mcp-status-chip.neutral,
+[data-theme="dark"] .mcp-mini-chip.muted {
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: var(--muted) !important;
+}
+
+[data-theme="dark"] .mcp-status-list div,
+[data-theme="dark"] .mcp-hero-status div,
+[data-theme="dark"] .mcp-capability-card,
+[data-theme="dark"] .mcp-tool-list article {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: var(--line) !important;
+  border-radius: var(--radius) !important;
+}
+
+[data-theme="dark"] .mcp-capability-card code {
+  color: var(--primary) !important;
+}
+
+[data-theme="dark"] .mcp-capability-card p,
+[data-theme="dark"] .mcp-capability-map span,
+[data-theme="dark"] .mcp-message,
+[data-theme="dark"] .mcp-empty,
+[data-theme="dark"] .mcp-tool-list p {
+  color: var(--muted) !important;
+}
+
+[data-theme="dark"] .mcp-message.danger {
+  color: var(--danger, #e05252) !important;
+}
+
+/* Skills */
+[data-theme="dark"] .settings-skill-card {
+  background: var(--panel) !important;
+  border-color: var(--line) !important;
+  box-shadow: var(--shadow) !important;
+}
+
+[data-theme="dark"] .skill-card.is-enabled {
+  background: var(--primary-soft) !important;
+}
+
+[data-theme="dark"] .skills-page-head h1,
+[data-theme="dark"] .skill-card h3,
+[data-theme="dark"] .settings-skill-card h3,
+[data-theme="dark"] .skill-switch {
+  color: var(--text) !important;
+}
+
+[data-theme="dark"] .skills-kicker,
+[data-theme="dark"] .skills-summary,
+[data-theme="dark"] .skills-count,
+[data-theme="dark"] .skill-card p,
+[data-theme="dark"] .settings-skill-card p,
+[data-theme="dark"] .skills-empty {
+  color: var(--muted) !important;
+}
+
+[data-theme="dark"] .skills-page-head,
+[data-theme="dark"] .skills-panel-head,
+[data-theme="dark"] .skill-card,
+[data-theme="dark"] .skills-filter-chip,
+[data-theme="dark"] .skills-pill,
+[data-theme="dark"] .skills-empty,
+[data-theme="dark"] .settings-skill-format,
+[data-theme="dark"] .settings-skill-message {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: var(--line) !important;
+}
+
+[data-theme="dark"] .settings-skill-format strong {
+  color: var(--text) !important;
+}
+
+[data-theme="dark"] .settings-skill-format code,
+[data-theme="dark"] .settings-skill-message {
+  color: var(--muted) !important;
+}
+
+[data-theme="dark"] .skills-filter-chip.is-active {
+  background: var(--primary-soft) !important;
+  border-color: rgba(78, 140, 255, 0.34) !important;
+  color: var(--primary) !important;
 }

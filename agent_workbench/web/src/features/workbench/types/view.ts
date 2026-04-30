@@ -30,6 +30,10 @@ export interface ViewStateGameModel {
   type: "game-model";
 }
 
+export interface ViewStateSkills {
+  type: "skills";
+}
+
 export type McpTool = "unity" | "godot" | "ue" | "blender";
 
 export interface ViewStateMcp {
@@ -44,6 +48,7 @@ export type ViewState =
   | ViewStateAigc
   | ViewStateCopywriting
   | ViewStateGameModel
+  | ViewStateSkills
   | ViewStateMcp;
 
 export interface RenderMessage {

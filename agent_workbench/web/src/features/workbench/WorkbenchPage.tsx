@@ -40,11 +40,13 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
     openGameModel,
     openGithub,
     openMcp,
+    openSkills,
     openProject,
     saveWorkspaceFile,
     selectAgent,
     sendAction,
     sendMessage,
+    uploadWorkspaceFileAsset,
   } = controller;
 
   const phaseLabel = PHASE_LABEL[model.phase] || model.phase || "-";
@@ -58,6 +60,8 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
       ? "文案加工台"
       : currentView.type === "game-model"
       ? "游戏内模型接入"
+      : currentView.type === "skills"
+      ? "Skills 能力"
       : currentView.type === "mcp"
       ? "MCP 集成"
       : currentView.type === "agent"
@@ -96,6 +100,7 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
           onOpenAigc={openAigc}
           onOpenCopywriting={openCopywriting}
           onOpenGameModel={openGameModel}
+          onOpenSkills={openSkills}
           onOpenMcp={openMcp}
         />
 
@@ -131,6 +136,7 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
           onSaveFile={async (fileId, content) => {
             await saveWorkspaceFile(fileId, content);
           }}
+          onUploadFileAsset={uploadWorkspaceFileAsset}
         />
       </div>
 

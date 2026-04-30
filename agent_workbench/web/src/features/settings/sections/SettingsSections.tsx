@@ -1,15 +1,25 @@
 import type {
+  McpConnectionConfig,
+  McpConnectionStatus,
   ModelProfileSummary,
   ProjectMeta,
   ProjectSettingsResponse,
   ProjectWorkspace,
   ToolCatalogItem,
+  UserProfileResponse,
 } from "../../workbench/types";
 
 export const WORKSPACE_KIND_OPTIONS = [
   { value: "unity", label: "Unity" },
   { value: "generic", label: "Generic" },
   { value: "blender", label: "Blender" },
+];
+
+const MCP_ENGINE_OPTIONS: Array<{ value: McpConnectionConfig["engine"]; label: string }> = [
+  { value: "unity", label: "Unity" },
+  { value: "godot", label: "Godot" },
+  { value: "blender", label: "Blender" },
+  { value: "unreal", label: "Unreal Engine" },
 ];
 
 type ModelRoutingValidation = {
@@ -235,6 +245,17 @@ interface GeneralSettingsSectionProps {
   onSaveModelRouting: () => void;
 }
 
+interface UserProfileSectionProps {
+  profile: UserProfileResponse | null;
+  draft: string;
+  dirty: boolean;
+  loading: boolean;
+  submitting: boolean;
+  onDraftChange: (value: string) => void;
+  onReload: () => void;
+  onSave: () => void;
+}
+
 export function GeneralSettingsSection(props: GeneralSettingsSectionProps) {
   const {
     projectSettings,
@@ -359,7 +380,7 @@ export function GeneralSettingsSection(props: GeneralSettingsSectionProps) {
                   </div>
                 ),
               },
-            ].map(({ value, label, desc, preview }) => (
+              ].map(({ value, label, desc, preview }) => (
               <button
                 key={value}
                 type="button"
@@ -475,6 +496,67 @@ export function GeneralSettingsSection(props: GeneralSettingsSectionProps) {
   );
 }
 
+export function UserProfileSection(props: UserProfileSectionProps) {
+  const {
+    profile,
+    draft,
+    dirty,
+    loading,
+    submitting,
+    onDraftChange,
+    onReload,
+    onSave,
+  } = props;
+
+  return (
+    <div className="settings-detail-stack settings-detail-stack--fill">
+      <section className="settings-pane-card settings-pane-card-main settings-profile-card">
+        <div className="settings-card-head">
+          <div>
+            <h2 className="settings-card-title">用户画像</h2>
+            <p className="settings-card-subtitle">
+              编辑当前项目的 USER_PROFILE.md。Agent 会在涉及身份、偏好、目标和约束时优先参考这里。
+            </p>
+          </div>
+          <div className="settings-profile-actions">
+            <button
+              type="button"
+              className="settings-pill-button"
+              title="把当前项目磁盘上的 USER_PROFILE.md 再读一遍，覆盖前端编辑框里的内容。"
+              disabled={loading || submitting}
+              onClick={onReload}
+            >
+              刷新
+            </button>
+            <button
+              type="button"
+              className="settings-primary-button"
+              disabled={loading || submitting || !dirty}
+              onClick={onSave}
+            >
+              {submitting ? "保存中..." : "保存画像"}
+            </button>
+          </div>
+        </div>
+
+        <div className="settings-profile-path">
+          {profile?.path || "当前项目尚未加载 USER_PROFILE.md"}
+        </div>
+
+        <label className="settings-field settings-profile-editor">
+          <span>USER_PROFILE.md</span>
+          <textarea
+            value={draft}
+            disabled={loading || submitting}
+            onChange={(event) => onDraftChange(event.target.value)}
+            placeholder="正在加载用户画像..."
+          />
+        </label>
+      </section>
+    </div>
+  );
+}
+
 interface ToolsSectionProps {
   tools: ToolCatalogItem[];
   toolsByCategory: Record<string, ToolCatalogItem[]>;
@@ -524,6 +606,262 @@ export function ToolsSection({ tools, toolsByCategory }: ToolsSectionProps) {
             ))}
           </div>
         )}
+      </section>
+    </div>
+  );
+}
+
+function mcpStatusLabel(status?: McpConnectionStatus): string {
+  if (!status) return "已配置";
+  if (status.status === "not_configured") return "未配置";
+  if (status.status === "configured") return "已配置";
+  if (status.status === "reachable") return "可连接";
+  if (status.status === "tools_loaded") return "工具列表已加载";
+  return "连接失败";
+}
+
+function mcpStatusClass(status?: McpConnectionStatus): string {
+  if (!status) return "neutral";
+  if (status.status === "tools_loaded" || status.status === "reachable") return "ok";
+  if (status.status === "failed") return "danger";
+  if (status.status === "not_configured") return "muted";
+  return "neutral";
+}
+
+interface EngineConnectionsSectionProps {
+  loading: boolean;
+  submitting: boolean;
+  checking: boolean;
+  connections: McpConnectionConfig[];
+  statuses: Record<string, McpConnectionStatus>;
+  engineInput: McpConnectionConfig["engine"];
+  labelInput: string;
+  commandInput: string;
+  argsInput: string;
+  envInput: string;
+  onEngineChange: (value: McpConnectionConfig["engine"]) => void;
+  onLabelChange: (value: string) => void;
+  onCommandChange: (value: string) => void;
+  onArgsChange: (value: string) => void;
+  onEnvChange: (value: string) => void;
+  onAddConnection: () => void;
+  onUpdateConnection: (
+    connectionId: string,
+    patch: Partial<McpConnectionConfig>,
+  ) => void;
+  onRemoveConnection: (connectionId: string) => void;
+  onCheckConnection: (connectionId: string) => void;
+  onCheckAll: () => void;
+}
+
+export function EngineConnectionsSection(props: EngineConnectionsSectionProps) {
+  const {
+    loading,
+    submitting,
+    checking,
+    connections,
+    statuses,
+    engineInput,
+    labelInput,
+    commandInput,
+    argsInput,
+    envInput,
+    onEngineChange,
+    onLabelChange,
+    onCommandChange,
+    onArgsChange,
+    onEnvChange,
+    onAddConnection,
+    onUpdateConnection,
+    onRemoveConnection,
+    onCheckConnection,
+    onCheckAll,
+  } = props;
+
+  const busy = loading || submitting || checking;
+  const configuredEngines = new Set(connections.map((connection) => connection.engine));
+  const missingEngines = MCP_ENGINE_OPTIONS.filter(
+    (engine) => !configuredEngines.has(engine.value),
+  );
+
+  return (
+    <div className="settings-detail-stack settings-detail-stack--fill">
+      <section className="settings-pane-card settings-pane-card-main settings-engine-whole">
+        <div className="settings-card-head">
+          <h2 className="settings-card-title">引擎连接</h2>
+          <div className="settings-card-actions">
+            <span className="settings-chip">{connections.length} 项</span>
+            <button
+              type="button"
+              className="settings-pill-button"
+              disabled={busy || !connections.length}
+              onClick={onCheckAll}
+            >
+              {checking ? "检查中..." : "检查全部"}
+            </button>
+          </div>
+        </div>
+
+        <div className="settings-engine-grid">
+          <div className="settings-engine-list">
+            {connections.map((connection) => {
+                const status = statuses[connection.id];
+                return (
+                  <article key={connection.id} className="settings-engine-card">
+                    <div className="settings-engine-card-head">
+                      <div>
+                        <h3>{connection.label}</h3>
+                        <span>{connection.engine}</span>
+                      </div>
+                      <span className={`settings-chip ${mcpStatusClass(status)}`}>
+                        {mcpStatusLabel(status)}
+                      </span>
+                    </div>
+
+                    <div className="settings-engine-command">
+                      <code>{connection.command || "未填写启动命令"}</code>
+                      {connection.args.length ? (
+                        <small>{connection.args.join(" ")}</small>
+                      ) : null}
+                    </div>
+
+                    {status?.message ? (
+                      <p className="settings-engine-message">{status.message}</p>
+                    ) : null}
+
+                    {status?.tools?.length ? (
+                      <div className="settings-engine-tools">
+                        {status.tools.slice(0, 12).map((tool) => (
+                          <span key={tool.name} className="settings-chip subtle">
+                            {tool.name}
+                          </span>
+                        ))}
+                        {status.tools.length > 12 ? (
+                          <span className="settings-chip subtle">
+                            +{status.tools.length - 12}
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : null}
+
+                    <div className="settings-engine-actions">
+                      <label className="settings-toggle compact">
+                        <input
+                          type="checkbox"
+                          checked={connection.enabled}
+                          disabled={busy}
+                          onChange={(event) =>
+                            onUpdateConnection(connection.id, {
+                              enabled: event.target.checked,
+                            })
+                          }
+                        />
+                        <span>启用</span>
+                      </label>
+                      <button
+                        type="button"
+                        className="settings-pill-button"
+                        disabled={busy || !connection.command}
+                        onClick={() => onCheckConnection(connection.id)}
+                      >
+                        检查
+                      </button>
+                      <button
+                        type="button"
+                        className="settings-pill-button danger"
+                        disabled={busy}
+                        onClick={() => onRemoveConnection(connection.id)}
+                      >
+                        移除
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            {missingEngines.map((engine) => (
+              <article key={engine.value} className="settings-engine-card is-empty">
+                <div className="settings-engine-card-head">
+                  <div>
+                    <h3>{engine.label}</h3>
+                    <span>{engine.value}</span>
+                  </div>
+                  <span className="settings-chip muted">未配置</span>
+                </div>
+                <p className="settings-engine-message">
+                  尚未为当前项目配置 {engine.label} MCP。填写右侧表单后可进行健康检查。
+                </p>
+              </article>
+            ))}
+          </div>
+
+          <div className="settings-engine-form">
+            <div className="settings-card-head compact">
+              <h2 className="settings-card-title">添加 MCP</h2>
+            </div>
+            <div className="settings-form">
+              <label className="settings-field">
+                <span>引擎</span>
+                <select
+                  value={engineInput}
+                  disabled={busy}
+                  onChange={(event) =>
+                    onEngineChange(event.target.value as McpConnectionConfig["engine"])
+                  }
+                >
+                  {MCP_ENGINE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="settings-field">
+                <span>显示名称</span>
+                <input
+                  value={labelInput}
+                  disabled={busy}
+                  onChange={(event) => onLabelChange(event.target.value)}
+                  placeholder="例如：主 Unity 编辑器"
+                />
+              </label>
+              <label className="settings-field">
+                <span>启动命令</span>
+                <input
+                  value={commandInput}
+                  disabled={busy}
+                  onChange={(event) => onCommandChange(event.target.value)}
+                  placeholder="例如：npx / uv / python"
+                />
+              </label>
+              <label className="settings-field">
+                <span>启动参数，每行一个</span>
+                <textarea
+                  value={argsInput}
+                  disabled={busy}
+                  onChange={(event) => onArgsChange(event.target.value)}
+                  placeholder={"例如：\n@coding-solo/godot-mcp"}
+                />
+              </label>
+              <label className="settings-field">
+                <span>环境变量，每行 KEY=VALUE</span>
+                <textarea
+                  value={envInput}
+                  disabled={busy}
+                  onChange={(event) => onEnvChange(event.target.value)}
+                  placeholder={"例如：\nGODOT_PATH=E:\\Tools\\Godot.exe"}
+                />
+              </label>
+              <button
+                type="button"
+                className="settings-primary-button"
+                disabled={busy}
+                onClick={onAddConnection}
+              >
+                保存连接
+              </button>
+            </div>
+          </div>
+        </div>
       </section>
     </div>
   );

@@ -1,10 +1,10 @@
 # Ludens-Flow 项目状态
-> 最后更新：2026-04-26
+> 最后更新：2026-05-01
 
 ---
 
 ## 当前状态
-项目主链路已经稳定运行，具备多 Agent 工作流、项目级状态管理、多项目工作台、Web/API/CLI 三套入口，以及项目工作区受控读写能力。近期重点集中在前端产品化扩展、工程工具能力补齐、Markdown 工件阅读体验与收版验收基线固化。
+项目主链路已经稳定运行，具备多 Agent 工作流、项目级状态管理、多项目工作台、Web/API/CLI 三套入口，以及项目工作区受控读写能力。近期重点集中在前端产品化收口、Skills 外部导入、用户画像设置入口、工程工具能力补齐与收版验收基线固化。
 
 ---
 
@@ -17,14 +17,15 @@
 | 项目生命周期 | 已完成 `schema_version`、项目元数据迁移、项目导入/导出、旧 workspace 迁移 |
 | Artifact 管理 | 已支持 `GDD / PROJECT_PLAN / IMPLEMENTATION_PLAN / REVIEW_REPORT / DEVLOG` 的读写与冻结保护；前端已支持人工编辑、Markdown 渲染与 DEVLOG pipeline（冻结仅限制 Agent 自动提交） |
 | Prompt / Schemas | 已完成 discuss 共享 schema、ReviewGate schema、统一结构化解析、Prompt 分层模板与第一轮 prompt 重写 |
-| 用户画像 | 已完成项目级 `USER_PROFILE.md`、结构化模板、提示词注入规则增强与旧版画像迁移 |
+| 用户画像 | 已完成项目级 `USER_PROFILE.md`、结构化模板、提示词注入规则增强、旧版画像迁移，并在设置页提供读取、编辑、保存入口 |
 | Web API | 已提供 `/api/state`、`/api/chat`、`/api/projects`、项目级 reset、SSE 事件推送、工作区文件读取/写入、目录创建、文件删除与项目 settings 更新接口 |
-| 前端工作台 | 已具备项目侧栏、工件查看/编辑、Agent 对话、SSE 增量消息、工具进度事件、多格式附件、项目级操作、Markdown 阅读、暗色主题、AIGC 快捷入口（含文字创作分组）、GitHub 可视化入口、Game Model / MCP / 文案加工台页面入口；设置页支持模型路由图形化编辑、工具、工作区与通用写入配置查看 |
+| 前端工作台 | 已具备项目侧栏、工件查看/编辑、Agent 对话、SSE 增量消息、工具进度事件、多格式附件、项目级操作、Markdown 阅读、暗色主题、AIGC 快捷入口（含文字创作分组）、GitHub 可视化入口、Game Model / MCP / Skills / 文案加工台页面入口；设置页支持通用设置、用户画像、Skills 管理、模型路由图形化编辑、工具、工作区、引擎连接与历史项目 |
 | 多项目工作台 | 已统一为 `workspace/projects/<project_id>/` 结构，并支持 active project / migrate / project meta |
 | 游戏工程接入（基础） | 已支持项目级工作区清单、目录读取、文本文件读取/写入、路径逃逸拦截、可写开关与统一错误结构 |
 | 多模型路由 | 已支持 `.env` 全局保底 + 项目级 `model_routing`（global/agents/capabilities/agent_capabilities）优先级路由；前端已提供图形化行式表单与 provider profile 下拉选择 |
 | 文案能力（基础） | 已提供 `DesignCopywritingRequest/Response` schema、normalize、generate API 与前端文案加工台页面壳 |
-| 测试 | 已完成测试收口与合并；当前后端全量结果为 `107 passed` |
+| Skills 外部导入 | 已支持 `workspace/skills/installed/<skill_id>/` 全局存储、外部 `skill.json` / `prompt.md` 导入、清单展示、删除、项目级启用开关与设置页管理 |
+| 测试 | 已完成测试收口与合并；近期涉及项目生命周期、Skills、用户画像与 MCP/工具能力的回归测试通过 |
 
 ---
 
@@ -33,6 +34,7 @@
 - Prompt / Schema 基础能力已落地，但 `reply` 仍主要是字符串层协议，尚未升级为更细粒度的角色化结构。
 - 工程文件工具当前已具备基础读写、目录创建、patch 与删除能力，但批量变更确认、编辑器侧操作与过程可视化仍需继续打磨。
 - AIGC、GitHub、Game Model、MCP 等新页面目前以“前端入口 / 页面壳 / 快捷目录”为主，真实后端集成仍需分阶段接入。
+- Skills 当前已具备外部导入和项目启用管理，但尚未进入 Agent 运行时自动加载与内部自沉淀闭环。
 - 收版验收基线（benchmark、核心指标看板、Release Checklist）尚未固化为流程闸门。
 
 ---
@@ -41,7 +43,7 @@
 当前后续开发计划已同步到 [ROADMAP](e:/GitDesktop/Ludens-Flow/11_docs/ROADMAP.md)，近期优先级如下：
 1. 继续完善受控工具能力：路径审核、写入确认、patch/delete/create-dir 等工程文件操作与过程事件展示。
 2. 推进游戏工程接入：Unity 编辑器 MCP / 工具层方案验证，并预留 Godot、UE 等更多引擎兼容方向。
-3. 持续打磨前端工作台：页面壳、导航、设置页、工具目录、AIGC 快捷入口、GitHub / Game Model / MCP 页面与项目状态一致性。
+3. 持续打磨前端工作台：页面壳、导航、设置页、工具目录、AIGC 快捷入口、GitHub / Game Model / MCP / Skills 页面与项目状态一致性。
 4. 固化收版验收基线：benchmark、核心指标看板与 Release Checklist。
 
 ---

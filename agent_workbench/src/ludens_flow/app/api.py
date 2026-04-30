@@ -7,6 +7,7 @@
 
 import argparse
 import asyncio
+import base64
 import json
 import logging
 import queue
@@ -24,7 +25,19 @@ from llm.model_profiles import list_model_profile_summaries
 from ludens_flow.capabilities.ingest.attachment_ingest import build_attachment_user_input
 from ludens_flow.capabilities.artifacts.artifacts import read_artifact, write_artifact
 from ludens_flow.capabilities.copywriting.design_copywriting import generate_design_copywriting
+from ludens_flow.capabilities.context.user_profile import (
+    read_profile_file,
+    write_profile_file,
+)
 from ludens_flow.app.env import load_env_if_available
+from ludens_flow.capabilities.mcp.health import check_mcp_connections
+from ludens_flow.capabilities.skills.registry import (
+    delete_skill,
+    get_project_skills,
+    import_external_skill,
+    list_skills,
+    set_project_skill_enabled,
+)
 from ludens_flow.capabilities.tools.registry import list_common_tools
 from ludens_flow.core.graph import graph_step
 from ludens_flow.core.paths import (
@@ -33,6 +46,8 @@ from ludens_flow.core.paths import (
     clear_project_unity_root,
     create_project,
     delete_project,
+    get_dev_notes_assets_dir,
+    get_project_mcp_connections,
     get_project_settings,
     get_project_unity_root,
     list_project_workspaces,
@@ -45,6 +60,7 @@ from ludens_flow.core.paths import (
     restore_project,
     set_project_agent_file_write_enabled,
     set_project_agent_file_write_confirm_required,
+    set_project_mcp_connections,
     set_project_model_routing,
     set_active_project_id,
     set_project_unity_root,
@@ -106,10 +122,29 @@ class ProjectSettingsRequest(BaseModel):
     agent_file_write_enabled: bool | None = None
     agent_file_write_confirm_required: bool | None = None
     model_routing: dict | None = None
+    mcp_connections: list[dict] | None = None
+
+
+class McpConnectionCheckRequest(BaseModel):
+    connection_id: str | None = None
+    engine: str | None = None
 
 
 class PermissionDecisionRequest(BaseModel):
     approved: bool
+
+
+class SkillImportRequest(BaseModel):
+    manifest: dict
+    prompt: str | None = None
+
+
+class ProjectSkillToggleRequest(BaseModel):
+    enabled: bool
+
+
+class UserProfileUpdateRequest(BaseModel):
+    content: str = ""
 
 
 class ActionRequest(BaseModel):
@@ -118,6 +153,11 @@ class ActionRequest(BaseModel):
 
 class WorkspaceFileUpdateRequest(BaseModel):
     content: str = ""
+
+
+class WorkspaceFileAssetUploadRequest(BaseModel):
+    name: str = "pasted-image.png"
+    data_url: str
 
 
 class DesignCopywritingGenerateRequest(BaseModel):
@@ -337,6 +377,10 @@ def _summarize_tool_call(tool_name: str, args: dict) -> str:
         pattern = str(args.get("pattern", "*.cs") or "*.cs").strip()
         relative_path = str(args.get("relative_path", "") or "").strip() or "/"
         return f"查找文件：{relative_path} 内匹配 {pattern}"
+    if tool_name.startswith("engine_"):
+        engine = str(args.get("engine", "") or "").strip() or "engine"
+        label = tool_name.replace("engine_", "engine.")
+        return f"{engine} MCP: {label}"
     if tool_name == "web_search":
         query = str(args.get("query", "") or "").strip() or "(未提供关键词)"
         return f"搜索网络：{query}"
@@ -351,6 +395,8 @@ def _summarize_tool_result(tool_name: str, result: str) -> str:
         "unity_list_dir",
         "unity_find_files",
         "workspace_read_files_batch",
+        "engine_list_scene",
+        "engine_read_console",
     }:
         lines = [line for line in text.splitlines() if line.strip()]
         return f"共返回 {len(lines)} 行结果"
@@ -798,6 +844,28 @@ def get_model_profiles():
     return {"profiles": list_model_profile_summaries()}
 
 
+@app.get("/api/projects/current/user-profile")
+def get_current_user_profile():
+    project_id = resolve_project_id()
+    profile = read_profile_file(project_id=project_id)
+    return {
+        "project_id": project_id,
+        "path": profile["path"],
+        "content": profile["content"],
+    }
+
+
+@app.post("/api/projects/current/user-profile")
+def post_current_user_profile(req: UserProfileUpdateRequest):
+    project_id = resolve_project_id()
+    profile = write_profile_file(req.content, project_id=project_id)
+    return {
+        "project_id": project_id,
+        "path": profile["path"],
+        "content": profile["content"],
+    }
+
+
 @app.post("/api/projects/current/settings")
 def post_current_project_settings(req: ProjectSettingsRequest):
     project_id = resolve_project_id()
@@ -805,6 +873,7 @@ def post_current_project_settings(req: ProjectSettingsRequest):
         req.agent_file_write_enabled is None
         and req.agent_file_write_confirm_required is None
         and req.model_routing is None
+        and req.mcp_connections is None
     ):
         raise HTTPException(status_code=400, detail="No settings field provided.")
 
@@ -826,7 +895,34 @@ def post_current_project_settings(req: ProjectSettingsRequest):
             project_id=project_id,
         )
 
+    if req.mcp_connections is not None:
+        set_project_mcp_connections(
+            req.mcp_connections,
+            project_id=project_id,
+        )
+
     return get_project_settings(project_id=project_id)
+
+
+@app.post("/api/projects/current/mcp-connections/check")
+def post_check_current_project_mcp_connections(req: McpConnectionCheckRequest):
+    project_id = resolve_project_id()
+    connections = get_project_mcp_connections(project_id=project_id)
+
+    if req.connection_id:
+        connections = [
+            item for item in connections if item.get("id") == req.connection_id
+        ]
+    if req.engine:
+        engine = "unreal" if req.engine == "ue" else req.engine
+        connections = [
+            item for item in connections if item.get("engine") == engine
+        ]
+
+    return {
+        "project_id": project_id,
+        "connections": check_mcp_connections(connections),
+    }
 
 
 @app.post("/api/permissions/{request_id}/decision")
@@ -846,6 +942,54 @@ def get_tool_catalog():
     return {
         "tools": list_common_tools(),
     }
+
+
+@app.get("/api/skills")
+def get_skill_catalog():
+    return {"skills": list_skills()}
+
+
+@app.post("/api/skills/import")
+def post_import_skill(req: SkillImportRequest):
+    try:
+        skill = import_external_skill(req.manifest, prompt=req.prompt)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"skill": skill, "skills": list_skills()}
+
+
+@app.delete("/api/skills/{skill_id}")
+def delete_installed_skill(skill_id: str):
+    try:
+        deleted = delete_skill(skill_id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"deleted_skill": deleted, "skills": list_skills()}
+
+
+@app.get("/api/projects/current/skills")
+def get_current_project_skills():
+    project_id = resolve_project_id()
+    return get_project_skills(project_id)
+
+
+@app.post("/api/projects/current/skills/{skill_id}")
+def post_current_project_skill_toggle(skill_id: str, req: ProjectSkillToggleRequest):
+    project_id = resolve_project_id()
+    try:
+        return set_project_skill_enabled(
+            skill_id,
+            req.enabled,
+            project_id=project_id,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/api/projects/current/workspaces")
@@ -1098,6 +1242,12 @@ WORKSPACE_FILES = [
         "artifact": "DEVLOG",
         "owner": "EngineeringAgent",
     },
+    {
+        "id": "notes",
+        "name": "dev_notes/NOTES.md",
+        "artifact": "NOTES",
+        "owner": "User",
+    },
 ]
 
 
@@ -1169,6 +1319,76 @@ def put_workspace_file_content(file_id: str, req: WorkspaceFileUpdateRequest):
         }
 
     raise HTTPException(status_code=404, detail="Not found")
+
+
+_NOTE_ASSET_MIME_EXTENSIONS = {
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+}
+
+
+def _safe_note_asset_name(raw_name: str, extension: str) -> str:
+    stem = Path(str(raw_name or "pasted-image")).stem
+    safe_stem = "".join(c if c.isalnum() or c in {"-", "_"} else "-" for c in stem)
+    safe_stem = safe_stem.strip("-_") or "pasted-image"
+    return f"{safe_stem}-{uuid.uuid4().hex[:8]}{extension}"
+
+
+@app.post("/api/workspace/files/{file_id}/assets")
+def upload_workspace_file_asset(file_id: str, req: WorkspaceFileAssetUploadRequest):
+    if file_id != "notes":
+        raise HTTPException(status_code=400, detail="Assets are only supported for NOTES.md.")
+
+    state = st.load_state()
+    project_id = resolve_project_id(getattr(state, "project_id", None))
+    data_url = str(req.data_url or "")
+    if not data_url.startswith("data:") or ";base64," not in data_url:
+        raise HTTPException(status_code=400, detail="Invalid image data URL.")
+
+    header, encoded = data_url.split(";base64,", 1)
+    mime_type = header[5:].split(";", 1)[0].lower()
+    extension = _NOTE_ASSET_MIME_EXTENSIONS.get(mime_type)
+    if not extension:
+        raise HTTPException(status_code=400, detail=f"Unsupported image type: {mime_type}")
+
+    try:
+        payload = base64.b64decode(encoded, validate=True)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid base64 image data.") from exc
+
+    max_bytes = 8 * 1024 * 1024
+    if len(payload) > max_bytes:
+        raise HTTPException(status_code=413, detail="Image is larger than 8 MB.")
+
+    assets_dir = get_dev_notes_assets_dir(project_id)
+    assets_dir.mkdir(parents=True, exist_ok=True)
+    filename = _safe_note_asset_name(req.name, extension)
+    target = assets_dir / filename
+    target.write_bytes(payload)
+
+    markdown = f"![{Path(filename).stem}](/api/workspace/files/notes/assets/{filename})"
+    return {
+        "file_id": file_id,
+        "name": filename,
+        "url": f"/api/workspace/files/notes/assets/{filename}",
+        "markdown": markdown,
+    }
+
+
+@app.get("/api/workspace/files/notes/assets/{asset_name}")
+def get_workspace_note_asset(asset_name: str):
+    safe_name = Path(asset_name).name
+    if safe_name != asset_name:
+        raise HTTPException(status_code=400, detail="Invalid asset name.")
+
+    state = st.load_state()
+    project_id = resolve_project_id(getattr(state, "project_id", None))
+    target = get_dev_notes_assets_dir(project_id) / safe_name
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail="Asset not found.")
+    return FileResponse(target)
 
 
 @app.post("/api/projects/current/copywriting/generate")
