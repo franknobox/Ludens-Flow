@@ -540,7 +540,7 @@ export function UserProfileSection(props: UserProfileSectionProps) {
         </div>
 
         <div className="settings-profile-path">
-          {profile?.path || "当前项目尚未加载 USER_PROFILE.md"}
+          {profile?.display_path || profile?.path || "当前项目尚未加载 USER_PROFILE.md"}
         </div>
 
         <label className="settings-field settings-profile-editor">

@@ -541,7 +541,7 @@ class RegressionTests(unittest.TestCase):
         self.assertEqual(result.assistant_message, "streamed design reply")
         self.assertEqual(result.state_updates, {})
         self.assertIsNotNone(captured["stream_handler"])
-        self.assertIn("Do not output JSON", captured["user_prompt"])
+        self.assertIn("不要输出 JSON", captured["user_prompt"])
 
     def test_engineering_plan_discuss_streaming_keeps_style_preset_update(self):
         agent = EngineeringAgent()
@@ -564,7 +564,7 @@ class RegressionTests(unittest.TestCase):
         self.assertEqual(result.assistant_message, "streamed engineering reply")
         self.assertEqual(result.state_updates.get("style_preset"), "B")
         self.assertIsNotNone(captured["stream_handler"])
-        self.assertIn("Do not output JSON", captured["user_prompt"])
+        self.assertIn("不要输出 JSON", captured["user_prompt"])
 
 
 if __name__ == "__main__":

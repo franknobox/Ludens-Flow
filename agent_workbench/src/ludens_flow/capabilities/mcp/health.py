@@ -55,7 +55,7 @@ def _build_stdio_input() -> str:
         {
             "protocolVersion": MCP_PROTOCOL_VERSION,
             "capabilities": {},
-            "clientInfo": {"name": "Ludens-Flow", "version": "0.1.0"},
+            "clientInfo": {"name": "Ludens-Flow", "version": "2.9.9"},
         },
     )
     initialized = _jsonrpc_notification("notifications/initialized")
@@ -72,7 +72,7 @@ def _build_tool_call_input(tool_name: str, arguments: dict | None = None) -> str
         {
             "protocolVersion": MCP_PROTOCOL_VERSION,
             "capabilities": {},
-            "clientInfo": {"name": "Ludens-Flow", "version": "0.1.0"},
+            "clientInfo": {"name": "Ludens-Flow", "version": "2.9.9"},
         },
     )
     initialized = _jsonrpc_notification("notifications/initialized")

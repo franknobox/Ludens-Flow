@@ -151,7 +151,7 @@ class BaseAgent(ABC):
 
             if iterations == 1:
                 history.append({"role": "user", "content": user_prompt})
-                user_prompt = "Please continue."
+                user_prompt = "请继续。"
 
             assistant_msg = {
                 "role": "assistant",

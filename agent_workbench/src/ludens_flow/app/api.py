@@ -90,6 +90,9 @@ WORKBENCH_ROOT = Path(__file__).resolve().parents[3]
 WEB_DIST_DIR = WORKBENCH_ROOT / "web" / "dist"
 STATIC_DIR = WEB_DIST_DIR
 
+def _project_relative_profile_path(project_id: str) -> str:
+    return f"workspace/projects/{project_id}/USER_PROFILE.md"
+
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
@@ -851,6 +854,7 @@ def get_current_user_profile():
     return {
         "project_id": project_id,
         "path": profile["path"],
+        "display_path": _project_relative_profile_path(project_id),
         "content": profile["content"],
     }
 
@@ -862,6 +866,7 @@ def post_current_user_profile(req: UserProfileUpdateRequest):
     return {
         "project_id": project_id,
         "path": profile["path"],
+        "display_path": _project_relative_profile_path(project_id),
         "content": profile["content"],
     }
 

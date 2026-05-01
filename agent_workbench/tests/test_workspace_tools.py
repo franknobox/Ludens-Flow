@@ -112,7 +112,7 @@ class WorkspaceToolsTests(unittest.TestCase):
         self.assertTrue((self.generic_root / "Scripts" / "Generated.cs").exists())
         self.assertEqual(
             [event["type"] for event in events],
-            ["tool_progress", "file_changed"],
+            ["permission_required", "permission_granted", "tool_progress", "file_changed"],
         )
 
     def test_workspace_create_directory_then_write_cs_file(self):

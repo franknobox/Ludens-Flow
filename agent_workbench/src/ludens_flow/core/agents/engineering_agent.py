@@ -137,28 +137,28 @@ class EngineeringAgent(BaseAgent):
         style = detected_style or state.style_preset or "None"
         dev_mode_context = ""
         if getattr(state, "artifact_frozen", False) and impl_plan.strip():
-            dev_mode_context = f"\nCurrent effective implementation plan:\n{impl_plan}\n"
+            dev_mode_context = f"\n当前生效的实现计划：\n{impl_plan}\n"
 
         base_prompt_text = (
-            f"Existing GDD:\n{gdd}\n\n"
-            f"Project plan:\n{pm}\n"
+            f"现有 GDD：\n{gdd}\n\n"
+            f"项目计划：\n{pm}\n"
             f"{dev_mode_context}"
-            f"Confirmed engineering preset so far: {style}\n\n"
-            "Please do the following:\n"
-            "1. Explain the A / B / C engineering preset options and recommend the best fit for the current project.\n"
-            "2. If the user already chose a preset, continue the discussion inside that preset instead of restarting from scratch.\n"
-            "3. Keep the conversation focused on engineering structure, implementation path, folder structure, module boundaries, risk, and debugging cost.\n"
-            "4. In this discussion stage, do not give class-by-class implementation instructions, file skeletons, exact script breakdowns, or step-by-step Unity editor operations.\n"
-            "5. Do not proactively suggest concrete file names, code scaffolds, or direct build instructions unless the user explicitly asks to enter a later execution-oriented stage.\n"
-            "6. Keep the tone practical, clear, and supportive.\n"
+            f"目前已确认的工程方案预设：{style}\n\n"
+            "请完成以下任务，默认使用简体中文回复，除非用户明确要求英文：\n"
+            "1. 解释 A / B / C 三种工程方案选项，并推荐最适合当前项目的一种。\n"
+            "2. 如果用户已经选择了方案，就在该方案内部继续讨论，不要从零开始。\n"
+            "3. 讨论重点放在工程结构、实现路径、文件夹结构、模块边界、风险和调试成本上。\n"
+            "4. 在工程讨论阶段，不要给出逐类实现指令、文件骨架、精确脚本拆分或 Unity 编辑器逐步操作。\n"
+            "5. 除非用户明确要求进入后续执行阶段，否则不要主动建议具体文件名、代码脚手架或直接构建指令。\n"
+            "6. 语气保持务实、清晰。\n"
         )
 
         if stream_handler:
             prompt = self._compose_user_prompt(
                 base_prompt_text
-                + "5. Reply in plain natural language only. Do not output JSON, code fences, or any structured protocol.\n",
+                + "7. 只输出自然语言正文，不要输出 JSON、代码块或结构化协议。\n",
                 user_input,
-                input_label="User intent",
+                input_label="用户意图",
             )
             reply = self._call(
                 prompt,
@@ -177,7 +177,7 @@ class EngineeringAgent(BaseAgent):
         prompt = self._compose_user_prompt(
             f"{base_prompt_text}\n{DISCUSS_RESPONSE_SCHEMA_TEXT}",
             user_input,
-            input_label="User intent",
+            input_label="用户意图",
         )
 
         raw = self._call(
@@ -219,20 +219,21 @@ class EngineeringAgent(BaseAgent):
         style = resolved_style or getattr(state, "style_preset", None) or "Use the current discussion context"
 
         prompt_text = (
-            f"Use the confirmed engineering preset: {style}\n\n"
+            f"使用已确认的工程方案预设：{style}\n\n"
             f"GDD:\n{gdd}\n\n"
-            f"Project Plan:\n{pm}\n\n"
-            "Produce an IMPLEMENTATION_PLAN.md for a Unity indie game developer.\n"
-            "It must include:\n"
-            "1. Unity project structure: a complete Assets directory suggestion.\n"
-            "2. System-level task breakdown: scripts, mounted objects, key components, and implementation order.\n"
-            "3. Key risks and fallback plans: list 2-3 realistic implementation risks and Plan B options.\n"
-            "Output plain Markdown only, with no extra wrapper text."
+            f"项目计划：\n{pm}\n\n"
+            "请为 Unity 独立游戏开发者生成一份 IMPLEMENTATION_PLAN.md。\n"
+            "默认使用简体中文撰写，除非用户明确要求英文。\n"
+            "必须包含：\n"
+            "1. Unity 项目结构：给出完整、实用的 Assets 目录建议。\n"
+            "2. 系统级任务拆解：覆盖脚本、挂载对象、关键组件和实现顺序。\n"
+            "3. 关键风险与兜底方案：列出 2-3 个现实的实现风险和 Plan B。\n"
+            "只输出纯 Markdown，不要添加额外包装话术。"
         )
         prompt = self._compose_user_prompt(
             prompt_text,
             user_input,
-            input_label="Current extra input",
+            input_label="当前补充输入",
         )
         final_eng = self._call(
             prompt,
@@ -323,24 +324,24 @@ class EngineeringAgent(BaseAgent):
         style = resolved_style or state.style_preset or "\u5e38\u89c4"
 
         prompt_text = (
-            "You are in DEV_COACHING mode. Only guide implementation work; do not modify the canonical plan.\n"
-            f"Engineering style: {style}\n"
-            f"Implementation plan:\n{impl_plan}\n\n"
-            "Reply using this structure:\n"
-            "1. Confirm your understanding of the user\u2019s problem in 2-3 sentences.\n"
-            "2. Give the most recommended implementation path.\n"
-            "3. Provide a lightweight Unity execution guide.\n"
-            "4. Warn about 1-2 likely pitfalls.\n"
-            "5. End by asking whether the user wants a more detailed Unity step-by-step guide or a complete coding-agent prompt.\n"
+            "你现在处于 DEV_COACHING 模式。只指导实现工作，不修改正式方案。\n"
+            "默认使用简体中文回复，除非用户明确要求英文。\n"
+            f"工程风格：{style}\n"
+            f"实现计划：\n{impl_plan}\n\n"
+            "请使用以下结构回复：\n"
+            "1. 用 2-3 句话确认你对用户问题的理解。\n"
+            "2. 给出最推荐的实现路径。\n"
+            "3. 提供轻量级 Unity 执行指引。\n"
+            "4. 提醒 1-2 个最可能踩坑的点。\n"
+            "5. 结尾询问用户是否需要更详细的 Unity 实操步骤，或一份可发给 coding agent 的完整指令。\n"
             "\n"
-            "DEVLOG (optional):\n"
-            "If this exchange contained a meaningful technical decision, an architectural trade-off, "
-            "a key problem identified, or something worth preserving for the project record, "
-            "append a brief DEVLOG note at the very end of your reply using this exact format:\n"
+            "DEVLOG（可选）：\n"
+            "如果这轮交流包含有价值的技术决策、架构取舍、关键问题，或值得写入项目记录的内容，"
+            "请在回复末尾追加一个简短 DEVLOG，严格使用以下格式：\n"
             "[DEVLOG]\n"
-            "<2-4 line note in Chinese. Start with \u300c\u51b3\u7b56\u300d\u3001\u300c\u95ee\u9898\u300d or \u300c\u7b14\u8bb0\u300d.>\n"
+            "<2-4 行中文记录。以「决策」、「问题」或「笔记」开头。>\n"
             "[/DEVLOG]\n"
-            "If the exchange was routine (simple Q&A, quick clarification, no new decision), omit the block entirely.\n"
+            "如果只是普通问答、快速澄清或没有新决策，请完全省略该块。\n"
         )
         prompt = self._compose_user_prompt(
             prompt_text,
