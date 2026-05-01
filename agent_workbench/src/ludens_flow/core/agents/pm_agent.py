@@ -169,8 +169,7 @@ class PMAgent(BaseAgent):
         return AgentResult(
             assistant_message=(
                 "项目计划已定稿。\n\n"
-                "**系统将自动进入工程阶段。**\n\n"
-                "*发送任意消息即可继续。*"
+                "**系统正在自动进入工程阶段。**"
             ),
             state_updates=updates,
             commit=CommitSpec(

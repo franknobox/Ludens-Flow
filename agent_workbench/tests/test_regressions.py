@@ -452,7 +452,7 @@ class RegressionTests(unittest.TestCase):
             api_key="test-key",
         )
 
-        with patch("ludens_flow.core.agents.base.merge_tool_schemas", return_value=[]), patch(
+        with patch("ludens_flow.core.agents.base.merge_tool_schemas") as merge_tools, patch(
             "ludens_flow.core.agents.base.generate_stream",
             return_value=iter(
                 [
@@ -468,6 +468,7 @@ class RegressionTests(unittest.TestCase):
                 stream_handler=streamed.append,
             )
 
+        merge_tools.assert_not_called()
         self.assertEqual(
             streamed,
             [

@@ -12,6 +12,7 @@ sys.path.insert(0, str(_ROOT / "src"))
 os.chdir(_ROOT)
 
 import ludens_flow.core.state as st
+from ludens_flow.capabilities.artifacts.artifacts import read_artifact
 from ludens_flow.core.agents.base import AgentResult, CommitSpec
 from ludens_flow.core.agents.design_agent import DesignAgent
 from ludens_flow.core.agents.engineering_agent import EngineeringAgent
@@ -200,23 +201,14 @@ class Step5GraphEngineTests(unittest.TestCase):
 
             state = graph_step(state, "gdd discuss")
             state = graph_step(state, "[ACTION] commit gdd", explicit_action="gdd_commit")
-            state = graph_step(state, "")
             self.assertEqual(state.phase, Phase.PM_DISCUSS.value)
 
             state = graph_step(state, "pm discuss")
             state = graph_step(state, "[ACTION] commit pm", explicit_action="pm_commit")
-            state = graph_step(state, "")
             self.assertEqual(state.phase, Phase.ENG_DISCUSS.value)
 
             state = graph_step(state, "eng discuss")
             state = graph_step(state, "[ACTION] commit eng", explicit_action="eng_commit")
-            state = graph_step(state, "")
-            self.assertEqual(state.phase, Phase.REVIEW.value)
-
-            state = graph_step(state, "")
-            self.assertEqual(state.phase, Phase.REVIEW.value)
-
-            state = graph_step(state, "")
             self.assertEqual(state.phase, Phase.POST_REVIEW_DECISION.value)
 
             state = graph_step(state, "[ACTION] option a", explicit_action="review_option_a")
@@ -224,13 +216,6 @@ class Step5GraphEngineTests(unittest.TestCase):
 
             state = graph_step(state, "eng discuss again")
             state = graph_step(state, "[ACTION] commit eng", explicit_action="eng_commit")
-            state = graph_step(state, "")
-            self.assertEqual(state.phase, Phase.REVIEW.value)
-
-            state = graph_step(state, "")
-            self.assertEqual(state.phase, Phase.REVIEW.value)
-
-            state = graph_step(state, "")
             self.assertEqual(state.phase, Phase.DEV_COACHING.value)
             self.assertTrue(state.artifact_frozen)
 
@@ -249,6 +234,43 @@ class Step5GraphEngineTests(unittest.TestCase):
         self.assertIsNotNone(state.last_error)
         self.assertIn("Cannot commit canonical artifact", state.last_error)
         self.assertEqual(state.phase, Phase.DEV_COACHING.value)
+
+    def test_commit_artifact_strips_markdown_wrapper_and_internal_markers(self):
+        state = st.load_state()
+        state.phase = Phase.GDD_DISCUSS.value
+
+        def wrapped_commit(
+            self,
+            state,
+            user_input,
+            cfg=None,
+            user_persona=None,
+            tool_event_handler=None,
+        ):
+            return AgentResult(
+                assistant_message="",
+                commit=CommitSpec(
+                    artifact_name="GDD",
+                    content=(
+                        "```markdown\n"
+                        "# 测试 GDD\n\n"
+                        "正文内容。\n"
+                        "[PROFILE_UPDATE] project_goals: hidden\n"
+                        "结尾内容。 [PROFILE_UPDATE] preferences: hidden\n"
+                        "```\n"
+                    ),
+                    reason="test",
+                ),
+                state_updates={},
+            )
+
+        with patch.object(DesignAgent, "commit", wrapped_commit):
+            result = run_agent_step(DesignAgent(), "COMMIT", state, "commit")
+
+        artifact = read_artifact("GDD", project_id=result.project_id)
+        self.assertEqual(artifact, "# 测试 GDD\n\n正文内容。\n结尾内容。\n")
+        self.assertNotIn("```markdown", artifact)
+        self.assertNotIn("[PROFILE_UPDATE]", artifact)
 
     def test_timeout_error_uses_unified_recovery_strategy(self):
         state = st.load_state()

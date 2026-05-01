@@ -124,15 +124,18 @@ class BaseAgent(ABC):
         if user_persona:
             history.append({"role": "user", "content": user_persona})
 
-        active_tools = merge_tool_schemas(tools)
-
-        if stream_handler and not active_tools:
+        # Streaming is the plain-text path. The common tool catalog is still
+        # used for non-streaming calls, but should not silently disable natural
+        # language streaming when the caller did not explicitly request tools.
+        if stream_handler and tools is None:
             return self._call_streaming(
                 user_prompt,
                 cfg,
                 history=history,
                 stream_handler=stream_handler,
             )
+
+        active_tools = merge_tool_schemas(tools)
 
         response = generate(
             system=self.system_prompt,

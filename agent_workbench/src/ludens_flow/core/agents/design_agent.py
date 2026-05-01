@@ -140,8 +140,7 @@ class DesignAgent(BaseAgent):
         return AgentResult(
             assistant_message=(
                 "GDD 已定稿。\n\n"
-                "**系统将自动进入 PM 阶段。**\n\n"
-                "*发送任意消息即可继续。*"
+                "**系统正在自动进入 PM 阶段。**"
             ),
             state_updates={"decisions": ["GDD 已提交"]},
             commit=CommitSpec(

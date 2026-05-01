@@ -1464,6 +1464,11 @@ input[type="file"] {
 }
 
 .project-toolbar-skills-btn {
+  color: #344255;
+}
+
+.project-toolbar-skills-btn:hover,
+.project-toolbar-skills-btn.is-active {
   color: #1663ff;
 }
 
