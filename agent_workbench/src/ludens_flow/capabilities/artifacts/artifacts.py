@@ -8,6 +8,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -56,6 +57,44 @@ def _now_iso() -> str:
 def compute_hash(content: str) -> str:
     """计算内容的 SHA-256 哈希值"""
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
+_OUTER_MARKDOWN_FENCE_RE = re.compile(
+    r"\A\s*(?P<fence>`{3,}|~{3,})(?:markdown|md)?[ \t]*\r?\n"
+    r"(?P<body>.*?)\r?\n(?P=fence)\s*\Z",
+    re.IGNORECASE | re.DOTALL,
+)
+_INTERNAL_AGENT_MARKER_LINE_RE = re.compile(
+    r"^\s*\[(?:PROFILE_UPDATE|PROFILE_UPDATES|STATE_UPDATE|STATE_UPDATES|EVENT|EVENTS)\]\b",
+    re.IGNORECASE,
+)
+_INLINE_INTERNAL_AGENT_MARKER_RE = re.compile(
+    r"\s*\[(?:PROFILE_UPDATE|PROFILE_UPDATES|STATE_UPDATE|STATE_UPDATES|EVENT|EVENTS)\]\s*:?\s*.*$",
+    re.IGNORECASE,
+)
+
+
+def sanitize_agent_artifact_content(content: str) -> str:
+    """Clean model protocol wrappers before saving generated artifacts."""
+    text = str(content or "").strip()
+    if not text:
+        return ""
+
+    while True:
+        fence_match = _OUTER_MARKDOWN_FENCE_RE.match(text)
+        if not fence_match:
+            break
+        text = fence_match.group("body").strip()
+
+    cleaned_lines: list[str] = []
+    for line in text.splitlines():
+        if _INTERNAL_AGENT_MARKER_LINE_RE.match(line):
+            continue
+        cleaned_line = _INLINE_INTERNAL_AGENT_MARKER_RE.sub("", line).rstrip()
+        if cleaned_line or not line.strip():
+            cleaned_lines.append(cleaned_line)
+
+    return "\n".join(cleaned_lines).strip()
 
 
 def artifact_exists(name: str, project_id: Optional[str] = None) -> bool:

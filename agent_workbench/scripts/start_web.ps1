@@ -23,6 +23,13 @@ if (Test-Path $srcDir) {
 }
 
 function Resolve-PythonRunner {
+    if ($env:LUDENS_PYTHON) {
+        if (Test-Path $env:LUDENS_PYTHON) {
+            return @{ Kind = "python"; Path = $env:LUDENS_PYTHON }
+        }
+        throw "LUDENS_PYTHON is set but does not point to an existing interpreter: $($env:LUDENS_PYTHON)"
+    }
+
     $pythonCmd = Get-Command python -ErrorAction SilentlyContinue
     if ($pythonCmd) {
         return @{ Kind = "python"; Path = $pythonCmd.Source }
@@ -33,12 +40,7 @@ function Resolve-PythonRunner {
         return @{ Kind = "py"; Path = $pyCmd.Source }
     }
 
-    $fallback = "C:\Users\11761\AppData\Local\Python\pythoncore-3.12-64\python.exe"
-    if (Test-Path $fallback) {
-        return @{ Kind = "python"; Path = $fallback }
-    }
-
-    throw "Python interpreter not found. Please configure python in PATH or update start_web.ps1."
+    throw "Python interpreter not found. Please configure python in PATH, use the py launcher, or set LUDENS_PYTHON."
 }
 
 function Ensure-WebBuild {

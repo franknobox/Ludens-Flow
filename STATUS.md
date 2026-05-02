@@ -4,7 +4,7 @@
 ---
 
 ## 当前状态
-项目主链路已经稳定运行，具备多 Agent 工作流、项目级状态管理、多项目工作台、Web/API/CLI 三套入口，以及项目工作区受控读写能力。近期重点集中在前端产品化收口、Skills 外部导入、用户画像设置入口、工程工具能力补齐与收版验收基线固化。
+项目主链路已经稳定运行，具备多 Agent 工作流、项目级状态管理、多项目工作台、Web/API 入口，以及项目工作区受控读写能力。CLI 目前作为旧版/调试入口保留，暂不作为推荐启动方式。近期重点集中在前端产品化收口、Skills 外部导入、用户画像设置入口、工程工具能力补齐与收版验收基线固化。
 
 ---
 
@@ -12,7 +12,7 @@
 | 模块 | 当前状态 |
 |---|---|
 | 多 Agent 主流程 | 已完成 `Design -> PM -> Engineering -> Review -> Decision / DEV_COACHING` 主链路与回流机制 |
-| 工程化入口 | 已完成 `pyproject.toml`、标准入口命令 `ludensflow / ludensflow-api` 与安装启动 smoke test |
+| 工程化入口 | 已完成 `pyproject.toml`、Web 启动脚本与 `ludensflow-api` 调试入口；`ludensflow` CLI 作为旧版/调试入口保留 |
 | 状态存储 | 已完成 `StateStore` 模块化拆分、revision 冲突检测、原子写入、锁文件与审计日志 |
 | 项目生命周期 | 已完成 `schema_version`、项目元数据迁移、项目导入/导出、旧 workspace 迁移 |
 | Artifact 管理 | 已支持 `GDD / PROJECT_PLAN / IMPLEMENTATION_PLAN / REVIEW_REPORT / DEVLOG` 的读写与冻结保护；前端已支持人工编辑、Markdown 渲染与 DEVLOG pipeline（冻结仅限制 Agent 自动提交） |

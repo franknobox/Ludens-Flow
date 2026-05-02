@@ -90,6 +90,9 @@ WORKBENCH_ROOT = Path(__file__).resolve().parents[3]
 WEB_DIST_DIR = WORKBENCH_ROOT / "web" / "dist"
 STATIC_DIR = WEB_DIST_DIR
 
+def _project_relative_profile_path(project_id: str) -> str:
+    return f"workspace/projects/{project_id}/USER_PROFILE.md"
+
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
@@ -206,6 +209,25 @@ def _phase_to_agent_key(phase: str | None) -> str:
     return "system"
 
 
+def _hide_obsolete_transition_message(item: dict) -> bool:
+    if not isinstance(item, dict):
+        return False
+    if str(item.get("role") or "").lower() != "assistant":
+        return False
+    content = str(item.get("content") or "")
+    return "发送任意消息即可继续" in content or "Send any message to continue" in content
+
+
+def _visible_history(history) -> list:
+    if not isinstance(history, list):
+        return []
+    return [
+        item
+        for item in history
+        if not _hide_obsolete_transition_message(item)
+    ]
+
+
 def _state_to_json(state) -> dict:
     actions = get_available_actions(state)
     return {
@@ -215,8 +237,8 @@ def _state_to_json(state) -> dict:
         "current_agent": _phase_to_agent_key(state.phase),
         "iteration_count": state.iteration_count,
         "artifact_frozen": getattr(state, "artifact_frozen", False),
-        "chat_history": getattr(state, "chat_history", []),
-        "transcript_history": getattr(state, "transcript_history", []),
+        "chat_history": _visible_history(getattr(state, "chat_history", [])),
+        "transcript_history": _visible_history(getattr(state, "transcript_history", [])),
         "last_assistant_message": getattr(state, "last_assistant_message", None),
         "last_error": getattr(state, "last_error"),
         "review_gate": getattr(state, "review_gate"),
@@ -851,6 +873,7 @@ def get_current_user_profile():
     return {
         "project_id": project_id,
         "path": profile["path"],
+        "display_path": _project_relative_profile_path(project_id),
         "content": profile["content"],
     }
 
@@ -862,6 +885,7 @@ def post_current_user_profile(req: UserProfileUpdateRequest):
     return {
         "project_id": project_id,
         "path": profile["path"],
+        "display_path": _project_relative_profile_path(project_id),
         "content": profile["content"],
     }
 

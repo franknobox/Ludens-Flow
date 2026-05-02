@@ -304,6 +304,7 @@ class ProjectLifecycleTests(unittest.TestCase):
         profile = api.get_current_user_profile()
         self.assertEqual(profile["project_id"], "alpha")
         self.assertTrue(profile["path"].endswith("USER_PROFILE.md"))
+        self.assertEqual(profile["display_path"], "workspace/projects/alpha/USER_PROFILE.md")
         self.assertIn("# USER_PROFILE", profile["content"])
 
         updated = api.post_current_user_profile(
@@ -313,6 +314,7 @@ class ProjectLifecycleTests(unittest.TestCase):
         )
 
         self.assertIn("- nickname: Tester", updated["content"])
+        self.assertEqual(updated["display_path"], "workspace/projects/alpha/USER_PROFILE.md")
         profile_path = self.workspace_root / "projects" / "alpha" / "USER_PROFILE.md"
         self.assertIn("- nickname: Tester", profile_path.read_text(encoding="utf-8"))
 

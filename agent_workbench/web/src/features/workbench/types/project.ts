@@ -56,6 +56,7 @@ export interface ProjectSettingsResponse {
 export interface UserProfileResponse {
   project_id: string;
   path: string;
+  display_path?: string;
   content: string;
 }
 

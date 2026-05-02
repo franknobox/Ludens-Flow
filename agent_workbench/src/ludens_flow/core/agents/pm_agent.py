@@ -39,27 +39,27 @@ class PMAgent(BaseAgent):
         pm_context = ""
         if existing_pm.strip():
             pm_context = (
-                "**Current PROJECT_PLAN content** "
-                "(if this is a revision pass, continue from this version):\n"
+                "**当前 PROJECT_PLAN 内容**"
+                "（如果这是一次修订，请基于这版继续，而不是从零开始）：\n"
                 f"{existing_pm}\n\n"
             )
 
         base_prompt_text = (
-            f"Existing GDD:\n{gdd_content}\n\n"
+            f"现有 GDD：\n{gdd_content}\n\n"
             f"{pm_context}"
-            "Please do the following:\n"
-            "1. As the project partner Pax, help the user confirm the most important schedule inputs, such as rough timeline and team size.\n"
-            "2. Based on the GDD, identify which features are core to the experience and which ones should be cut for a jam or MVP scope.\n"
-            "3. Assume Unity PC standalone is the main target. Do not drift into multiplayer or cross-platform planning unless the user asks for it.\n"
-            "4. Reply in clear, natural language with practical scope guidance.\n"
+            "请完成以下任务，默认使用简体中文回复，除非用户明确要求英文：\n"
+            "1. 作为项目伙伴 Pax，帮助用户确认最重要的排期输入，例如大致周期和团队规模。\n"
+            "2. 基于 GDD，判断哪些功能是核心体验，哪些功能应该在 game jam 或 MVP 范围内暂时砍掉。\n"
+            "3. 默认假设 Unity PC 单机版本是主要目标。除非用户主动提出，不要扩展到多人或跨平台规划。\n"
+            "4. 用清晰、自然的语言回复，重点给出可执行的范围控制建议。\n"
         )
 
         if stream_handler:
             prompt = self._compose_user_prompt(
                 base_prompt_text
-                + "5. Reply in plain natural language only. Do not output JSON, code fences, or any structured protocol.\n",
+                + "5. 只输出自然语言正文，不要输出 JSON、代码块或结构化协议。\n",
                 user_input,
-                input_label="User intent",
+                input_label="用户意图",
             )
             reply = self._call(
                 prompt,
@@ -75,7 +75,7 @@ class PMAgent(BaseAgent):
         prompt = self._compose_user_prompt(
             f"{base_prompt_text}\n{DISCUSS_RESPONSE_SCHEMA_TEXT}",
             user_input,
-            input_label="User intent",
+            input_label="用户意图",
         )
         raw = self._call(
             prompt,
@@ -107,27 +107,28 @@ class PMAgent(BaseAgent):
         gdd_content = read_artifact("GDD", project_id=state.project_id)
 
         prompt_text = (
-            f"Existing GDD:\n{gdd_content}\n\n"
-            "Produce a PROJECT_PLAN.md suitable for an indie game or game-jam project.\n"
-            "Requirements:\n"
-            "1. Milestones: split into M0 / M1 / M2, and make each milestone verifiable inside Unity Editor Play Mode.\n"
-            "2. Task Breakdown: group work by Unity project modules, for example Scripts / Prefabs / SceneSetup / Animations / Audio.\n"
-            "3. Unity folder structure suggestion: propose a practical Assets/ layout.\n"
-            "4. Risks and mitigation: focus on technical and scope risks, not business release planning.\n"
-            "5. If the GDD is still missing critical information, append a ChangeRequest JSON block in this exact format:\n"
+            f"现有 GDD：\n{gdd_content}\n\n"
+            "请生成一份适合独立游戏或 game jam 项目的 PROJECT_PLAN.md。\n"
+            "默认使用简体中文撰写，除非用户明确要求英文。\n"
+            "要求：\n"
+            "1. 里程碑：拆分为 M0 / M1 / M2，并让每个里程碑都能在 Unity Editor Play Mode 中验证。\n"
+            "2. 任务拆解：按 Unity 项目模块组织，例如 Scripts / Prefabs / SceneSetup / Animations / Audio。\n"
+            "3. Unity 文件夹结构建议：给出实用的 Assets/ 目录规划。\n"
+            "4. 风险与缓解：聚焦技术风险和范围风险，不做商业发行规划。\n"
+            "5. 如果 GDD 仍缺少关键信息，请在文末追加一个 ChangeRequest JSON 块，严格使用以下格式：\n"
             "<<CHANGE_REQUEST_JSON>>\n"
             "{\n"
             '  "change_requests": [\n'
-            '    {"target": "GDD", "rationale": "missing ending condition", "suggested_changes": "clarify win or fail loop", "severity": "High"}\n'
+            '    {"target": "GDD", "rationale": "缺少结束条件", "suggested_changes": "明确胜利或失败循环", "severity": "High"}\n'
             "  ]\n"
             "}\n"
             "<<END_CHANGE_REQUEST_JSON>>\n"
-            "If there is no missing information, omit that JSON block. The main body should be plain Markdown."
+            "如果没有缺失信息，请省略该 JSON 块。主体内容应为纯 Markdown。"
         )
         prompt = self._compose_user_prompt(
             prompt_text,
             user_input,
-            input_label="Current extra input",
+            input_label="当前补充输入",
         )
         final_pm_output = self._call(
             prompt,
@@ -168,8 +169,7 @@ class PMAgent(BaseAgent):
         return AgentResult(
             assistant_message=(
                 "项目计划已定稿。\n\n"
-                "**系统将自动进入工程阶段。**\n\n"
-                "*发送任意消息即可继续。*"
+                "**系统正在自动进入工程阶段。**"
             ),
             state_updates=updates,
             commit=CommitSpec(

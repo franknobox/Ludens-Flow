@@ -8,7 +8,10 @@
 import logging
 from typing import Tuple, Dict, Any, Optional
 
-from ludens_flow.capabilities.artifacts.artifacts import write_artifact
+from ludens_flow.capabilities.artifacts.artifacts import (
+    sanitize_agent_artifact_content,
+    write_artifact,
+)
 from ludens_flow.capabilities.context.prompt_templates import load_prompt_template
 from llm.modelrouter import resolve_model_config
 from ludens_flow.core.state import LudensState, save_state, write_trace_log
@@ -449,14 +452,18 @@ def run_agent_step(
                     # Review 自动门禁写入特殊原因。
                     commit_reason = f"Review Auto-Gate, decision: {result.state_updates['review_gate'].get('status', 'PND')}"
 
+                artifact_content = sanitize_agent_artifact_content(
+                    result.commit.content
+                )
+
                 logger.debug(f">>>>> WRITE ARTIFACT GUARD <<<<<")
-                logger.debug(f"Type of content: {type(result.commit.content)}")
-                logger.debug(f"Content preview: {repr(result.commit.content[:100])}...")
+                logger.debug(f"Type of content: {type(artifact_content)}")
+                logger.debug(f"Content preview: {repr(artifact_content[:100])}...")
 
                 # 写工件并记录 artifacts.log。
                 write_artifact(
                     name=art_name,
-                    content=result.commit.content,
+                    content=artifact_content,
                     reason=commit_reason,
                     actor=node_name,
                     state=state,
@@ -740,6 +747,51 @@ PHASE_NODE_MAP = {
 }
 
 
+def _auto_advance_after_node(
+    state: LudensState,
+    *,
+    stream_handler=None,
+    tool_event_handler=None,
+) -> LudensState:
+    """Advance non-interactive workflow phases without requiring dummy input."""
+    router_node = RouterNode()
+
+    for _ in range(4):
+        phase = state.phase
+        last_event = getattr(state, "last_event", "")
+
+        if phase == Phase.GDD_COMMIT.value and last_event == "GDD_COMMITTED":
+            router_node.execute(state, "")
+            return state
+
+        if phase == Phase.PM_COMMIT.value and last_event == "PM_COMMITTED":
+            router_node.execute(state, "")
+            return state
+
+        if phase == Phase.ENG_COMMIT.value and last_event == "ENG_COMMITTED":
+            router_node.execute(state, "")
+            if state.phase != Phase.REVIEW.value:
+                return state
+            review_node = PHASE_NODE_MAP.get(Phase.REVIEW.value)
+            if not review_node:
+                return state
+            state = review_node.execute(
+                state,
+                "",
+                stream_handler=stream_handler,
+                tool_event_handler=tool_event_handler,
+            )
+            continue
+
+        if phase == Phase.REVIEW.value and last_event == "REVIEW_DONE":
+            router_node.execute(state, "")
+            return state
+
+        break
+
+    return state
+
+
 def graph_step(
     state: LudensState,
     user_input: str,
@@ -788,6 +840,11 @@ def graph_step(
         state = active_node.execute(
             state,
             user_input,
+            stream_handler=stream_handler,
+            tool_event_handler=tool_event_handler,
+        )
+        state = _auto_advance_after_node(
+            state,
             stream_handler=stream_handler,
             tool_event_handler=tool_event_handler,
         )

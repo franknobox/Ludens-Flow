@@ -452,7 +452,7 @@ class RegressionTests(unittest.TestCase):
             api_key="test-key",
         )
 
-        with patch("ludens_flow.core.agents.base.merge_tool_schemas", return_value=[]), patch(
+        with patch("ludens_flow.core.agents.base.merge_tool_schemas") as merge_tools, patch(
             "ludens_flow.core.agents.base.generate_stream",
             return_value=iter(
                 [
@@ -468,6 +468,7 @@ class RegressionTests(unittest.TestCase):
                 stream_handler=streamed.append,
             )
 
+        merge_tools.assert_not_called()
         self.assertEqual(
             streamed,
             [
@@ -541,7 +542,7 @@ class RegressionTests(unittest.TestCase):
         self.assertEqual(result.assistant_message, "streamed design reply")
         self.assertEqual(result.state_updates, {})
         self.assertIsNotNone(captured["stream_handler"])
-        self.assertIn("Do not output JSON", captured["user_prompt"])
+        self.assertIn("不要输出 JSON", captured["user_prompt"])
 
     def test_engineering_plan_discuss_streaming_keeps_style_preset_update(self):
         agent = EngineeringAgent()
@@ -564,7 +565,7 @@ class RegressionTests(unittest.TestCase):
         self.assertEqual(result.assistant_message, "streamed engineering reply")
         self.assertEqual(result.state_updates.get("style_preset"), "B")
         self.assertIsNotNone(captured["stream_handler"])
-        self.assertIn("Do not output JSON", captured["user_prompt"])
+        self.assertIn("不要输出 JSON", captured["user_prompt"])
 
 
 if __name__ == "__main__":

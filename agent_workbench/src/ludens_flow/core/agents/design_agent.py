@@ -37,26 +37,26 @@ class DesignAgent(BaseAgent):
         gdd_context = ""
         if existing_gdd.strip():
             gdd_context = (
-                "**Current GDD content** "
-                "(if this is a revision pass, continue from this draft instead of restarting):\n"
+                "**当前 GDD 内容**"
+                "（如果这是一次修订，请基于这版草稿继续，而不是从零开始）：\n"
                 f"{existing_gdd}\n\n"
             )
 
         base_prompt_text = (
             f"{gdd_context}"
-            "Please do the following:\n"
-            "1. As the design partner Dam, discuss the user's current game idea warmly and help surface the key points "
-            "(core loop, player feeling, and likely development scope).\n"
-            "2. From a Unity indie-dev perspective, comment on implementation feasibility where helpful, including smarter alternatives.\n"
-            "3. Encourage creative exploration, but keep the discussion anchored to the smallest core experience that can actually ship.\n"
-            "4. If parts are still vague, ask focused follow-up questions. If the direction is already clear, affirm it and expand it.\n"
-            "5. Keep the tone lively, collaborative, and idea-forward.\n"
+            "请完成以下任务，默认使用简体中文回复，除非用户明确要求英文：\n"
+            "1. 作为策划伙伴 Dam，围绕用户当前的游戏想法展开讨论，帮助提炼关键点"
+            "（核心循环、玩家感受、可能的开发范围）。\n"
+            "2. 从 Unity 独立开发视角，在有帮助时评价实现可行性，并给出更聪明的替代方案。\n"
+            "3. 鼓励创意发散，但始终把讨论锚定在真正能做出来的最小核心体验上。\n"
+            "4. 如果仍有模糊部分，提出聚焦的追问；如果方向已经清楚，就确认方向并适度展开。\n"
+            "5. 语气保持有想法、有协作感，但不要空泛。\n"
         )
 
         if stream_handler:
             prompt = self._compose_user_prompt(
                 base_prompt_text
-                + "6. Reply in plain natural language only. Do not output JSON, code fences, or any structured protocol.\n",
+                + "6. 只输出自然语言正文，不要输出 JSON、代码块或结构化协议。\n",
                 user_input,
                 input_label="用户的需求/反馈",
             )
@@ -106,26 +106,26 @@ class DesignAgent(BaseAgent):
         tool_event_handler=None,
     ) -> AgentResult:
         prompt_text = (
-            "Based on the full discussion so far, produce a clean GDD (Game Design Document) in Markdown.\n"
-            "It should be written for a Unity indie developer or a small game-jam team.\n\n"
-            "Requirements:\n"
-            "1. Include these sections: Overview (theme / core experience / target player), Core Loop, Key Systems, "
-            "Level / Content Structure, Visual Style & Atmosphere, MVP Boundary.\n"
-            "2. In the Key Systems section, each system should include a short Unity implementation note, for example using "
-            "CharacterController, Tilemap, Rigidbody2D, NavMesh, Animator, and so on.\n"
-            "3. In the MVP Boundary section, clearly separate must-have core experience from nice-to-have ideas that can wait.\n"
-            "4. Do not invent unresolved details. If something truly was not decided in the discussion, mark it as "
-            "[TODO: clarify ...]. But anything that was discussed should be carried through faithfully.\n"
-            "5. Keep the Markdown clean and readable. A small amount of emphasis is fine, but avoid extra framing text.\n"
-            "6. Add two short ending sections:\n"
-            "   - Technical Risks: name 2-3 likely Unity implementation risks.\n"
-            "   - Creative Variants: provide 2 concise gameplay variation directions.\n"
-            "Important: this output will be saved directly. Do not add extra preface or closing remarks outside the Markdown body."
+            "请基于目前完整讨论，生成一份干净、可直接保存的 GDD（游戏设计文档），格式为 Markdown。\n"
+            "默认使用简体中文撰写，除非用户明确要求英文。文档应面向 Unity 独立游戏开发者或小型 game jam 团队。\n\n"
+            "要求：\n"
+            "1. 至少包含这些部分：概述（题材 / 核心体验 / 目标玩家）、核心循环、关键系统、"
+            "关卡 / 内容结构、视觉风格与氛围、MVP 边界。\n"
+            "2. 在关键系统部分，每个系统都要补充简短的 Unity 实现提示，例如 CharacterController、"
+            "Tilemap、Rigidbody2D、NavMesh、Animator 等。\n"
+            "3. 在 MVP 边界部分，明确区分必须完成的核心体验和可以后置的想法。\n"
+            "4. 不要编造尚未确定的细节。如果讨论中确实没有决定，请标记为“【待确认：...】”。"
+            "但已经讨论过的内容必须如实保留。\n"
+            "5. 保持 Markdown 清晰可读，可以少量使用强调，但不要加入额外包装话术。\n"
+            "6. 末尾增加两个简短部分：\n"
+            "   - 技术风险：列出 2-3 个可能出现的 Unity 实现风险。\n"
+            "   - 创意变体：给出 2 个简洁的玩法变化方向。\n"
+            "重要：这份内容会被直接保存。不要在 Markdown 正文之外添加开场白或结束语。"
         )
         prompt = self._compose_user_prompt(
             prompt_text,
             user_input,
-            input_label="Current extra input",
+            input_label="当前补充输入",
         )
         final_gdd = self._call(
             prompt,
@@ -139,11 +139,10 @@ class DesignAgent(BaseAgent):
 
         return AgentResult(
             assistant_message=(
-                "GDD finalized.\n\n"
-                "**The system will now move into the PM phase automatically.**\n\n"
-                "*Send any message to continue.*"
+                "GDD 已定稿。\n\n"
+                "**系统正在自动进入 PM 阶段。**"
             ),
-            state_updates={"decisions": ["GDD committed"]},
+            state_updates={"decisions": ["GDD 已提交"]},
             commit=CommitSpec(
                 artifact_name="GDD",
                 content=final_gdd,

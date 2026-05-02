@@ -95,7 +95,7 @@ workspace/skills/installed/<skill_id>/
 
 ### 2. 安装依赖
 
-推荐使用可编辑安装（同时安装依赖并注册 CLI 入口）：
+推荐使用可编辑安装（安装后端依赖，并注册调试入口）：
 
 ```bash
 pip install -e ./agent_workbench
@@ -103,28 +103,14 @@ pip install -e ./agent_workbench
 
 说明：
 
-- 安装后可直接使用 `ludensflow` 与 `ludensflow-api` 命令
-- 仍可通过仓库脚本启动 Web（`start_web.ps1`）
+- 当前推荐通过仓库脚本启动 Web（`start_web.ps1`）
+- `ludensflow` CLI 目前作为旧版/调试入口保留，暂不作为推荐启动方式
+- `ludensflow-api` 可作为后端 API 调试入口使用
 - 可执行 `python agent_workbench/scripts/smoke_install.py` 做安装与启动 smoke 检查
 
 ## 启动方式
 
-### 方式 A：CLI 交互模式
-
-推荐命令：
-
-```bash
-ludensflow
-```
-
-常用命令：
-
-- `/projects`：列出当前工作区内的项目
-- `/project new <project_id>`：创建并切换到新项目
-  - `/project use <project_id>`：切换到已有项目
-- `/reset` 或 `/restart`：重置当前项目状态
-
-### 方式 B：Web 工作台
+### 方式 A：Web 工作台（推荐）
 
 前置条件（首次机器环境）：
 
@@ -152,6 +138,14 @@ ludensflow
 ```
 
 访问：`http://127.0.0.1:4173/`（前端）和 `http://127.0.0.1:8011/`（API）
+
+### 方式 B：CLI 交互模式（旧版/调试）
+
+CLI 入口目前保留用于兼容和调试，不作为推荐启动方式：
+
+```bash
+ludensflow
+```
 
 ## 工作流阶段
 

@@ -76,13 +76,7 @@ See [ROADMAP.md](11_docs/ROADMAP.md) for the longer-term direction.
 pip install -e ./agent_workbench
 ```
 
-#### 2. CLI
-
-```bash
-ludensflow
-```
-
-#### 3. Web Workbench
+#### 2. Web Workbench
 
 Product mode:
 
@@ -101,6 +95,8 @@ Default URLs:
 - Product mode: `http://127.0.0.1:8011/`
 - Dev frontend: `http://127.0.0.1:4173/`
 - Dev API: `http://127.0.0.1:8011/`
+
+CLI note: the `ludensflow` command is a legacy/debug entry for now and is not the recommended way to run the project.
 
 ## Project Structure
 
