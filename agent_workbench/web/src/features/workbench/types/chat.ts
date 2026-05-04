@@ -81,7 +81,11 @@ export type WorkbenchEventType =
   | "assistant_stream_completed"
   | "state_updated"
   | "run_failed"
-  | "projects_updated";
+  | "projects_updated"
+  | "copywriting_job_queued"
+  | "copywriting_job_progress"
+  | "copywriting_job_completed"
+  | "copywriting_job_failed";
 
 export interface WorkbenchEvent {
   type: WorkbenchEventType;
@@ -104,4 +108,7 @@ export interface WorkbenchEvent {
   file_path?: string;
   change_type?: string;
   permission_request_id?: string;
+  job_id?: string;
+  status?: string;
+  response?: unknown;
 }

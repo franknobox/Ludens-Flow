@@ -106,25 +106,51 @@ export function MainPanel(props: MainPanelProps) {
       )}
 
       <section className="content" ref={contentAreaRef}>
-        {isSpecialView ? (
-          <div className="special-view-container">
-            {currentView.type === "github" ? (
-              <GithubPage />
-            ) : currentView.type === "aigc" ? (
-              <AigcPage />
-            ) : currentView.type === "copywriting" ? (
-              <CopywritingPage />
-            ) : currentView.type === "mcp" ? (
-              <McpPage tool={currentView.tool} />
-            ) : currentView.type === "skills" ? (
-              <SkillsWorkbenchPage projectId={currentProjectId} />
-            ) : (
-              <GameModelPage />
-            )}
+        <div className="special-view-container" hidden={!isSpecialView}>
+          <div className="persistent-view" hidden={currentView.type !== "github"}>
+            <GithubPage />
           </div>
-        ) : currentView.type === "agent" ? (
+          <div className="persistent-view" hidden={currentView.type !== "aigc"}>
+            <AigcPage />
+          </div>
+          <div className="persistent-view" hidden={currentView.type !== "copywriting"}>
+            <CopywritingPage key={currentProjectId} />
+          </div>
+          <div className="persistent-view" hidden={currentView.type !== "game-model"}>
+            <GameModelPage key={currentProjectId} />
+          </div>
+          <div className="persistent-view" hidden={currentView.type !== "skills"}>
+            <SkillsWorkbenchPage key={currentProjectId} projectId={currentProjectId} />
+          </div>
+          <div
+            className="persistent-view"
+            hidden={currentView.type !== "mcp" || currentView.tool !== "unity"}
+          >
+            <McpPage key={`${currentProjectId}::unity`} tool="unity" />
+          </div>
+          <div
+            className="persistent-view"
+            hidden={currentView.type !== "mcp" || currentView.tool !== "godot"}
+          >
+            <McpPage key={`${currentProjectId}::godot`} tool="godot" />
+          </div>
+          <div
+            className="persistent-view"
+            hidden={currentView.type !== "mcp" || currentView.tool !== "blender"}
+          >
+            <McpPage key={`${currentProjectId}::blender`} tool="blender" />
+          </div>
+          <div
+            className="persistent-view"
+            hidden={currentView.type !== "mcp" || currentView.tool !== "ue"}
+          >
+            <McpPage key={`${currentProjectId}::ue`} tool="ue" />
+          </div>
+        </div>
+
+        <div className="persistent-view" hidden={isSpecialView || currentView.type !== "agent"}>
           <AgentMessages
-            agentKey={currentView.id}
+            agentKey={currentView.type === "agent" ? currentView.id : currentAgent}
             currentAgent={currentAgent}
             readOnly={readOnly}
             requestInFlight={requestInFlight}
@@ -133,7 +159,9 @@ export function MainPanel(props: MainPanelProps) {
             actions={actions}
             onAction={onAction}
           />
-        ) : (
+        </div>
+
+        <div className="persistent-view" hidden={isSpecialView || currentView.type !== "file"}>
           <FileView
             currentView={currentView}
             currentProjectId={currentProjectId}
@@ -143,7 +171,7 @@ export function MainPanel(props: MainPanelProps) {
             onSaveFile={onSaveFile}
             onUploadFileAsset={onUploadFileAsset}
           />
-        )}
+        </div>
       </section>
 
       {!isSpecialView && currentView.type === "agent" ? (

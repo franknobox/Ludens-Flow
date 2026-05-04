@@ -18,6 +18,8 @@ class LLMConfig:
     api_key: Optional[str]
     base_url: Optional[str] = None
     temperature: float = 0.2
+    timeout: float = 120.0
+    max_retries: int = 0
 
 
 _OPENAI_COMPATIBLE_PROVIDERS = {
@@ -81,6 +83,15 @@ def _coerce_temperature(value: Any, default: float = 0.2) -> float:
         return default
 
 
+def _coerce_int(value: Any, default: int = 0) -> int:
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def build_config(
     *,
     provider: Optional[str] = None,
@@ -88,6 +99,8 @@ def build_config(
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,
     temperature: Optional[float] = None,
+    timeout: Optional[float] = None,
+    max_retries: Optional[int] = None,
     strict: bool = True,
 ) -> LLMConfig:
     resolved_provider = (provider or os.getenv("LLM_PROVIDER", "openai")).strip().lower()
@@ -100,6 +113,16 @@ def build_config(
     )
     resolved_temperature = _coerce_temperature(
         temperature if temperature is not None else os.getenv("LLM_TEMPERATURE", "0.2")
+    )
+    resolved_timeout = _coerce_temperature(
+        timeout if timeout is not None else os.getenv("LLM_TIMEOUT_SECONDS", "120"),
+        120.0,
+    )
+    resolved_max_retries = _coerce_int(
+        max_retries
+        if max_retries is not None
+        else os.getenv("LLM_MAX_RETRIES", "0"),
+        0,
     )
     resolved_api_key = _resolve_api_key(resolved_provider, api_key)
 
@@ -119,6 +142,8 @@ def build_config(
         api_key=resolved_api_key,
         base_url=resolved_base_url,
         temperature=resolved_temperature,
+        timeout=max(5.0, resolved_timeout),
+        max_retries=max(0, resolved_max_retries),
     )
 
 
@@ -139,7 +164,12 @@ def generate(
     if cfg.provider in _OPENAI_COMPATIBLE_PROVIDERS:
         from openai import OpenAI
 
-        client = OpenAI(api_key=cfg.api_key, base_url=cfg.base_url, timeout=120.0)
+        client = OpenAI(
+            api_key=cfg.api_key,
+            base_url=cfg.base_url,
+            timeout=cfg.timeout,
+            max_retries=cfg.max_retries,
+        )
 
         messages: List[Dict[str, Any]] = [{"role": "system", "content": system}]
         if history:
@@ -197,7 +227,12 @@ def generate_stream(
     if cfg.provider in _OPENAI_COMPATIBLE_PROVIDERS:
         from openai import OpenAI
 
-        client = OpenAI(api_key=cfg.api_key, base_url=cfg.base_url, timeout=120.0)
+        client = OpenAI(
+            api_key=cfg.api_key,
+            base_url=cfg.base_url,
+            timeout=cfg.timeout,
+            max_retries=cfg.max_retries,
+        )
 
         messages: List[Dict[str, Any]] = [{"role": "system", "content": system}]
         if history:

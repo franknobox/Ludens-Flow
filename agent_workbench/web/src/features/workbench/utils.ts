@@ -10,7 +10,13 @@ import type {
 } from "./types";
 
 export function toErrorMessage(error: unknown): string {
+  if (error instanceof DOMException && error.name === "AbortError") {
+    return "请求超时，请稍后重试，或换一个更快的模型。";
+  }
   if (error instanceof Error) {
+    if (error.name === "AbortError") {
+      return "请求超时，请稍后重试，或换一个更快的模型。";
+    }
     return error.message;
   }
   return String(error);

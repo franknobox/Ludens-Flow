@@ -119,7 +119,7 @@
 .copywriting-hero {
   flex-shrink: 0;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
 }
@@ -194,6 +194,39 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 12px;
+}
+
+.copywriting-constraint-grid {
+  margin-top: 14px;
+}
+
+.copywriting-field-toggle {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0;
+  cursor: pointer;
+}
+
+.copywriting-field-toggle span {
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.copywriting-field-toggle strong {
+  color: var(--primary);
+  font-size: 16px;
+  line-height: 1;
+  font-weight: 900;
+}
+
+.copywriting-collapsible-field {
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
 }
 
 .copywriting-field {
@@ -501,6 +534,97 @@
   font-weight: 900;
 }
 
+.copywriting-external-reference-card {
+  align-items: flex-start;
+}
+
+.copywriting-external-reference-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.copywriting-add-reference-btn {
+  flex-shrink: 0;
+  width: auto;
+  height: auto;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--primary);
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.copywriting-external-reference-list {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.copywriting-external-reference-file {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 8px;
+  padding: 7px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.copywriting-external-file-icon {
+  width: 34px;
+  height: 28px;
+  margin-top: 0;
+  border-radius: 10px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.copywriting-external-reference-file strong,
+.copywriting-external-reference-file small {
+  display: block;
+}
+
+.copywriting-external-reference-file strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.copywriting-external-reference-file small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.copywriting-external-reference-file button {
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.copywriting-external-reference-file button:hover {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
 .copywriting-codex-note {
   margin: 0 16px 16px;
   padding: 14px;
@@ -524,6 +648,32 @@
   color: var(--muted);
   font-size: 12px;
   line-height: 1.55;
+}
+
+.copywriting-table-preview {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--primary-soft);
+  color: var(--text);
+}
+
+.copywriting-table-preview strong,
+.copywriting-table-preview span {
+  display: block;
+}
+
+.copywriting-table-preview strong {
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.copywriting-table-preview span {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-word;
 }
 
 @media (max-width: 1280px) {

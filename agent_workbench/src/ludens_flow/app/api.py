@@ -85,6 +85,9 @@ _EVENT_SUBSCRIBERS: dict[str, list[queue.Queue[dict]]] = {}
 _EVENT_SUBSCRIBERS_GUARD = threading.Lock()
 _PERMISSION_REQUESTS: dict[str, dict] = {}
 _PERMISSION_REQUESTS_GUARD = threading.Lock()
+_COPYWRITING_JOBS: dict[str, dict] = {}
+_COPYWRITING_JOBS_GUARD = threading.Lock()
+_MAX_COPYWRITING_JOBS = 50
 
 WORKBENCH_ROOT = Path(__file__).resolve().parents[3]
 WEB_DIST_DIR = WORKBENCH_ROOT / "web" / "dist"
@@ -173,7 +176,13 @@ class DesignCopywritingGenerateRequest(BaseModel):
     must_include: list[str] | None = None
     must_avoid: list[str] | None = None
     reference_ids: list[str] | None = None
+    external_references: list[dict] | None = None
     language: str = "zh-CN"
+
+
+class DesignCopywritingJobCreateResponse(BaseModel):
+    job_id: str
+    status: str = "queued"
 
 
 class ProjectExportRequest(BaseModel):
@@ -332,6 +341,52 @@ def _event_payload(
 
 def _format_sse(payload: dict) -> str:
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+def _set_copywriting_job(job_id: str, update: dict) -> dict:
+    with _COPYWRITING_JOBS_GUARD:
+        existing = dict(_COPYWRITING_JOBS.get(job_id, {}))
+        existing.update(update)
+        existing["updated_at"] = datetime.now(timezone.utc).isoformat()
+        _COPYWRITING_JOBS[job_id] = existing
+        if len(_COPYWRITING_JOBS) > _MAX_COPYWRITING_JOBS:
+            stale_ids = sorted(
+                _COPYWRITING_JOBS,
+                key=lambda item: str(_COPYWRITING_JOBS[item].get("updated_at", "")),
+            )
+            for stale_id in stale_ids[: len(_COPYWRITING_JOBS) - _MAX_COPYWRITING_JOBS]:
+                _COPYWRITING_JOBS.pop(stale_id, None)
+        return dict(existing)
+
+
+def _get_copywriting_job(job_id: str) -> dict | None:
+    with _COPYWRITING_JOBS_GUARD:
+        job = _COPYWRITING_JOBS.get(job_id)
+        return dict(job) if job else None
+
+
+def _publish_copywriting_job_event(
+    project_id: str,
+    job_id: str,
+    event_type: str,
+    *,
+    status: str,
+    message: str | None = None,
+    response: dict | None = None,
+    error: str | None = None,
+) -> None:
+    payload = _event_payload(
+        event_type,
+        project_id=project_id,
+        message=message,
+        error=error,
+    ) | {
+        "job_id": job_id,
+        "status": status,
+    }
+    if response is not None:
+        payload["response"] = response
+    _publish_project_event(project_id, payload)
 
 
 def _build_stream_handler(project_id: str, state) -> callable:
@@ -1421,8 +1476,122 @@ def post_generate_current_project_copywriting(req: DesignCopywritingGenerateRequ
     project_id = resolve_project_id(getattr(state, "project_id", None))
     request_data = req.dict()
     normalized_request = normalize_design_copywriting_request(request_data)
-    response = generate_design_copywriting(normalized_request, project_id=project_id)
+    response = generate_design_copywriting(
+        normalized_request,
+        project_id=project_id,
+        external_references=request_data.get("external_references"),
+    )
     return response.to_dict()
+
+
+def _run_copywriting_job(job_id: str, project_id: str, request_data: dict) -> None:
+    def publish_progress(message: str) -> None:
+        _set_copywriting_job(
+            job_id,
+            {
+                "status": "running",
+                "message": message,
+            },
+        )
+        _publish_copywriting_job_event(
+            project_id,
+            job_id,
+            "copywriting_job_progress",
+            status="running",
+            message=message,
+        )
+
+    try:
+        publish_progress("正在整理加工要求与输出格式...")
+        normalized_request = normalize_design_copywriting_request(request_data)
+        response = generate_design_copywriting(
+            normalized_request,
+            project_id=project_id,
+            external_references=request_data.get("external_references"),
+            progress_handler=publish_progress,
+        )
+        response_payload = response.to_dict()
+        _set_copywriting_job(
+            job_id,
+            {
+                "status": "completed",
+                "message": "生成完成。",
+                "response": response_payload,
+            },
+        )
+        _publish_copywriting_job_event(
+            project_id,
+            job_id,
+            "copywriting_job_completed",
+            status="completed",
+            message="生成完成。",
+            response=response_payload,
+        )
+    except Exception as exc:
+        error_text = str(exc) or "Copywriting generation failed."
+        logger.exception("copywriting job failed")
+        _set_copywriting_job(
+            job_id,
+            {
+                "status": "failed",
+                "message": "生成失败。",
+                "error": error_text,
+            },
+        )
+        _publish_copywriting_job_event(
+            project_id,
+            job_id,
+            "copywriting_job_failed",
+            status="failed",
+            message="生成失败。",
+            error=error_text,
+        )
+
+
+@app.post("/api/projects/current/copywriting/jobs")
+def post_create_current_project_copywriting_job(req: DesignCopywritingGenerateRequest):
+    state = st.load_state()
+    project_id = resolve_project_id(getattr(state, "project_id", None))
+    request_data = req.dict()
+    normalized_request = normalize_design_copywriting_request(request_data)
+    request_data.update(normalized_request.to_dict())
+
+    job_id = uuid.uuid4().hex
+    _set_copywriting_job(
+        job_id,
+        {
+            "job_id": job_id,
+            "project_id": project_id,
+            "status": "queued",
+            "message": "文案生成任务已创建。",
+            "request": normalized_request.to_dict(),
+        },
+    )
+    _publish_copywriting_job_event(
+        project_id,
+        job_id,
+        "copywriting_job_queued",
+        status="queued",
+        message="文案生成任务已创建。",
+    )
+
+    worker = threading.Thread(
+        target=_run_copywriting_job,
+        args=(job_id, project_id, request_data),
+        daemon=True,
+    )
+    worker.start()
+    return DesignCopywritingJobCreateResponse(job_id=job_id).dict()
+
+
+@app.get("/api/projects/current/copywriting/jobs/{job_id}")
+def get_current_project_copywriting_job(job_id: str):
+    state = st.load_state()
+    project_id = resolve_project_id(getattr(state, "project_id", None))
+    job = _get_copywriting_job(job_id)
+    if not job or job.get("project_id") != project_id:
+        raise HTTPException(status_code=404, detail="Copywriting job not found.")
+    return job
 
 
 @app.get("/")
