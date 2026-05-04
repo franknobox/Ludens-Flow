@@ -271,6 +271,22 @@ def _normalize_mcp_connections(raw: Any) -> List[Dict[str, Any]]:
     return entries
 
 
+def _normalize_github_repo(raw: Any) -> Dict[str, str]:
+    if not isinstance(raw, dict):
+        return {}
+    owner = str(raw.get("owner") or "").strip()
+    repo = str(raw.get("repo") or "").strip()
+    if not owner or not repo:
+        return {}
+    result = {
+        "owner": owner,
+        "repo": repo.removesuffix(".git"),
+    }
+    url = str(raw.get("url") or "").strip()
+    result["url"] = url or f"https://github.com/{result['owner']}/{result['repo']}"
+    return result
+
+
 def _normalize_workspace_id(workspace_id: Optional[str], fallback: str) -> str:
     normalized = _normalize_project_id(workspace_id or fallback)
     if not normalized:
@@ -492,6 +508,7 @@ def _migrate_project_meta_payload(
         ),
         "model_routing": _normalize_model_routing(meta.get("model_routing")),
         "mcp_connections": _normalize_mcp_connections(meta.get("mcp_connections")),
+        "github_repo": _normalize_github_repo(meta.get("github_repo")),
         "unity_root": _first_workspace_root(workspaces, kind="unity"),
         "workspaces": workspaces,
     }
@@ -540,6 +557,7 @@ def _build_project_meta_record(
         ),
         "model_routing": _normalize_model_routing(meta.get("model_routing")),
         "mcp_connections": _normalize_mcp_connections(meta.get("mcp_connections")),
+        "github_repo": _normalize_github_repo(meta.get("github_repo")),
         "unity_root": _first_workspace_root(workspaces, kind="unity"),
         "workspaces": workspaces,
     }
@@ -561,6 +579,7 @@ def _upsert_project_meta(
     agent_file_write_confirm_required: Any = _UNSET,
     model_routing: Any = _UNSET,
     mcp_connections: Any = _UNSET,
+    github_repo: Any = _UNSET,
     unity_root: Any = _UNSET,
     workspaces: Any = _UNSET,
 ) -> Dict[str, Any]:
@@ -605,6 +624,7 @@ def _upsert_project_meta(
         ),
         "model_routing": _normalize_model_routing(existing.get("model_routing")),
         "mcp_connections": _normalize_mcp_connections(existing.get("mcp_connections")),
+        "github_repo": _normalize_github_repo(existing.get("github_repo")),
         "unity_root": _first_workspace_root(existing_workspaces, kind="unity"),
         "workspaces": existing_workspaces,
     }
@@ -625,6 +645,8 @@ def _upsert_project_meta(
         meta["model_routing"] = _normalize_model_routing(model_routing)
     if mcp_connections is not _UNSET:
         meta["mcp_connections"] = _normalize_mcp_connections(mcp_connections)
+    if github_repo is not _UNSET:
+        meta["github_repo"] = _normalize_github_repo(github_repo)
     if unity_root is not _UNSET:
         if str(unity_root or "").strip():
             next_workspaces = [
@@ -791,6 +813,7 @@ def create_project(
     agent_file_write_confirm_required: Any = _UNSET,
     model_routing: Any = _UNSET,
     mcp_connections: Any = _UNSET,
+    github_repo: Any = _UNSET,
     unity_root: Any = _UNSET,
     workspaces: Any = _UNSET,
 ) -> Dict[str, Any]:
@@ -808,6 +831,7 @@ def create_project(
         agent_file_write_confirm_required=agent_file_write_confirm_required,
         model_routing=model_routing,
         mcp_connections=mcp_connections,
+        github_repo=github_repo,
         unity_root=unity_root,
         workspaces=workspaces,
     )
@@ -830,6 +854,7 @@ def touch_project(
     agent_file_write_confirm_required: Any = _UNSET,
     model_routing: Any = _UNSET,
     mcp_connections: Any = _UNSET,
+    github_repo: Any = _UNSET,
     unity_root: Any = _UNSET,
     workspaces: Any = _UNSET,
 ) -> Dict[str, Any]:
@@ -850,6 +875,7 @@ def touch_project(
         agent_file_write_confirm_required=agent_file_write_confirm_required,
         model_routing=model_routing,
         mcp_connections=mcp_connections,
+        github_repo=github_repo,
         unity_root=unity_root,
         workspaces=workspaces,
     )
@@ -1108,6 +1134,27 @@ def set_project_mcp_connections(
         ),
         "model_routing": _normalize_model_routing(meta.get("model_routing")),
         "mcp_connections": _normalize_mcp_connections(meta.get("mcp_connections")),
+    }
+
+
+def get_project_github_repo(project_id: Optional[str] = None) -> Dict[str, str]:
+    resolved = resolve_project_id(project_id)
+    if not resolved:
+        raise ValueError("Project id is required.")
+    return _normalize_github_repo(_read_project_meta(resolved).get("github_repo"))
+
+
+def set_project_github_repo(
+    github_repo: Any, *, project_id: Optional[str] = None
+) -> Dict[str, Any]:
+    resolved = resolve_project_id(project_id)
+    if not resolved:
+        raise ValueError("Project id is required.")
+
+    meta = touch_project(resolved, github_repo=github_repo)
+    return {
+        "project_id": resolved,
+        "github_repo": _normalize_github_repo(meta.get("github_repo")),
     }
 
 

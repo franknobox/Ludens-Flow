@@ -1,18 +1,66 @@
-import { useState, useEffect } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 
-import { SettingsPage } from "./features/settings/SettingsPage";
+import { WelcomePage } from "./features/welcome/WelcomePage";
 import { WorkbenchPage } from "./features/workbench/WorkbenchPage";
 import { ProjectRuntimeProvider } from "./features/workbench/state/ProjectRuntimeContext";
 
+const SettingsPage = lazy(() =>
+  import("./features/settings/SettingsPage").then((module) => ({
+    default: module.SettingsPage,
+  })),
+);
+
 type TopLevelRoute = "workbench" | "settings";
+
+function LazySettingsRoute({ isActive }: { isActive: boolean }) {
+  const [shouldMount, setShouldMount] = useState(isActive);
+
+  useEffect(() => {
+    if (isActive) {
+      setShouldMount(true);
+    }
+  }, [isActive]);
+
+  if (!shouldMount) {
+    return null;
+  }
+
+  return (
+    <div className="app-stage-route" hidden={!isActive}>
+      <Suspense fallback={<div className="route-loading">加载设置...</div>}>
+        <SettingsPage isActive={isActive} />
+      </Suspense>
+    </div>
+  );
+}
 
 export default function App() {
   const [route, setRoute] = useState<TopLevelRoute>("workbench");
+  const [showWelcome, setShowWelcome] = useState(() => {
+    return sessionStorage.getItem("ludens_welcome_seen") !== "1";
+  });
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("ludens_theme") || "light";
     document.documentElement.setAttribute("data-theme", savedTheme);
   }, []);
+
+  useEffect(() => {
+    if (!showWelcome) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      sessionStorage.setItem("ludens_welcome_seen", "1");
+      setShowWelcome(false);
+    }, 1600);
+
+    return () => window.clearTimeout(timer);
+  }, [showWelcome]);
+
+  if (showWelcome) {
+    return <WelcomePage />;
+  }
 
   return (
     <ProjectRuntimeProvider>
@@ -64,9 +112,7 @@ export default function App() {
           <div className="app-stage-route" hidden={route !== "workbench"}>
             <WorkbenchPage isActive={route === "workbench"} />
           </div>
-          <div className="app-stage-route" hidden={route !== "settings"}>
-            <SettingsPage isActive={route === "settings"} />
-          </div>
+          <LazySettingsRoute isActive={route === "settings"} />
         </main>
       </div>
     </ProjectRuntimeProvider>

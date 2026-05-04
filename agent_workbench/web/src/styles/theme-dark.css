@@ -636,11 +636,43 @@
   color: var(--text) !important;
 }
 
+[data-theme="dark"] .github-subtitle,
+[data-theme="dark"] .github-bind-copy span,
+[data-theme="dark"] .github-stat-card span {
+  color: var(--muted) !important;
+}
+
+[data-theme="dark"] .github-auth-chip,
+[data-theme="dark"] .github-bind-panel,
+[data-theme="dark"] .github-stat-card,
+[data-theme="dark"] .github-message,
+[data-theme="dark"] .github-empty-state {
+  background: var(--panel) !important;
+  border-color: var(--line) !important;
+}
+
+[data-theme="dark"] .github-bind-copy strong,
+[data-theme="dark"] .github-stat-card strong {
+  color: var(--text) !important;
+}
+
+[data-theme="dark"] .github-message.danger {
+  background: var(--danger-soft, rgba(220, 80, 70, 0.12)) !important;
+  border-color: rgba(220, 80, 70, 0.24) !important;
+  color: var(--danger, #e05252) !important;
+}
+
 /* Topbar action buttons */
 [data-theme="dark"] .github-action-btn {
   background: transparent !important;
   border-color: var(--line) !important;
   color: var(--muted) !important;
+}
+
+[data-theme="dark"] .github-action-btn.primary {
+  background: var(--primary) !important;
+  border-color: var(--primary) !important;
+  color: #fff !important;
 }
 
 [data-theme="dark"] .github-action-btn:hover {

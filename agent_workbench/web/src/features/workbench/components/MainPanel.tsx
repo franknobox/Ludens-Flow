@@ -1,4 +1,11 @@
-import type { RefObject } from "react";
+import {
+  Suspense,
+  lazy,
+  useEffect,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 
 import { agentName } from "../utils";
 import type {
@@ -10,15 +17,40 @@ import type {
   WorkflowAction,
   WorkspaceFileItem,
 } from "../types";
-import { GithubPage } from "../../github/components/GithubPage";
-import { AigcPage } from "../../aigc/components/AigcPage";
-import { CopywritingPage } from "../../copywriting/components/CopywritingPage";
-import { GameModelPage } from "../../game-model/components/GameModelPage";
-import { McpPage } from "../../mcp/components/McpPage";
-import { SkillsWorkbenchPage } from "../../skills/components/SkillsWorkbenchPage";
 import { AgentMessages } from "./mainPanel/AgentMessages";
 import { Composer } from "./mainPanel/Composer";
 import { FileView } from "./mainPanel/FileView";
+
+const GithubPage = lazy(() =>
+  import("../../github/components/GithubPage").then((module) => ({
+    default: module.GithubPage,
+  })),
+);
+const AigcPage = lazy(() =>
+  import("../../aigc/components/AigcPage").then((module) => ({
+    default: module.AigcPage,
+  })),
+);
+const CopywritingPage = lazy(() =>
+  import("../../copywriting/components/CopywritingPage").then((module) => ({
+    default: module.CopywritingPage,
+  })),
+);
+const GameModelPage = lazy(() =>
+  import("../../game-model/components/GameModelPage").then((module) => ({
+    default: module.GameModelPage,
+  })),
+);
+const McpPage = lazy(() =>
+  import("../../mcp/components/McpPage").then((module) => ({
+    default: module.McpPage,
+  })),
+);
+const SkillsWorkbenchPage = lazy(() =>
+  import("../../skills/components/SkillsWorkbenchPage").then((module) => ({
+    default: module.SkillsWorkbenchPage,
+  })),
+);
 
 interface MainPanelProps {
   currentView: ViewState;
@@ -48,6 +80,34 @@ interface MainPanelProps {
     name: string,
     dataUrl: string,
   ) => Promise<{ markdown: string }>;
+}
+
+function LazyPersistentView({
+  active,
+  children,
+}: {
+  active: boolean;
+  children: ReactNode;
+}) {
+  const [shouldMount, setShouldMount] = useState(active);
+
+  useEffect(() => {
+    if (active) {
+      setShouldMount(true);
+    }
+  }, [active]);
+
+  if (!shouldMount) {
+    return null;
+  }
+
+  return (
+    <div className="persistent-view" hidden={!active}>
+      <Suspense fallback={<div className="empty">加载中...</div>}>
+        {children}
+      </Suspense>
+    </div>
+  );
 }
 
 export function MainPanel(props: MainPanelProps) {
@@ -107,45 +167,39 @@ export function MainPanel(props: MainPanelProps) {
 
       <section className="content" ref={contentAreaRef}>
         <div className="special-view-container" hidden={!isSpecialView}>
-          <div className="persistent-view" hidden={currentView.type !== "github"}>
+          <LazyPersistentView active={currentView.type === "github"}>
             <GithubPage />
-          </div>
-          <div className="persistent-view" hidden={currentView.type !== "aigc"}>
+          </LazyPersistentView>
+          <LazyPersistentView active={currentView.type === "aigc"}>
             <AigcPage />
-          </div>
-          <div className="persistent-view" hidden={currentView.type !== "copywriting"}>
+          </LazyPersistentView>
+          <LazyPersistentView active={currentView.type === "copywriting"}>
             <CopywritingPage key={currentProjectId} />
-          </div>
-          <div className="persistent-view" hidden={currentView.type !== "game-model"}>
+          </LazyPersistentView>
+          <LazyPersistentView active={currentView.type === "game-model"}>
             <GameModelPage key={currentProjectId} />
-          </div>
-          <div className="persistent-view" hidden={currentView.type !== "skills"}>
+          </LazyPersistentView>
+          <LazyPersistentView active={currentView.type === "skills"}>
             <SkillsWorkbenchPage key={currentProjectId} projectId={currentProjectId} />
-          </div>
-          <div
-            className="persistent-view"
-            hidden={currentView.type !== "mcp" || currentView.tool !== "unity"}
+          </LazyPersistentView>
+          <LazyPersistentView
+            active={currentView.type === "mcp" && currentView.tool === "unity"}
           >
             <McpPage key={`${currentProjectId}::unity`} tool="unity" />
-          </div>
-          <div
-            className="persistent-view"
-            hidden={currentView.type !== "mcp" || currentView.tool !== "godot"}
+          </LazyPersistentView>
+          <LazyPersistentView
+            active={currentView.type === "mcp" && currentView.tool === "godot"}
           >
             <McpPage key={`${currentProjectId}::godot`} tool="godot" />
-          </div>
-          <div
-            className="persistent-view"
-            hidden={currentView.type !== "mcp" || currentView.tool !== "blender"}
+          </LazyPersistentView>
+          <LazyPersistentView
+            active={currentView.type === "mcp" && currentView.tool === "blender"}
           >
             <McpPage key={`${currentProjectId}::blender`} tool="blender" />
-          </div>
-          <div
-            className="persistent-view"
-            hidden={currentView.type !== "mcp" || currentView.tool !== "ue"}
-          >
+          </LazyPersistentView>
+          <LazyPersistentView active={currentView.type === "mcp" && currentView.tool === "ue"}>
             <McpPage key={`${currentProjectId}::ue`} tool="ue" />
-          </div>
+          </LazyPersistentView>
         </div>
 
         <div className="persistent-view" hidden={isSpecialView || currentView.type !== "agent"}>

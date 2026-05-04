@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { workbenchApi } from "../workbench/api";
 import { ProjectToolbar } from "../workbench/components/ProjectToolbar";
@@ -145,6 +145,7 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
   const [modelRoutingDraft, setModelRoutingDraft] = useState("{}");
   const [modelRoutingDirty, setModelRoutingDirty] = useState(false);
   const [modelRoutingProjectId, setModelRoutingProjectId] = useState("");
+  const refreshSeqRef = useRef(0);
   const [theme, setTheme] = useState(
     () => document.documentElement.getAttribute("data-theme") || "light",
   );
@@ -210,6 +211,7 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
   }, [modelRoutingDraft]);
 
   const refresh = async () => {
+    const refreshSeq = ++refreshSeqRef.current;
     setLoading(true);
     setErrorText("");
     try {
@@ -230,11 +232,13 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
           workbenchApi.getCurrentUserProfile(),
         ]);
 
-      setWorkspaces(
-        workspacesResult.status === "fulfilled"
-          ? workspacesResult.value.workspaces || []
-          : [],
-      );
+      if (refreshSeq !== refreshSeqRef.current) {
+        return;
+      }
+
+      if (workspacesResult.status === "fulfilled") {
+        setWorkspaces(workspacesResult.value.workspaces || []);
+      }
       setTools(
         toolsResult.status === "fulfilled" ? toolsResult.value.tools || [] : [],
       );
@@ -271,9 +275,13 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
         setUserProfileDirty(false);
       }
     } catch (error) {
-      setErrorText(toErrorMessage(error));
+      if (refreshSeq === refreshSeqRef.current) {
+        setErrorText(toErrorMessage(error));
+      }
     } finally {
-      setLoading(false);
+      if (refreshSeq === refreshSeqRef.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -346,6 +354,8 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
 
     setSubmitting(true);
     clearMessages();
+    refreshSeqRef.current += 1;
+    setLoading(false);
     try {
       const response = await workbenchApi.addCurrentWorkspace({
         root,
@@ -375,6 +385,8 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
     if (!confirmed) return;
 
     clearMessages();
+    refreshSeqRef.current += 1;
+    setLoading(false);
     try {
       const response = await workbenchApi.deleteCurrentWorkspace(workspace.id);
       setWorkspaces(response.workspaces || []);
