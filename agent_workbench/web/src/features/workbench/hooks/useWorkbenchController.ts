@@ -71,6 +71,10 @@ function mergeChatResponse(
   };
 }
 
+function responseAgent(response: ChatResponse, fallbackPhase: string): AgentKey {
+  return phaseToAgent(response.phase || fallbackPhase);
+}
+
 function fileCacheKey(projectId: string, fileId: string): string {
   return `${projectId}::${fileId}`;
 }
@@ -506,6 +510,11 @@ export function useWorkbenchController() {
       }
       setWarningText((response.attachment_warnings || []).join("\n"));
       setModel((prev) => mergeChatResponse(prev, response));
+      setCurrentView((prev) =>
+        prev.type === "agent"
+          ? { type: "agent", id: responseAgent(response, model.phase) }
+          : prev,
+      );
       setFileCache({});
       window.setTimeout(() => {
         if (Date.now() - lastEventAtRef.current > 800) {
@@ -545,6 +554,11 @@ export function useWorkbenchController() {
       }
       setWarningText("");
       setModel((prev) => mergeChatResponse(prev, response));
+      setCurrentView((prev) =>
+        prev.type === "agent"
+          ? { type: "agent", id: responseAgent(response, model.phase) }
+          : prev,
+      );
       setFileCache({});
       window.setTimeout(() => {
         if (Date.now() - lastEventAtRef.current > 800) {

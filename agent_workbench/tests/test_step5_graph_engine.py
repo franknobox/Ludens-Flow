@@ -216,6 +216,8 @@ class Step5GraphEngineTests(unittest.TestCase):
 
             state = graph_step(state, "eng discuss again")
             state = graph_step(state, "[ACTION] commit eng", explicit_action="eng_commit")
+            self.assertEqual(state.phase, Phase.POST_REVIEW_DECISION.value)
+            state = graph_step(state, "[ACTION] option c", explicit_action="review_option_c")
             self.assertEqual(state.phase, Phase.DEV_COACHING.value)
             self.assertTrue(state.artifact_frozen)
 
