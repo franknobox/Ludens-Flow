@@ -164,38 +164,71 @@ ludensflow
 6. `DEV_COACHING`
    - 主工件冻结后进入开发辅导模式
 
-## 多项目工作区结构
+## MCP 引擎接入
 
-当前推荐的工作区结构如下：
+当前已支持通过 MCP（Model Context Protocol）连接外部游戏引擎。连接配置内置在前端，可直接在 Web 工作台操作：
+
+- 进入 `设置 -> 引擎连接`，添加或编辑 MCP 连接（如 Blender、Unity、Godot、Unreal）。
+- 连接配置按项目持久化，保存在对应项目的元数据中。
+
+已实机验证的能力（Blender）：
+
+- `engine_list_scene`：列出当前场景中的对象
+- `engine_create_object`：在场景中创建对象
+- `engine_save_scene`：保存场景文件
+
+其他引擎（Unity / Godot / Unreal）当前采用安全沙箱校验：写入类操作限定在项目可写工作区内，并对脚本扩展名、运行模式等做白名单检查。
+
+安全与行为说明：
+
+- **写操作权限确认**：MCP 工具执行涉及写入时，前端会弹出权限确认；如果未配置权限处理器或用户未明确允许，写入会被拒绝（fail-closed）。
+- **健康检查 TTL 缓存**：MCP 连接的健康检查带 30 秒 TTL 缓存，避免短时间内重复启动外部进程。
+- **工具事件可观测**：Agent 调用工具时，前端会实时展示工具进度事件；历史消息中也会汇总展示已执行的工具名称与次数。
+
+## Agent Workbench 目录结构
 
 ```text
-workspace/
-├── .active_project
-├── skills/
-│   └── installed/
-│       └── <skill_id>/
-│           ├── skill.json
-│           └── prompt.md
-└── projects/
-    ├── project-1/
-    │   ├── state.json
-    │   ├── USER_PROFILE.md
-    │   ├── GDD.md
-    │   ├── PROJECT_PLAN.md
-    │   ├── IMPLEMENTATION_PLAN.md
-    │   ├── REVIEW_REPORT.md
-    │   ├── logs/
-    │   ├── images/
-    │   ├── dev_notes/
-    │   └── patches/
-    └── <another_project>/
+agent_workbench/
+├── pyproject.toml          # Python 包配置与依赖
+├── README.md               # 本文件
+├── prompts/                # Agent 提示词模板
+├── scripts/                # 启动与辅助脚本
+│   ├── start_web.ps1
+│   └── smoke_install.py
+├── src/                    # 后端源码
+│   ├── ludens_flow/        # 主包
+│   │   ├── app/            # FastAPI 应用与路由（api.py 等）
+│   │   ├── capabilities/   # 能力模块
+│   │   │   ├── artifacts/  # 工件读写管理
+│   │   │   ├── copywriting/# 文案生成能力
+│   │   │   ├── github/     # GitHub 集成
+│   │   │   ├── ingest/     # 文件摄取
+│   │   │   ├── mcp/        # MCP 引擎接入
+│   │   │   │   └── adapters/  # 各引擎适配器
+│   │   │   ├── skills/     # Skills 管理
+│   │   │   ├── tools/      # 工具注册与分发
+│   │   │   └── workspaces/ # 工作区工具
+│   │   └── core/           # 核心引擎
+│   │       ├── agents/     # Agent 基类与各专业实现
+│   │       ├── schemas/    # 数据模型与校验
+│   │       └── state/      # 状态存储与持久化
+│   └── llm/                # LLM 客户端封装
+├── tests/                  # 测试套件
+└── web/                    # 前端（Vite + React + TypeScript）
+    ├── src/
+    │   ├── features/       # 功能模块
+    │   │   ├── aigc/       # AIGC 快捷入口
+    │   │   ├── copywriting/# 文案加工台
+    │   │   ├── game-model/ # Game Model 页面
+    │   │   ├── github/     # GitHub 可视化
+    │   │   ├── mcp/        # MCP 引擎连接页面
+    │   │   ├── settings/   # 设置页
+    │   │   ├── skills/     # Skills 管理
+    │   │   ├── welcome/    # 欢迎页
+    │   │   └── workbench/  # 主工作台（对话、工件、工具事件）
+    │   └── styles/         # 主题与样式
+    └── ...
 ```
-
-说明：
-
-- `state.json`、工件、日志、用户画像都按项目隔离
-- Web 工作台显示和操作的也是当前项目目录
-- 项目切换不会混用别的项目状态
 
 ## 重置与清理
 
