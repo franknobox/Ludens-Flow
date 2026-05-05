@@ -42,7 +42,10 @@ Instead of treating the agent as a free-form assistant, Ludens-Flow puts it back
 - Supports project-scoped workspaces, structured tool execution, and controlled file operations.
 - Integrates multimodal input such as images, text files, code files, and PDFs.
 - Supports project profiles and externally imported Skills that can be enabled per project.
-- Builds toward practical engine workflows, starting with Unity and expanding to broader game-development ecosystems.
+- Connects external game engines via MCP for live scene operations and asset manipulation (Blender verified; Unity/Godot/Unreal sandboxed).
+- Provides a copywriting workspace with external references, live generation status, and Markdown/CSV export.
+- Supports capability-aware model routing with per-project configuration.
+- Offers a resilient web workbench with real-time streaming, tool progress tracking, and multi-theme support.
 
 ## What It Is Not
 
@@ -60,11 +63,11 @@ It is a workflow system for:
 
 Ludens-Flow is currently focused on:
 
-- stabilizing the multi-agent workflow core
-- improving workspace-safe tool execution
-- connecting imported Skills and project profiles more deeply into agent runtime behavior
-- expanding Unity-oriented engineering assistance
-- polishing the workbench UX and settings flow
+- stabilizing the multi-agent workflow core and graph execution
+- connecting real game engines via MCP for live asset and scene operations
+- hardening project-level state persistence, metadata safety, and workspace isolation
+- enriching the web workbench with tool observability, settings management, and responsive UX
+- deepening the integration of Skills and user profiles into agent runtime behavior
 
 See [ROADMAP.md](11_docs/ROADMAP.md) for the longer-term direction.
 
@@ -123,13 +126,14 @@ Screenshot placeholders can be added here later:
 
 Ludens-Flow is evolving toward a broader game-development AI workbench, including:
 
-- stronger structured agent collaboration
-- richer file and tool execution flows
-- Unity editor capability integration
+- deeper engine integration (viewport snapshots, material editing, Unity editor workflows)
+- richer file and tool execution flows with batch operations and editor-side visualization
 - broader engine compatibility such as Godot and UE
+- stronger structured agent collaboration with role-based communication protocols
 - in-game LLM integration
 - collaboration platform visualization
 - external AIGC ecosystem access
+- release acceptance baselines and automated smoke tests
 
 ## Open Source
 

@@ -123,3 +123,46 @@ Engineering Agent 必须拆成两个阶段设计：
 - 精细的 Editor 操作步骤
 - 具体脚本修改建议
 - 可直接发给 Cursor 的多段指令
+
+## 4. Blender MCP Tool Usage
+
+Engineering Agent 可以在开发辅导阶段使用 Blender MCP，但必须通过 Ludens-Flow 的稳定能力层，而不是直接暴露底层 MCP 工具。
+
+### 4.1 使用边界
+
+- Architecture / Planning 阶段只讨论是否需要 Blender MCP、操作边界和风险，不主动执行具体编辑器操作。
+- Continuous Development / Coaching 阶段可以使用 Blender MCP 辅助读取场景、创建对象、调整 Transform、保存文件和执行受控自动化。
+- 工具调用是否真正可用由运行时 MCP 模式开关决定；如果用户要求实际操作但当前未进入工具调用模式，应提醒用户在工作台打开 `MCP on`。
+- 涉及场景写入、保存、批量修改、删除或 Blender Python 执行时，需要先说明风险并等待用户确认。
+
+### 4.2 稳定能力名
+
+Engineering Agent 应优先使用：
+
+- `engine_list_scene`：读取当前 Blender 场景信息。
+- `engine_create_object`：创建基础对象。
+- `engine_move_object`：调整对象 Transform。
+- `engine_save_scene`：保存 `.blend` 文件。
+- `engine_run_project`：触发渲染、视口截图或运行类任务。
+- `engine_create_script`：执行受控 Blender Python，仅用于明确需要脚本化操作的场景。
+
+### 4.3 参数约定
+
+- `engine` 必须是 `"blender"`。
+- `position` / `rotation` / `scale` 优先使用 `{ "x": number, "y": number, "z": number }`。
+- `object_type` 优先使用 `cube`, `sphere`, `cylinder`, `cone`, `plane`, `empty`, `camera`, `light`。
+- `name` 和 `target` 必须明确，不使用“当前物体”“那个对象”等含糊表达。
+- 保存文件时必须明确 `scene_path`，除非用户已确认可以覆盖当前 `.blend`。
+
+### 4.4 推荐操作顺序
+
+1. 先调用 `engine_list_scene` 读取当前场景。
+2. 再执行创建、移动、保存等写操作。
+3. 写操作后再次读取场景，或说明用户如何验证结果。
+4. 如果可用稳定能力解决，不直接升级到任意 Blender Python。
+
+### 4.5 高风险限制
+
+- 不直接要求调用 `execute_blender_code`，而是通过 `engine_*` 能力间接完成。
+- 不生成访问系统文件、网络、shell、环境变量或外部进程的 Blender Python。
+- 不主动删除对象、覆盖用户文件或批量改动场景，除非用户明确确认。

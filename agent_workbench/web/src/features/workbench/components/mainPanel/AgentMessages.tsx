@@ -50,6 +50,9 @@ function renderMessageRow(agentKey: AgentKey, item: RenderMessage, index: number
             <MarkdownRenderer content={item.content} />
           </div>
         )}
+        {!user && item.toolEvents?.length ? (
+          <ToolSummaryLine toolEvents={item.toolEvents} />
+        ) : null}
       </div>
     </div>
   );
@@ -87,6 +90,35 @@ function toolEventDetail(event: ToolProgressEvent): string {
       : "",
   ].filter(Boolean);
   return parts.join("\n");
+}
+
+function ToolSummaryLine({ toolEvents }: { toolEvents: ToolProgressEvent[] }) {
+  const counts = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const event of toolEvents) {
+      if (event.type === "tool_started" || event.type === "tool_completed") {
+        map.set(event.tool_name, (map.get(event.tool_name) || 0) + 1);
+      }
+    }
+    return Array.from(map.entries()).map(([name, count]) => ({
+      name: name.replace(/^engine_/, "").replace(/_/g, "."),
+      count,
+    }));
+  }, [toolEvents]);
+
+  if (!counts.length) return null;
+
+  return (
+    <div className="tool-summary-line">
+      <span className="tool-summary-prefix">调用工具</span>
+      {counts.map((item) => (
+        <span key={item.name} className="tool-summary-tag">
+          {item.name}
+          {item.count > 1 ? ` ×${item.count}` : ""}
+        </span>
+      ))}
+    </div>
+  );
 }
 
 function ToolProcessCard({ toolEvents }: { toolEvents: ToolProgressEvent[] }) {

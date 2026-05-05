@@ -75,8 +75,8 @@ PHASE_ACTIONS: Dict[str, List[Dict[str, str]]] = {
         },
         {
             "id": "review_option_c",
-            "label": "C: 强制进入 DEV_COACHING",
-            "description": "忽略回流，直接进入开发辅导。",
+            "label": "进入持续开发",
+            "description": "确认评审结果，进入持续开发辅导。",
         },
     ],
 }
@@ -90,7 +90,7 @@ ACTION_USER_TEXT: Dict[str, str] = {
     "eng_back": "[ACTION] 回退到 PM",
     "review_option_a": "[ACTION] A: 接受建议并回流",
     "review_option_b": "[ACTION] B: 仅修 BLOCK/MAJOR",
-    "review_option_c": "[ACTION] C: 强制进入 DEV_COACHING",
+    "review_option_c": "[ACTION] 进入持续开发",
 }
 
 
@@ -100,17 +100,74 @@ def get_phase_actions(phase: Optional[str]) -> List[Dict[str, str]]:
 
 
 def get_available_actions(state: LudensState) -> List[Dict[str, str]]:
-    return get_phase_actions(getattr(state, "phase", None))
+    phase = getattr(state, "phase", None)
+    actions = get_phase_actions(phase)
+    if phase != Phase.POST_REVIEW_DECISION.value:
+        return actions
+
+    gate = getattr(state, "review_gate", None) or {}
+    gate_status = str(gate.get("status", "")).upper()
+    if gate_status == "PASS":
+        return [
+            {
+                "id": "review_option_c",
+                "label": "进入持续开发",
+                "description": "评审已通过，进入持续开发辅导。",
+            }
+        ]
+    return actions
+
+
+_PHASE_TO_AGENT_KEY = {
+    "GDD_": "design",
+    "PM_": "pm",
+    "ENG_": "engineering",
+    "REVIEW": "review",
+    "DEV_COACHING": "engineering",
+}
+
+_PHASE_TO_AGENT_NAME = {
+    "GDD_": "DesignAgent",
+    "PM_": "PMAgent",
+    "ENG_": "EngineeringAgent",
+    "REVIEW": "ReviewAgent",
+    "DEV_COACHING": "EngineeringAgent",
+}
+
+
+def phase_to_agent_key(phase: str | None) -> str:
+    if not phase:
+        return "system"
+    for prefix, key in _PHASE_TO_AGENT_KEY.items():
+        if phase.startswith(prefix) or phase == prefix:
+            return key
+    return "system"
+
+
+def phase_to_agent_name(phase: str | None) -> str:
+    if not phase:
+        return "System"
+    for prefix, name in _PHASE_TO_AGENT_NAME.items():
+        if phase.startswith(prefix) or phase == prefix:
+            return name
+    return "System"
 
 
 def action_user_input(action_id: str) -> str:
     return ACTION_USER_TEXT.get(action_id, f"[ACTION] {action_id}")
 
 
-def _is_action_allowed(phase: str, action_id: Optional[str]) -> bool:
+def _is_action_allowed(
+    phase: str,
+    action_id: Optional[str],
+    state: Optional[LudensState] = None,
+) -> bool:
     if not action_id:
         return False
-    allowed_ids = {item["id"] for item in get_phase_actions(phase)}
+    if state is not None and phase == getattr(state, "phase", None):
+        allowed_ids = {item["id"] for item in get_available_actions(state)}
+    else:
+        allowed_ids = {item["id"] for item in get_phase_actions(phase)}
     return action_id in allowed_ids
 
 
@@ -231,7 +288,7 @@ def route(
 
     # --- 统一解析工作流动作（仅接受显式选项，不做自由文本意图猜测） ---
     action = str(explicit_action or "").strip().lower()
-    if action and not _is_action_allowed(current_phase, action):
+    if action and not _is_action_allowed(current_phase, action, state):
         action = ""
 
     wants_commit = action in {"gdd_commit", "pm_commit", "eng_commit"}
@@ -314,9 +371,8 @@ def route(
 
     elif current_phase == Phase.REVIEW.value:
         if last_event == "REVIEW_DONE":
-            # 一步到位：如果用户在看到 ReviewAgent 的 A/B/C 选项后已经做出选择，直接执行
+            # Review 完成后统一进入人工决策点，由前端展示 A/B/C 操作。
             gate = state.review_gate or {}
-            gate_status = gate.get("status", "PASS")
             gate_targets = gate.get("targets", [])
             gate_issues = gate.get("issues", [])
 
@@ -343,19 +399,17 @@ def route(
                     next_phase = _get_backflow_phase(serious_targets)
                     explanation = f"User Option B: Flowing back to major issues target ({next_phase})."
                     updates["iteration_count"] = state.iteration_count + 1
-            elif opt_c or gate_status == "PASS":
+            elif opt_c:
                 next_phase = Phase.DEV_COACHING.value
-                explanation = "User Option C or PASS: Entering DEV_COACHING and freezing artifacts."
+                explanation = "User Option C: Entering DEV_COACHING and freezing artifacts."
                 updates["artifact_frozen"] = True
             else:
-                # 用户未做有效选择，降落到 POST_REVIEW_DECISION 等待
                 next_phase = Phase.POST_REVIEW_DECISION.value
                 explanation = "Review completed, awaiting user decision (A/B/C)."
 
     elif current_phase == Phase.POST_REVIEW_DECISION.value:
         # Step 3.3 核心流转机制
         gate = state.review_gate or {}
-        gate_status = gate.get("status", "PASS")
         gate_targets = gate.get("targets", [])
         gate_issues = gate.get("issues", [])
 
@@ -380,10 +434,10 @@ def route(
                 next_phase = _get_backflow_phase(serious_targets)
                 explanation = f"User Option B: Flowing back to major issues target ({next_phase})."
                 updates["iteration_count"] = state.iteration_count + 1
-        elif opt_c or gate_status == "PASS":
+        elif opt_c:
             next_phase = Phase.DEV_COACHING.value
             explanation = (
-                "User Option C or PASS: Entering DEV_COACHING and freezing artifacts."
+                "User Option C: Entering DEV_COACHING and freezing artifacts."
             )
             updates["artifact_frozen"] = True
         else:

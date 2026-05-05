@@ -4,6 +4,7 @@ import { MCP_ICONS } from "./McpIcons";
 const BLENDER_CAPABILITIES: EngineCapability[] = [
   {
     id: "engine_list_scene",
+    displayId: "blender.scene.inspect",
     label: "读取场景信息",
     desc: "读取当前 Blender 场景、对象列表、材质和层级信息。",
     level: "只读",
@@ -11,6 +12,7 @@ const BLENDER_CAPABILITIES: EngineCapability[] = [
   },
   {
     id: "engine_create_object",
+    displayId: "blender.object.create",
     label: "创建 / 删除 / 修改对象",
     desc: "创建基础形体、调整对象属性，后续可扩展到删除与复杂修改。",
     level: "需权限",
@@ -18,6 +20,7 @@ const BLENDER_CAPABILITIES: EngineCapability[] = [
   },
   {
     id: "engine_move_object",
+    displayId: "blender.object.transform",
     label: "调整 Transform",
     desc: "移动、旋转、缩放 Blender 对象。",
     level: "需权限",
@@ -25,6 +28,7 @@ const BLENDER_CAPABILITIES: EngineCapability[] = [
   },
   {
     id: "engine_save_scene",
+    displayId: "blender.file.save",
     label: "保存 .blend",
     desc: "保存当前 Blender 文件或指定文件。",
     level: "需权限",
@@ -32,6 +36,7 @@ const BLENDER_CAPABILITIES: EngineCapability[] = [
   },
   {
     id: "engine_create_script",
+    displayId: "blender.python.execute",
     label: "执行 Blender Python",
     desc: "映射到 execute_blender_code / run_script 一类工具，能力强但风险最高。",
     level: "高风险",
@@ -39,6 +44,7 @@ const BLENDER_CAPABILITIES: EngineCapability[] = [
   },
   {
     id: "engine_run_project",
+    displayId: "blender.viewport.capture",
     label: "渲染 / 运行任务",
     desc: "用于渲染场景或触发 Blender 侧自动化任务。",
     level: "需权限",
@@ -48,11 +54,17 @@ const BLENDER_CAPABILITIES: EngineCapability[] = [
 
 const BLENDER_MAPPING_HINTS: Record<string, string[]> = {
   engine_list_scene: ["get_scene_info", "get_scene_objects", "get_object_info"],
-  engine_create_object: ["create_object", "add_object", "delete_object", "modify_object"],
-  engine_move_object: ["modify_object", "set_object_transform"],
-  engine_save_scene: ["save_file", "save_blend_file"],
+  engine_create_object: [
+    "create_object",
+    "add_object",
+    "delete_object",
+    "modify_object",
+    "execute_blender_code",
+  ],
+  engine_move_object: ["modify_object", "set_object_transform", "execute_blender_code"],
+  engine_save_scene: ["save_file", "save_blend_file", "execute_blender_code"],
   engine_create_script: ["execute_blender_code", "run_script", "execute_blender_python"],
-  engine_run_project: ["render_scene", "get_viewport_screenshot"],
+  engine_run_project: ["render_scene", "get_viewport_screenshot", "execute_blender_code"],
 };
 
 export function BlenderMcpPage() {

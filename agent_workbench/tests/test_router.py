@@ -15,7 +15,7 @@ os.environ.setdefault(
     str((Path(tempfile.gettempdir()) / "ludens_flow_tests" / "test_router").resolve()),
 )
 
-from ludens_flow.core.router import Phase, route
+from ludens_flow.core.router import Phase, get_available_actions, route
 from ludens_flow.core.state import init_state
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -77,6 +77,36 @@ class RouterTests(unittest.TestCase):
 
         next_phase, _, _ = route(state, "", last_event="REVIEW_DONE")
         self.assertEqual(next_phase, Phase.POST_REVIEW_DECISION.value)
+
+    def test_review_done_with_pass_still_pauses_for_user_decision(self):
+        state = init_state()
+        state.phase = Phase.REVIEW.value
+        state.review_gate = {
+            "status": "PASS",
+            "targets": [],
+            "issues": [],
+        }
+
+        next_phase, _, updates = route(state, "", last_event="REVIEW_DONE")
+        self.assertEqual(next_phase, Phase.POST_REVIEW_DECISION.value)
+        self.assertNotIn("artifact_frozen", updates)
+
+    def test_pass_review_decision_only_exposes_enter_dev_action(self):
+        state = init_state()
+        state.phase = Phase.POST_REVIEW_DECISION.value
+        state.review_gate = {
+            "status": "PASS",
+            "targets": [],
+            "issues": [],
+        }
+
+        actions = get_available_actions(state)
+        self.assertEqual([item["id"] for item in actions], ["review_option_c"])
+        self.assertEqual(actions[0]["label"], "进入持续开发")
+
+        next_phase, _, updates = route(state, "", explicit_action="review_option_a")
+        self.assertEqual(next_phase, Phase.POST_REVIEW_DECISION.value)
+        self.assertNotIn("artifact_frozen", updates)
 
     def test_post_review_option_a_flows_back_to_targets(self):
         state = init_state()

@@ -29,6 +29,7 @@ from ludens_flow.capabilities.context.user_profile import (
     read_profile_file,
     write_profile_file,
 )
+from ludens_flow.capabilities.github import fetch_github_snapshot, parse_github_repo_ref
 from ludens_flow.app.env import load_env_if_available
 from ludens_flow.capabilities.mcp.health import check_mcp_connections
 from ludens_flow.capabilities.skills.registry import (
@@ -40,6 +41,7 @@ from ludens_flow.capabilities.skills.registry import (
 )
 from ludens_flow.capabilities.tools.registry import list_common_tools
 from ludens_flow.core.graph import graph_step
+from ludens_flow.core.router import phase_to_agent_key
 from ludens_flow.core.paths import (
     add_project_workspace,
     archive_project,
@@ -47,6 +49,7 @@ from ludens_flow.core.paths import (
     create_project,
     delete_project,
     get_dev_notes_assets_dir,
+    get_project_github_repo,
     get_project_mcp_connections,
     get_project_settings,
     get_project_unity_root,
@@ -60,6 +63,7 @@ from ludens_flow.core.paths import (
     restore_project,
     set_project_agent_file_write_enabled,
     set_project_agent_file_write_confirm_required,
+    set_project_github_repo,
     set_project_mcp_connections,
     set_project_model_routing,
     set_active_project_id,
@@ -85,6 +89,9 @@ _EVENT_SUBSCRIBERS: dict[str, list[queue.Queue[dict]]] = {}
 _EVENT_SUBSCRIBERS_GUARD = threading.Lock()
 _PERMISSION_REQUESTS: dict[str, dict] = {}
 _PERMISSION_REQUESTS_GUARD = threading.Lock()
+_COPYWRITING_JOBS: dict[str, dict] = {}
+_COPYWRITING_JOBS_GUARD = threading.Lock()
+_MAX_COPYWRITING_JOBS = 50
 
 WORKBENCH_ROOT = Path(__file__).resolve().parents[3]
 WEB_DIST_DIR = WORKBENCH_ROOT / "web" / "dist"
@@ -100,6 +107,7 @@ if STATIC_DIR.exists():
 class ChatRequest(BaseModel):
     message: str
     attachments: list[dict] | None = None
+    mcp_mode: bool = False
 
 
 class ProjectRequest(BaseModel):
@@ -126,6 +134,11 @@ class ProjectSettingsRequest(BaseModel):
     agent_file_write_confirm_required: bool | None = None
     model_routing: dict | None = None
     mcp_connections: list[dict] | None = None
+    allow_clear_mcp_connections: bool = False
+
+
+class GithubRepoBindRequest(BaseModel):
+    repo: str
 
 
 class McpConnectionCheckRequest(BaseModel):
@@ -173,7 +186,13 @@ class DesignCopywritingGenerateRequest(BaseModel):
     must_include: list[str] | None = None
     must_avoid: list[str] | None = None
     reference_ids: list[str] | None = None
+    external_references: list[dict] | None = None
     language: str = "zh-CN"
+
+
+class DesignCopywritingJobCreateResponse(BaseModel):
+    job_id: str
+    status: str = "queued"
 
 
 class ProjectExportRequest(BaseModel):
@@ -193,20 +212,6 @@ class ProjectRestoreRequest(BaseModel):
 
 class ProjectRenameRequest(BaseModel):
     display_name: str
-
-
-def _phase_to_agent_key(phase: str | None) -> str:
-    if not phase:
-        return "system"
-    if phase.startswith("GDD_"):
-        return "design"
-    if phase.startswith("PM_"):
-        return "pm"
-    if phase.startswith("ENG_") or phase == "DEV_COACHING":
-        return "engineering"
-    if phase.startswith("REVIEW") or phase == "POST_REVIEW_DECISION":
-        return "review"
-    return "system"
 
 
 def _hide_obsolete_transition_message(item: dict) -> bool:
@@ -234,7 +239,7 @@ def _state_to_json(state) -> dict:
         "project_id": getattr(state, "project_id", None),
         "schema_version": getattr(state, "schema_version", None),
         "phase": state.phase,
-        "current_agent": _phase_to_agent_key(state.phase),
+        "current_agent": phase_to_agent_key(state.phase),
         "iteration_count": state.iteration_count,
         "artifact_frozen": getattr(state, "artifact_frozen", False),
         "chat_history": _visible_history(getattr(state, "chat_history", [])),
@@ -320,7 +325,7 @@ def _event_payload(
     if state is not None:
         payload["state"] = _state_to_json(state)
         payload["phase"] = getattr(state, "phase", "")
-        payload["current_agent"] = _phase_to_agent_key(getattr(state, "phase", ""))
+        payload["current_agent"] = phase_to_agent_key(getattr(state, "phase", ""))
     if error:
         payload["error"] = error
     if message:
@@ -332,6 +337,52 @@ def _event_payload(
 
 def _format_sse(payload: dict) -> str:
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+def _set_copywriting_job(job_id: str, update: dict) -> dict:
+    with _COPYWRITING_JOBS_GUARD:
+        existing = dict(_COPYWRITING_JOBS.get(job_id, {}))
+        existing.update(update)
+        existing["updated_at"] = datetime.now(timezone.utc).isoformat()
+        _COPYWRITING_JOBS[job_id] = existing
+        if len(_COPYWRITING_JOBS) > _MAX_COPYWRITING_JOBS:
+            stale_ids = sorted(
+                _COPYWRITING_JOBS,
+                key=lambda item: str(_COPYWRITING_JOBS[item].get("updated_at", "")),
+            )
+            for stale_id in stale_ids[: len(_COPYWRITING_JOBS) - _MAX_COPYWRITING_JOBS]:
+                _COPYWRITING_JOBS.pop(stale_id, None)
+        return dict(existing)
+
+
+def _get_copywriting_job(job_id: str) -> dict | None:
+    with _COPYWRITING_JOBS_GUARD:
+        job = _COPYWRITING_JOBS.get(job_id)
+        return dict(job) if job else None
+
+
+def _publish_copywriting_job_event(
+    project_id: str,
+    job_id: str,
+    event_type: str,
+    *,
+    status: str,
+    message: str | None = None,
+    response: dict | None = None,
+    error: str | None = None,
+) -> None:
+    payload = _event_payload(
+        event_type,
+        project_id=project_id,
+        message=message,
+        error=error,
+    ) | {
+        "job_id": job_id,
+        "status": status,
+    }
+    if response is not None:
+        payload["response"] = response
+    _publish_project_event(project_id, payload)
 
 
 def _build_stream_handler(project_id: str, state) -> callable:
@@ -636,6 +687,7 @@ def post_chat(req: ChatRequest):
                 user_input,
                 stream_handler=stream_handler,
                 tool_event_handler=tool_event_handler,
+                mcp_mode=bool(req.mcp_mode),
             )
             reply = getattr(state, "last_assistant_message", "") or ""
             state.last_assistant_message = None
@@ -861,6 +913,71 @@ def get_current_project_settings():
     return get_project_settings(project_id=project_id)
 
 
+@app.get("/api/projects/current/github")
+def get_current_project_github():
+    project_id = resolve_project_id()
+    repo = get_project_github_repo(project_id=project_id)
+    if not repo:
+        return {
+            "project_id": project_id,
+            "configured": False,
+            "repo": None,
+            "summary": {},
+            "branches": [],
+            "commits": [],
+            "pull_requests": [],
+            "issues": [],
+            "workflow_runs": [],
+            "errors": [],
+            "fetched_at": "",
+            "auth": {"token_configured": False},
+        }
+
+    try:
+        snapshot = fetch_github_snapshot(repo)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    return {"project_id": project_id, **snapshot}
+
+
+@app.post("/api/projects/current/github/bind")
+def post_current_project_github_bind(req: GithubRepoBindRequest):
+    project_id = resolve_project_id()
+    try:
+        repo = parse_github_repo_ref(req.repo)
+        set_project_github_repo(repo, project_id=project_id)
+        snapshot = fetch_github_snapshot(repo)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    return {"project_id": project_id, **snapshot}
+
+
+@app.delete("/api/projects/current/github/bind")
+def delete_current_project_github_bind():
+    project_id = resolve_project_id()
+    set_project_github_repo({}, project_id=project_id)
+    return {
+        "project_id": project_id,
+        "configured": False,
+        "repo": None,
+        "summary": {},
+        "branches": [],
+        "commits": [],
+        "pull_requests": [],
+        "issues": [],
+        "workflow_runs": [],
+        "errors": [],
+        "fetched_at": "",
+        "auth": {"token_configured": False},
+    }
+
+
 @app.get("/api/model-profiles")
 def get_model_profiles():
     return {"profiles": list_model_profile_summaries()}
@@ -920,12 +1037,53 @@ def post_current_project_settings(req: ProjectSettingsRequest):
         )
 
     if req.mcp_connections is not None:
+        existing_mcp_connections = get_project_mcp_connections(project_id=project_id)
+        existing_mcp_ids = {
+            str(item.get("id", ""))
+            for item in existing_mcp_connections
+            if str(item.get("id", "")).strip()
+        }
+        next_mcp_ids = {
+            str(item.get("id", ""))
+            for item in req.mcp_connections
+            if str(item.get("id", "")).strip()
+        }
+        if (
+            existing_mcp_ids
+            and not existing_mcp_ids.issubset(next_mcp_ids)
+            and not req.allow_clear_mcp_connections
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Refusing to remove existing MCP connections from the generic "
+                    "settings endpoint. Use the explicit MCP delete endpoint."
+                ),
+            )
         set_project_mcp_connections(
             req.mcp_connections,
             project_id=project_id,
+            allow_remove_mcp_connections=req.allow_clear_mcp_connections,
         )
 
     return get_project_settings(project_id=project_id)
+
+
+@app.delete("/api/projects/current/mcp-connections/{connection_id}")
+def delete_current_project_mcp_connection(connection_id: str):
+    project_id = resolve_project_id()
+    connections = get_project_mcp_connections(project_id=project_id)
+    next_connections = [
+        item for item in connections if str(item.get("id", "")) != connection_id
+    ]
+    if len(next_connections) == len(connections):
+        raise HTTPException(status_code=404, detail="MCP connection not found.")
+
+    return set_project_mcp_connections(
+        next_connections,
+        project_id=project_id,
+        allow_remove_mcp_connections=True,
+    )
 
 
 @app.post("/api/projects/current/mcp-connections/check")
@@ -1421,8 +1579,122 @@ def post_generate_current_project_copywriting(req: DesignCopywritingGenerateRequ
     project_id = resolve_project_id(getattr(state, "project_id", None))
     request_data = req.dict()
     normalized_request = normalize_design_copywriting_request(request_data)
-    response = generate_design_copywriting(normalized_request, project_id=project_id)
+    response = generate_design_copywriting(
+        normalized_request,
+        project_id=project_id,
+        external_references=request_data.get("external_references"),
+    )
     return response.to_dict()
+
+
+def _run_copywriting_job(job_id: str, project_id: str, request_data: dict) -> None:
+    def publish_progress(message: str) -> None:
+        _set_copywriting_job(
+            job_id,
+            {
+                "status": "running",
+                "message": message,
+            },
+        )
+        _publish_copywriting_job_event(
+            project_id,
+            job_id,
+            "copywriting_job_progress",
+            status="running",
+            message=message,
+        )
+
+    try:
+        publish_progress("正在整理加工要求与输出格式...")
+        normalized_request = normalize_design_copywriting_request(request_data)
+        response = generate_design_copywriting(
+            normalized_request,
+            project_id=project_id,
+            external_references=request_data.get("external_references"),
+            progress_handler=publish_progress,
+        )
+        response_payload = response.to_dict()
+        _set_copywriting_job(
+            job_id,
+            {
+                "status": "completed",
+                "message": "生成完成。",
+                "response": response_payload,
+            },
+        )
+        _publish_copywriting_job_event(
+            project_id,
+            job_id,
+            "copywriting_job_completed",
+            status="completed",
+            message="生成完成。",
+            response=response_payload,
+        )
+    except Exception as exc:
+        error_text = str(exc) or "Copywriting generation failed."
+        logger.exception("copywriting job failed")
+        _set_copywriting_job(
+            job_id,
+            {
+                "status": "failed",
+                "message": "生成失败。",
+                "error": error_text,
+            },
+        )
+        _publish_copywriting_job_event(
+            project_id,
+            job_id,
+            "copywriting_job_failed",
+            status="failed",
+            message="生成失败。",
+            error=error_text,
+        )
+
+
+@app.post("/api/projects/current/copywriting/jobs")
+def post_create_current_project_copywriting_job(req: DesignCopywritingGenerateRequest):
+    state = st.load_state()
+    project_id = resolve_project_id(getattr(state, "project_id", None))
+    request_data = req.dict()
+    normalized_request = normalize_design_copywriting_request(request_data)
+    request_data.update(normalized_request.to_dict())
+
+    job_id = uuid.uuid4().hex
+    _set_copywriting_job(
+        job_id,
+        {
+            "job_id": job_id,
+            "project_id": project_id,
+            "status": "queued",
+            "message": "文案生成任务已创建。",
+            "request": normalized_request.to_dict(),
+        },
+    )
+    _publish_copywriting_job_event(
+        project_id,
+        job_id,
+        "copywriting_job_queued",
+        status="queued",
+        message="文案生成任务已创建。",
+    )
+
+    worker = threading.Thread(
+        target=_run_copywriting_job,
+        args=(job_id, project_id, request_data),
+        daemon=True,
+    )
+    worker.start()
+    return DesignCopywritingJobCreateResponse(job_id=job_id).dict()
+
+
+@app.get("/api/projects/current/copywriting/jobs/{job_id}")
+def get_current_project_copywriting_job(job_id: str):
+    state = st.load_state()
+    project_id = resolve_project_id(getattr(state, "project_id", None))
+    job = _get_copywriting_job(job_id)
+    if not job or job.get("project_id") != project_id:
+        raise HTTPException(status_code=404, detail="Copywriting job not found.")
+    return job
 
 
 @app.get("/")

@@ -10,6 +10,7 @@ interface IconProps {
 
 export interface EngineCapability {
   id: string;
+  displayId?: string;
   label: string;
   desc: string;
   level: string;
@@ -123,7 +124,7 @@ export function EngineMcpConsole({
   };
 
   useEffect(() => {
-    void loadEngine(false);
+    void loadEngine(true);
   }, [engine]);
 
   const tools = status?.tools || [];
@@ -193,7 +194,7 @@ export function EngineMcpConsole({
                 >
                   <div>
                     <h3>{capability.label}</h3>
-                    <code>{capability.id}</code>
+                    <code>{capability.displayId || capability.id}</code>
                   </div>
                   <div className="mcp-capability-map">
                     <span>映射</span>

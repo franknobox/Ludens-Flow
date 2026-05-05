@@ -10,11 +10,16 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-from typing import Any, Dict, Iterable, List
+import time
+from copy import deepcopy
+from typing import Any, Iterable, List
 
 
 MCP_PROTOCOL_VERSION = "2024-11-05"
-DEFAULT_TIMEOUT_SECONDS = 8
+DEFAULT_TIMEOUT_SECONDS = 20
+DEFAULT_HEALTH_CACHE_TTL_SECONDS = 30
+_TRANSPORT_CACHE: dict[str, str] = {}
+_HEALTH_CACHE: dict[str, tuple[float, dict]] = {}
 
 
 class McpClientError(RuntimeError):
@@ -42,13 +47,22 @@ def _jsonrpc_notification(method: str, params: dict | None = None) -> dict:
     return payload
 
 
-def _frame_message(payload: dict) -> str:
-    body = json.dumps(payload, ensure_ascii=False)
-    body_bytes = body.encode("utf-8")
-    return f"Content-Length: {len(body_bytes)}\r\n\r\n{body}"
+def _frame_message(payload: dict) -> bytes:
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    header = f"Content-Length: {len(body)}\r\n\r\n".encode("ascii")
+    return header + body
 
 
-def _build_stdio_input() -> str:
+def _serialize_messages(messages: list[dict], *, transport: str) -> bytes:
+    if transport == "line":
+        return b"".join(
+            json.dumps(message, ensure_ascii=False).encode("utf-8") + b"\n"
+            for message in messages
+        )
+    return b"".join(_frame_message(message) for message in messages)
+
+
+def _build_stdio_input(*, transport: str = "framed") -> bytes:
     initialize = _jsonrpc_request(
         1,
         "initialize",
@@ -60,12 +74,15 @@ def _build_stdio_input() -> str:
     )
     initialized = _jsonrpc_notification("notifications/initialized")
     tools_list = _jsonrpc_request(2, "tools/list", {})
-    return "".join(
-        [_frame_message(initialize), _frame_message(initialized), _frame_message(tools_list)]
-    )
+    return _serialize_messages([initialize, initialized, tools_list], transport=transport)
 
 
-def _build_tool_call_input(tool_name: str, arguments: dict | None = None) -> str:
+def _build_tool_call_input(
+    tool_name: str,
+    arguments: dict | None = None,
+    *,
+    transport: str = "framed",
+) -> bytes:
     initialize = _jsonrpc_request(
         1,
         "initialize",
@@ -84,24 +101,46 @@ def _build_tool_call_input(tool_name: str, arguments: dict | None = None) -> str
             "arguments": arguments or {},
         },
     )
-    return "".join(
-        [_frame_message(initialize), _frame_message(initialized), _frame_message(tool_call)]
-    )
+    return _serialize_messages([initialize, initialized, tool_call], transport=transport)
 
 
-def _parse_content_length_messages(output: str) -> List[dict]:
+def _to_bytes(value: Any) -> bytes:
+    if value is None:
+        return b""
+    if isinstance(value, bytes):
+        return value
+    if isinstance(value, str):
+        return value.encode("utf-8", errors="replace")
+    return str(value).encode("utf-8", errors="replace")
+
+
+def _decode_output(value: Any) -> str:
+    return _to_bytes(value).decode("utf-8", errors="replace")
+
+
+def _combined_output(stdout: Any, stderr: Any) -> bytes:
+    return _to_bytes(stdout) + b"\n" + _to_bytes(stderr)
+
+
+def _parse_content_length_messages(output: bytes | str) -> List[dict]:
+    raw = _to_bytes(output)
     messages: list[dict] = []
     index = 0
-    while index < len(output):
-        header_end = output.find("\r\n\r\n", index)
+    lowered = raw.lower()
+    while index < len(raw):
+        header_start = lowered.find(b"content-length:", index)
+        if header_start < 0:
+            break
+
+        header_end = raw.find(b"\r\n\r\n", header_start)
         separator_len = 4
         if header_end < 0:
-            header_end = output.find("\n\n", index)
+            header_end = raw.find(b"\n\n", header_start)
             separator_len = 2
         if header_end < 0:
             break
 
-        headers = output[index:header_end]
+        headers = raw[header_start:header_end].decode("ascii", errors="ignore")
         content_length = None
         for line in headers.splitlines():
             name, _, value = line.partition(":")
@@ -112,36 +151,37 @@ def _parse_content_length_messages(output: str) -> List[dict]:
                     content_length = None
                 break
 
-        if content_length is None:
+        if content_length is None or content_length < 0:
             index = header_end + separator_len
             continue
 
         body_start = header_end + separator_len
-        body = output[body_start : body_start + content_length]
-        if len(body.encode("utf-8")) < content_length:
+        body = raw[body_start : body_start + content_length]
+        if len(body) < content_length:
             break
         try:
-            messages.append(json.loads(body))
+            messages.append(json.loads(body.decode("utf-8")))
         except json.JSONDecodeError:
             pass
-        index = body_start + len(body)
+        index = body_start + content_length
     return messages
 
 
-def _parse_line_messages(output: str) -> List[dict]:
+def _parse_line_messages(output: bytes | str) -> List[dict]:
+    raw = _to_bytes(output)
     messages: list[dict] = []
-    for line in output.splitlines():
+    for line in raw.splitlines():
         text = line.strip()
-        if not text.startswith("{"):
+        if not text.startswith(b"{"):
             continue
         try:
-            messages.append(json.loads(text))
+            messages.append(json.loads(text.decode("utf-8")))
         except json.JSONDecodeError:
             continue
     return messages
 
 
-def _parse_mcp_messages(output: str) -> List[dict]:
+def _parse_mcp_messages(output: bytes | str) -> List[dict]:
     messages = _parse_content_length_messages(output)
     if messages:
         return messages
@@ -158,16 +198,25 @@ def _safe_tool_summary(raw_tools: Any) -> List[dict]:
         name = str(item.get("name") or "").strip()
         if not name:
             continue
-        tools.append(
-            {
-                "name": name,
-                "description": str(item.get("description") or "").strip(),
-            }
-        )
+        summary = {
+            "name": name,
+            "description": str(item.get("description") or "").strip(),
+        }
+        input_schema = item.get("inputSchema")
+        if isinstance(input_schema, dict):
+            summary["inputSchema"] = input_schema
+        tools.append(summary)
     return tools
 
 
-def _result_for_config(config: dict, *, status: str, message: str = "", tools: list[dict] | None = None) -> dict:
+def _result_for_config(
+    config: dict,
+    *,
+    status: str,
+    message: str = "",
+    tools: list[dict] | None = None,
+    transport: str = "",
+) -> dict:
     return {
         "id": str(config.get("id") or ""),
         "engine": str(config.get("engine") or ""),
@@ -178,15 +227,76 @@ def _result_for_config(config: dict, *, status: str, message: str = "", tools: l
         "message": message,
         "tools": tools or [],
         "tool_count": len(tools or []),
+        "transport": transport,
     }
 
 
-def check_mcp_connection(config: dict, *, timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS) -> dict:
+def _connection_cache_key(config: dict) -> str:
+    relevant = {
+        "id": config.get("id") or "",
+        "engine": config.get("engine") or "",
+        "enabled": bool(config.get("enabled", True)),
+        "command": config.get("command") or "",
+        "args": config.get("args") or [],
+        "env": config.get("env") or {},
+    }
+    return json.dumps(relevant, ensure_ascii=False, sort_keys=True, default=str)
+
+
+def _remember_transport(config: dict, transport: str) -> None:
+    if transport in {"line", "framed"}:
+        _TRANSPORT_CACHE[_connection_cache_key(config)] = transport
+
+
+def _transport_candidates(config: dict, preferred: str | None = None) -> list[str]:
+    candidates: list[str] = []
+    cached = _TRANSPORT_CACHE.get(_connection_cache_key(config))
+    configured = str(config.get("transport") or "").strip()
+    for item in (preferred, cached, configured, "line", "framed"):
+        if item in {"line", "framed"} and item not in candidates:
+            candidates.append(item)
+    return candidates
+
+
+def clear_mcp_connection_cache() -> None:
+    _TRANSPORT_CACHE.clear()
+    _HEALTH_CACHE.clear()
+
+
+def _get_cached_health_result(config: dict, ttl_seconds: int) -> dict | None:
+    cached = _HEALTH_CACHE.get(_connection_cache_key(config))
+    if not cached:
+        return None
+    created_at, result = cached
+    if time.monotonic() - created_at > ttl_seconds:
+        _HEALTH_CACHE.pop(_connection_cache_key(config), None)
+        return None
+    return deepcopy(result)
+
+
+def _remember_health_result(config: dict, result: dict) -> dict:
+    if result.get("status") in {"tools_loaded", "reachable"}:
+        _HEALTH_CACHE[_connection_cache_key(config)] = (time.monotonic(), deepcopy(result))
+    return result
+
+
+def check_mcp_connection(
+    config: dict,
+    *,
+    timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+    use_cache: bool = True,
+    cache_ttl_seconds: int = DEFAULT_HEALTH_CACHE_TTL_SECONDS,
+) -> dict:
     command = str(config.get("command") or "").strip()
     if not bool(config.get("enabled", True)):
         return _result_for_config(config, status="configured", message="Connection is disabled.")
     if not command:
         return _result_for_config(config, status="not_configured", message="Command is empty.")
+
+    if use_cache:
+        cached = _get_cached_health_result(config, cache_ttl_seconds)
+        if cached is not None:
+            return cached
 
     args = [str(item) for item in config.get("args", []) if str(item).strip()]
     env = os.environ.copy()
@@ -194,45 +304,70 @@ def check_mcp_connection(config: dict, *, timeout_seconds: int = DEFAULT_TIMEOUT
     if isinstance(raw_env, dict):
         env.update({str(key): str(value) for key, value in raw_env.items()})
 
-    try:
-        completed = subprocess.run(
-            [command, *args],
-            input=_build_stdio_input(),
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=timeout_seconds,
-            env=env,
-            shell=False,
-        )
-    except FileNotFoundError:
-        return _result_for_config(config, status="failed", message=f"Command not found: {command}")
-    except subprocess.TimeoutExpired as exc:
-        output = (exc.stdout or "") + "\n" + (exc.stderr or "")
+    last_error = ""
+    initialized_without_tools = False
+    for transport in _transport_candidates(config):
+        try:
+            completed = subprocess.run(
+                [command, *args],
+                input=_build_stdio_input(transport=transport),
+                capture_output=True,
+                timeout=timeout_seconds,
+                env=env,
+                shell=False,
+            )
+        except FileNotFoundError:
+            return _result_for_config(config, status="failed", message=f"Command not found: {command}")
+        except subprocess.TimeoutExpired as exc:
+            output = _combined_output(exc.stdout, exc.stderr)
+            messages = _parse_mcp_messages(output)
+            tools = _tools_from_messages(messages)
+            if tools:
+                _remember_transport(config, transport)
+                return _remember_health_result(
+                    config,
+                    _result_for_config(config, status="tools_loaded", tools=tools, transport=transport),
+                )
+            last_error = "Health check timed out."
+            continue
+        except Exception as exc:
+            last_error = str(exc)
+            continue
+
+        output = _combined_output(completed.stdout, completed.stderr)
         messages = _parse_mcp_messages(output)
         tools = _tools_from_messages(messages)
         if tools:
-            return _result_for_config(config, status="tools_loaded", tools=tools)
-        return _result_for_config(config, status="failed", message="Health check timed out.")
-    except Exception as exc:
-        return _result_for_config(config, status="failed", message=str(exc))
+            _remember_transport(config, transport)
+            return _remember_health_result(
+                config,
+                _result_for_config(config, status="tools_loaded", tools=tools, transport=transport),
+            )
 
-    output = f"{completed.stdout or ''}\n{completed.stderr or ''}"
-    messages = _parse_mcp_messages(output)
-    tools = _tools_from_messages(messages)
-    if tools:
-        return _result_for_config(config, status="tools_loaded", tools=tools)
+        if any(message.get("id") == 1 and "result" in message for message in messages):
+            initialized_without_tools = True
+            _remember_transport(config, transport)
+            continue
 
-    if any(message.get("id") == 1 and "result" in message for message in messages):
-        return _result_for_config(config, status="reachable", message="Initialized, but no tools were returned.")
+        error_message = _first_error_message(messages)
+        if not error_message:
+            error_message = (_decode_output(completed.stderr) or _decode_output(completed.stdout) or "No MCP response.").strip()
+        if completed.returncode == 0 and not error_message:
+            error_message = "Process exited without listing tools."
+        last_error = error_message[:500]
 
-    error_message = _first_error_message(messages)
-    if not error_message:
-        error_message = (completed.stderr or completed.stdout or "No MCP response.").strip()
-    if completed.returncode == 0 and not error_message:
-        error_message = "Process exited without listing tools."
-    return _result_for_config(config, status="failed", message=error_message[:500])
+    if initialized_without_tools:
+        transport = _TRANSPORT_CACHE.get(_connection_cache_key(config), "")
+        return _remember_health_result(
+            config,
+            _result_for_config(
+                config,
+                status="reachable",
+                message="Initialized, but no tools were returned.",
+                transport=transport,
+            ),
+        )
+    return _result_for_config(config, status="failed", message=last_error)
 
 
 def _tools_from_messages(messages: Iterable[dict]) -> List[dict]:
@@ -265,6 +400,7 @@ def call_mcp_tool(
     arguments: dict | None = None,
     *,
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+    transport: str | None = None,
 ) -> dict:
     command = str(config.get("command") or "").strip()
     if not bool(config.get("enabled", True)):
@@ -278,47 +414,57 @@ def call_mcp_tool(
     if isinstance(raw_env, dict):
         env.update({str(key): str(value) for key, value in raw_env.items()})
 
-    try:
-        completed = subprocess.run(
-            [command, *args],
-            input=_build_tool_call_input(tool_name, arguments),
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=timeout_seconds,
-            env=env,
-            shell=False,
-        )
-        output = f"{completed.stdout or ''}\n{completed.stderr or ''}"
-    except FileNotFoundError as exc:
-        raise McpClientError(f"Command not found: {command}") from exc
-    except subprocess.TimeoutExpired as exc:
-        output = (exc.stdout or "") + "\n" + (exc.stderr or "")
+    last_error = ""
+    for candidate_transport in _transport_candidates(config, preferred=transport):
+        try:
+            completed = subprocess.run(
+                [command, *args],
+                input=_build_tool_call_input(tool_name, arguments, transport=candidate_transport),
+                capture_output=True,
+                timeout=timeout_seconds,
+                env=env,
+                shell=False,
+            )
+            output = _combined_output(completed.stdout, completed.stderr)
+        except FileNotFoundError as exc:
+            raise McpClientError(f"Command not found: {command}") from exc
+        except subprocess.TimeoutExpired as exc:
+            output = _combined_output(exc.stdout, exc.stderr)
+            messages = _parse_mcp_messages(output)
+            result, rpc_error = _result_from_messages(messages)
+            if result is not None:
+                _remember_transport(config, candidate_transport)
+                return result
+            if rpc_error:
+                raise McpClientError(rpc_error)
+            last_error = "MCP tool call timed out."
+            continue
+
         messages = _parse_mcp_messages(output)
-        result = _result_from_messages(messages)
+        result, rpc_error = _result_from_messages(messages)
         if result is not None:
+            _remember_transport(config, candidate_transport)
             return result
-        raise McpClientError("MCP tool call timed out.") from exc
+        if rpc_error:
+            raise McpClientError(rpc_error)
 
-    messages = _parse_mcp_messages(output)
-    result = _result_from_messages(messages)
-    if result is not None:
-        return result
+        error_message = _first_error_message(messages)
+        if not error_message:
+            error_message = (_decode_output(completed.stderr) or _decode_output(completed.stdout) or "No MCP response.").strip()
+        last_error = error_message[:500]
 
-    error_message = _first_error_message(messages)
-    if not error_message:
-        error_message = (completed.stderr or completed.stdout or "No MCP response.").strip()
-    raise McpClientError(error_message[:500])
+    raise McpClientError(last_error)
 
 
-def _result_from_messages(messages: Iterable[dict]) -> dict | None:
+def _result_from_messages(messages: Iterable[dict]) -> tuple[dict | None, str]:
     for message in messages:
         if message.get("id") != 2:
             continue
         if "result" in message and isinstance(message.get("result"), dict):
-            return message["result"]
+            return message["result"], ""
         error = message.get("error")
         if isinstance(error, dict):
-            raise McpClientError(str(error.get("message") or error))
-    return None
+            if "data" in error:
+                return None, json.dumps(error, ensure_ascii=False)
+            return None, str(error.get("message") or error)
+    return None, ""

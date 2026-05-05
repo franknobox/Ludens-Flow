@@ -44,7 +44,6 @@ export function FileView(props: FileViewProps) {
 
   useEffect(() => {
     if (currentView.type !== "file") {
-      setEditingFileId(null);
       setFileSaveError("");
       return;
     }

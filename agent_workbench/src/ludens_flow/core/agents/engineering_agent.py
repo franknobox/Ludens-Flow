@@ -8,8 +8,9 @@ import logging
 import re
 from typing import Callable, Optional
 
-from ludens_flow.core.agents.base import AgentResult, BaseAgent, CommitSpec
 from ludens_flow.capabilities.artifacts.artifacts import read_artifact
+from ludens_flow.capabilities.mcp.adapter import ENGINE_TOOL_SCHEMAS
+from ludens_flow.core.agents.base import AgentResult, BaseAgent, CommitSpec
 from ludens_flow.core.schemas import DISCUSS_RESPONSE_SCHEMA_TEXT, parse_discuss_payload
 from ludens_flow.core.state import LudensState
 from llm.provider import LLMConfig
@@ -128,6 +129,7 @@ class EngineeringAgent(BaseAgent):
         user_persona: Optional[str] = None,
         stream_handler: Optional[Callable[[str], None]] = None,
         tool_event_handler=None,
+        mcp_mode: bool = False,
     ) -> AgentResult:
         gdd = read_artifact("GDD", project_id=state.project_id)
         pm = read_artifact("PROJECT_PLAN", project_id=state.project_id)
@@ -151,12 +153,15 @@ class EngineeringAgent(BaseAgent):
             "4. 在工程讨论阶段，不要给出逐类实现指令、文件骨架、精确脚本拆分或 Unity 编辑器逐步操作。\n"
             "5. 除非用户明确要求进入后续执行阶段，否则不要主动建议具体文件名、代码脚手架或直接构建指令。\n"
             "6. 语气保持务实、清晰。\n"
+            "7. MCP 工具模式："
+            + ("开启" if mcp_mode else "关闭")
+            + "。你知道系统具备受控 `engine_*` MCP 能力；开启时，如果用户明确要求读取或操作外部编辑器，可以调用工具；关闭时请提醒用户先打开 `MCP on`。\n"
         )
 
-        if stream_handler:
+        if stream_handler and not mcp_mode:
             prompt = self._compose_user_prompt(
                 base_prompt_text
-                + "7. 只输出自然语言正文，不要输出 JSON、代码块或结构化协议。\n",
+                + "8. 只输出自然语言正文，不要输出 JSON、代码块或结构化协议。\n",
                 user_input,
                 input_label="用户意图",
             )
@@ -186,6 +191,7 @@ class EngineeringAgent(BaseAgent):
             history=state.chat_history,
             user_persona=user_persona,
             project_id=state.project_id,
+            tools=ENGINE_TOOL_SCHEMAS if mcp_mode else None,
             tool_event_handler=tool_event_handler,
         )
         payload, _ = parse_discuss_payload(raw)
@@ -315,6 +321,7 @@ class EngineeringAgent(BaseAgent):
         user_persona: Optional[str] = None,
         stream_handler: Optional[Callable[[str], None]] = None,
         tool_event_handler=None,
+        mcp_mode: bool = False,
     ) -> AgentResult:
         from datetime import datetime, timezone
 
@@ -327,6 +334,12 @@ class EngineeringAgent(BaseAgent):
             "默认使用简体中文回复，除非用户明确要求英文。\n"
             f"工程风格：{style}\n"
             f"实现计划：\n{impl_plan}\n\n"
+            "MCP 工具模式："
+            + ("开启" if mcp_mode else "关闭")
+            + "。\n"
+            "你知道 Ludens-Flow 具备受控 MCP / 引擎工具能力，可通过稳定的 `engine_*` 能力操作 Blender、Unity 等外部编辑器。\n"
+            "如果 MCP 工具模式开启，并且用户目标需要读取或操作外部编辑器，请优先调用可用工具，不要改为让用户手动运行脚本。\n"
+            "如果 MCP 工具模式关闭，而用户要求你实际调用 MCP 或操作外部编辑器，请明确提醒用户先在工作台顶部打开 `MCP on`，不要声称系统没有这类能力。\n\n"
             "请使用以下结构回复：\n"
             "1. 用 2-3 句话确认你对用户问题的理解。\n"
             "2. 给出最推荐的实现路径。\n"
@@ -359,7 +372,8 @@ class EngineeringAgent(BaseAgent):
             history=state.chat_history,
             user_persona=user_persona,
             project_id=state.project_id,
-            stream_handler=filtered_handler,
+            stream_handler=None if mcp_mode else filtered_handler,
+            tools=ENGINE_TOOL_SCHEMAS if mcp_mode else None,
             tool_event_handler=tool_event_handler,
         )
         logger.info("[EngineeringAgent] Coach instruction issued.")

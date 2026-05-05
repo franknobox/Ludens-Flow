@@ -11,6 +11,7 @@ import json
 import os
 import re
 import shutil
+import threading
 import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,6 +28,8 @@ _UNSET = object()
 DEFAULT_UNITY_WORKSPACE_ID = "unity-main"
 SUPPORTED_WORKSPACE_KINDS = {"unity", "generic", "blender"}
 SUPPORTED_MCP_ENGINES = {"unity", "godot", "blender", "unreal"}
+_PROJECT_META_LOCKS: Dict[str, threading.RLock] = {}
+_PROJECT_META_LOCKS_GUARD = threading.Lock()
 
 # 统一管理仓库根目录、工作区根目录和项目级路径。
 # 运行时总是落在某个项目目录下；首次启动时自动创建第一个项目。
@@ -51,6 +54,15 @@ def _coerce_bool(value: Any) -> bool:
     if isinstance(value, str):
         return value.strip().lower() in {"1", "true", "yes", "y", "on"}
     return bool(value)
+
+
+def _get_project_meta_lock(project_id: str) -> threading.RLock:
+    with _PROJECT_META_LOCKS_GUARD:
+        lock = _PROJECT_META_LOCKS.get(project_id)
+        if lock is None:
+            lock = threading.RLock()
+            _PROJECT_META_LOCKS[project_id] = lock
+        return lock
 
 
 def _normalize_project_id(project_id: Optional[str]) -> Optional[str]:
@@ -271,6 +283,36 @@ def _normalize_mcp_connections(raw: Any) -> List[Dict[str, Any]]:
     return entries
 
 
+def _merge_mcp_connection_lists(
+    preferred: List[Dict[str, Any]], fallback: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    merged: List[Dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    for item in [*preferred, *fallback]:
+        connection_id = str(item.get("id", "") or "").strip()
+        if not connection_id or connection_id in seen_ids:
+            continue
+        seen_ids.add(connection_id)
+        merged.append(dict(item))
+    return merged
+
+
+def _normalize_github_repo(raw: Any) -> Dict[str, str]:
+    if not isinstance(raw, dict):
+        return {}
+    owner = str(raw.get("owner") or "").strip()
+    repo = str(raw.get("repo") or "").strip()
+    if not owner or not repo:
+        return {}
+    result = {
+        "owner": owner,
+        "repo": repo.removesuffix(".git"),
+    }
+    url = str(raw.get("url") or "").strip()
+    result["url"] = url or f"https://github.com/{result['owner']}/{result['repo']}"
+    return result
+
+
 def _normalize_workspace_id(workspace_id: Optional[str], fallback: str) -> str:
     normalized = _normalize_project_id(workspace_id or fallback)
     if not normalized:
@@ -406,6 +448,20 @@ def _normalize_workspace_list(raw_workspaces: Any, legacy_unity_root: str = "") 
     return entries
 
 
+def _merge_workspace_lists(
+    preferred: List[Dict[str, Any]], fallback: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    merged: List[Dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    for item in [*preferred, *fallback]:
+        workspace_id = str(item.get("id", "") or "").strip()
+        if not workspace_id or workspace_id in seen_ids:
+            continue
+        seen_ids.add(workspace_id)
+        merged.append(dict(item))
+    return merged
+
+
 def _first_workspace_root(
     workspaces: List[Dict[str, Any]], *, kind: Optional[str] = None
 ) -> str:
@@ -439,8 +495,10 @@ def _read_project_meta(project_id: str) -> Dict[str, Any]:
                     project_id=project_id,
                 )
         return migrated
-    except Exception:
-        return {}
+    except Exception as exc:
+        raise RuntimeError(
+            f"Failed to read project metadata without risking data loss: {meta_file}"
+        ) from exc
 
 
 def _migrate_project_meta_payload(
@@ -492,6 +550,7 @@ def _migrate_project_meta_payload(
         ),
         "model_routing": _normalize_model_routing(meta.get("model_routing")),
         "mcp_connections": _normalize_mcp_connections(meta.get("mcp_connections")),
+        "github_repo": _normalize_github_repo(meta.get("github_repo")),
         "unity_root": _first_workspace_root(workspaces, kind="unity"),
         "workspaces": workspaces,
     }
@@ -505,9 +564,18 @@ def _migrate_project_meta_payload(
 def _write_project_meta(project_id: str, meta: Dict[str, Any]) -> Dict[str, Any]:
     meta_file = get_project_meta_file(project_id)
     meta_file.parent.mkdir(parents=True, exist_ok=True)
-    meta_file.write_text(
-        json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
+    payload = json.dumps(meta, ensure_ascii=False, indent=2)
+    temp_file = meta_file.with_name(
+        f".{meta_file.name}.{os.getpid()}.{threading.get_ident()}.tmp"
     )
+    try:
+        with open(temp_file, "w", encoding="utf-8") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_file, meta_file)
+    finally:
+        temp_file.unlink(missing_ok=True)
     return meta
 
 
@@ -540,6 +608,7 @@ def _build_project_meta_record(
         ),
         "model_routing": _normalize_model_routing(meta.get("model_routing")),
         "mcp_connections": _normalize_mcp_connections(meta.get("mcp_connections")),
+        "github_repo": _normalize_github_repo(meta.get("github_repo")),
         "unity_root": _first_workspace_root(workspaces, kind="unity"),
         "workspaces": workspaces,
     }
@@ -561,8 +630,11 @@ def _upsert_project_meta(
     agent_file_write_confirm_required: Any = _UNSET,
     model_routing: Any = _UNSET,
     mcp_connections: Any = _UNSET,
+    github_repo: Any = _UNSET,
     unity_root: Any = _UNSET,
     workspaces: Any = _UNSET,
+    allow_remove_mcp_connections: bool = False,
+    allow_remove_workspaces: bool = False,
 ) -> Dict[str, Any]:
     normalized = _normalize_project_id(project_id)
     if not normalized:
@@ -605,6 +677,7 @@ def _upsert_project_meta(
         ),
         "model_routing": _normalize_model_routing(existing.get("model_routing")),
         "mcp_connections": _normalize_mcp_connections(existing.get("mcp_connections")),
+        "github_repo": _normalize_github_repo(existing.get("github_repo")),
         "unity_root": _first_workspace_root(existing_workspaces, kind="unity"),
         "workspaces": existing_workspaces,
     }
@@ -625,6 +698,8 @@ def _upsert_project_meta(
         meta["model_routing"] = _normalize_model_routing(model_routing)
     if mcp_connections is not _UNSET:
         meta["mcp_connections"] = _normalize_mcp_connections(mcp_connections)
+    if github_repo is not _UNSET:
+        meta["github_repo"] = _normalize_github_repo(github_repo)
     if unity_root is not _UNSET:
         if str(unity_root or "").strip():
             next_workspaces = [
@@ -646,16 +721,76 @@ def _upsert_project_meta(
             )
             meta["workspaces"] = next_workspaces
         else:
-            meta["workspaces"] = [
+            next_workspaces = [
                 workspace
                 for workspace in meta["workspaces"]
                 if workspace.get("kind") != "unity"
             ]
+            removed_workspace_ids = {
+                str(workspace.get("id", ""))
+                for workspace in meta["workspaces"]
+                if workspace.get("kind") == "unity"
+                and str(workspace.get("id", "")).strip()
+            }
+            if removed_workspace_ids and not allow_remove_workspaces:
+                raise ValueError(
+                    "Refusing to remove existing Unity workspaces from a generic "
+                    "project metadata update. Use the explicit workspace delete API."
+                )
+            meta["workspaces"] = next_workspaces
         meta["unity_root"] = _first_workspace_root(meta["workspaces"], kind="unity")
     if workspaces is not _UNSET:
         normalized_workspaces = _normalize_workspace_list(workspaces)
+        existing_workspace_ids = {
+            str(workspace.get("id", ""))
+            for workspace in meta["workspaces"]
+            if str(workspace.get("id", "")).strip()
+        }
+        next_workspace_ids = {
+            str(workspace.get("id", ""))
+            for workspace in normalized_workspaces
+            if str(workspace.get("id", "")).strip()
+        }
+        if (
+            existing_workspace_ids
+            and not existing_workspace_ids.issubset(next_workspace_ids)
+            and not allow_remove_workspaces
+        ):
+            raise ValueError(
+                "Refusing to remove existing project workspaces from a generic "
+                "project metadata update. Use the explicit workspace delete API."
+            )
         meta["workspaces"] = normalized_workspaces
         meta["unity_root"] = _first_workspace_root(normalized_workspaces, kind="unity")
+
+    latest = _read_project_meta(normalized)
+    if latest:
+        mcp_connections_touched = mcp_connections is not _UNSET
+        workspaces_touched = workspaces is not _UNSET or unity_root is not _UNSET
+        if not allow_remove_mcp_connections:
+            latest_mcp_connections = _normalize_mcp_connections(
+                latest.get("mcp_connections")
+            )
+            if mcp_connections_touched:
+                meta["mcp_connections"] = _merge_mcp_connection_lists(
+                    _normalize_mcp_connections(meta.get("mcp_connections")),
+                    latest_mcp_connections,
+                )
+            else:
+                meta["mcp_connections"] = latest_mcp_connections
+        if not allow_remove_workspaces:
+            latest_workspaces = _normalize_workspace_list(
+                latest.get("workspaces"),
+                legacy_unity_root=str(latest.get("unity_root", "") or ""),
+            )
+            if workspaces_touched:
+                meta["workspaces"] = _merge_workspace_lists(
+                    _normalize_workspace_list(meta.get("workspaces")),
+                    latest_workspaces,
+                )
+            else:
+                meta["workspaces"] = latest_workspaces
+            meta["unity_root"] = _first_workspace_root(meta["workspaces"], kind="unity")
 
     stored = _write_project_meta(normalized, meta)
     return _build_project_meta_record(normalized, stored, project_dir)
@@ -791,31 +926,38 @@ def create_project(
     agent_file_write_confirm_required: Any = _UNSET,
     model_routing: Any = _UNSET,
     mcp_connections: Any = _UNSET,
+    github_repo: Any = _UNSET,
     unity_root: Any = _UNSET,
     workspaces: Any = _UNSET,
+    allow_remove_mcp_connections: bool = False,
+    allow_remove_workspaces: bool = False,
 ) -> Dict[str, Any]:
     """创建项目目录和基础元数据；已存在时刷新元数据。"""
     normalized = _normalize_project_id(project_id) or next_project_id(display_name or title)
     if not normalized:
         raise ValueError("Project id is required.")
 
-    meta = _upsert_project_meta(
-        normalized,
-        display_name=display_name,
-        title=title,
-        archived=archived,
-        agent_file_write_enabled=agent_file_write_enabled,
-        agent_file_write_confirm_required=agent_file_write_confirm_required,
-        model_routing=model_routing,
-        mcp_connections=mcp_connections,
-        unity_root=unity_root,
-        workspaces=workspaces,
-    )
+    with _get_project_meta_lock(normalized):
+        meta = _upsert_project_meta(
+            normalized,
+            display_name=display_name,
+            title=title,
+            archived=archived,
+            agent_file_write_enabled=agent_file_write_enabled,
+            agent_file_write_confirm_required=agent_file_write_confirm_required,
+            model_routing=model_routing,
+            mcp_connections=mcp_connections,
+            github_repo=github_repo,
+            unity_root=unity_root,
+            workspaces=workspaces,
+            allow_remove_mcp_connections=allow_remove_mcp_connections,
+            allow_remove_workspaces=allow_remove_workspaces,
+        )
 
-    if set_active:
-        set_active_project_id(normalized)
+        if set_active:
+            set_active_project_id(normalized)
 
-    return meta
+        return meta
 
 
 def touch_project(
@@ -830,29 +972,36 @@ def touch_project(
     agent_file_write_confirm_required: Any = _UNSET,
     model_routing: Any = _UNSET,
     mcp_connections: Any = _UNSET,
+    github_repo: Any = _UNSET,
     unity_root: Any = _UNSET,
     workspaces: Any = _UNSET,
+    allow_remove_mcp_connections: bool = False,
+    allow_remove_workspaces: bool = False,
 ) -> Dict[str, Any]:
     """刷新项目元数据，用于记录最近活跃时间。"""
     normalized = _normalize_project_id(project_id)
     if not normalized:
         raise ValueError("Project id is required.")
 
-    return _upsert_project_meta(
-        normalized,
-        display_name=display_name,
-        title=title,
-        mark_active=mark_active,
-        last_phase=last_phase,
-        archived=archived,
-        last_message_preview=last_message_preview,
-        agent_file_write_enabled=agent_file_write_enabled,
-        agent_file_write_confirm_required=agent_file_write_confirm_required,
-        model_routing=model_routing,
-        mcp_connections=mcp_connections,
-        unity_root=unity_root,
-        workspaces=workspaces,
-    )
+    with _get_project_meta_lock(normalized):
+        return _upsert_project_meta(
+            normalized,
+            display_name=display_name,
+            title=title,
+            mark_active=mark_active,
+            last_phase=last_phase,
+            archived=archived,
+            last_message_preview=last_message_preview,
+            agent_file_write_enabled=agent_file_write_enabled,
+            agent_file_write_confirm_required=agent_file_write_confirm_required,
+            model_routing=model_routing,
+            mcp_connections=mcp_connections,
+            github_repo=github_repo,
+            unity_root=unity_root,
+            workspaces=workspaces,
+            allow_remove_mcp_connections=allow_remove_mcp_connections,
+            allow_remove_workspaces=allow_remove_workspaces,
+        )
 
 
 def list_project_workspaces(
@@ -957,7 +1106,11 @@ def remove_project_workspace(
         raise FileNotFoundError(f"Workspace not found: {target_id}")
 
     remaining = [workspace for workspace in existing if workspace.get("id") != target_id]
-    meta = touch_project(resolved, workspaces=remaining)
+    meta = touch_project(
+        resolved,
+        workspaces=remaining,
+        allow_remove_workspaces=True,
+    )
     from ludens_flow.core.state.state_logs import write_audit_log
 
     write_audit_log(
@@ -1090,14 +1243,21 @@ def get_project_mcp_connections(project_id: Optional[str] = None) -> List[Dict[s
 
 
 def set_project_mcp_connections(
-    connections: Any, *, project_id: Optional[str] = None
+    connections: Any,
+    *,
+    project_id: Optional[str] = None,
+    allow_remove_mcp_connections: bool = False,
 ) -> Dict[str, Any]:
     resolved = resolve_project_id(project_id)
     if not resolved:
         raise ValueError("Project id is required.")
 
     normalized = _normalize_mcp_connections(connections)
-    meta = touch_project(resolved, mcp_connections=normalized)
+    meta = touch_project(
+        resolved,
+        mcp_connections=normalized,
+        allow_remove_mcp_connections=allow_remove_mcp_connections,
+    )
     return {
         "project_id": resolved,
         "agent_file_write_enabled": _coerce_bool(
@@ -1108,6 +1268,27 @@ def set_project_mcp_connections(
         ),
         "model_routing": _normalize_model_routing(meta.get("model_routing")),
         "mcp_connections": _normalize_mcp_connections(meta.get("mcp_connections")),
+    }
+
+
+def get_project_github_repo(project_id: Optional[str] = None) -> Dict[str, str]:
+    resolved = resolve_project_id(project_id)
+    if not resolved:
+        raise ValueError("Project id is required.")
+    return _normalize_github_repo(_read_project_meta(resolved).get("github_repo"))
+
+
+def set_project_github_repo(
+    github_repo: Any, *, project_id: Optional[str] = None
+) -> Dict[str, Any]:
+    resolved = resolve_project_id(project_id)
+    if not resolved:
+        raise ValueError("Project id is required.")
+
+    meta = touch_project(resolved, github_repo=github_repo)
+    return {
+        "project_id": resolved,
+        "github_repo": _normalize_github_repo(meta.get("github_repo")),
     }
 
 
@@ -1142,7 +1323,11 @@ def clear_project_unity_root(project_id: Optional[str] = None) -> Dict[str, Any]
             and workspace.get("id") == DEFAULT_UNITY_WORKSPACE_ID
         )
     ]
-    meta = touch_project(resolved, workspaces=remaining)
+    meta = touch_project(
+        resolved,
+        workspaces=remaining,
+        allow_remove_workspaces=True,
+    )
     if removed:
         from ludens_flow.core.state.state_logs import write_audit_log
 
@@ -1179,8 +1364,11 @@ def list_projects(*, include_archived: bool = True) -> List[Dict[str, Any]]:
         project_id = _normalize_project_id(entry.name)
         if not project_id:
             continue
-        meta = _read_project_meta(project_id)
-        record = _build_project_meta_record(project_id, meta, entry)
+        try:
+            meta = _read_project_meta(project_id)
+            record = _build_project_meta_record(project_id, meta, entry)
+        except Exception as exc:
+            record = _build_broken_project_meta_record(project_id, entry, exc)
         if not include_archived and record.get("archived", False):
             continue
         projects.append(record)
@@ -1193,6 +1381,32 @@ def list_projects(*, include_archived: bool = True) -> List[Dict[str, Any]]:
         reverse=True,
     )
     return projects
+
+
+def _build_broken_project_meta_record(
+    project_id: str, project_dir: Path, error: Exception
+) -> Dict[str, Any]:
+    return {
+        "schema_version": PROJECT_META_SCHEMA_VERSION,
+        "id": project_id,
+        "display_name": project_id,
+        "title": project_id,
+        "created_at": "",
+        "updated_at": "",
+        "last_active_at": "",
+        "last_phase": "",
+        "archived": False,
+        "last_message_preview": "",
+        "agent_file_write_enabled": True,
+        "agent_file_write_confirm_required": False,
+        "model_routing": {},
+        "mcp_connections": [],
+        "github_repo": {},
+        "unity_root": "",
+        "workspaces": [],
+        "path": str(project_dir),
+        "metadata_error": str(error),
+    }
 
 
 def list_active_projects() -> List[Dict[str, Any]]:

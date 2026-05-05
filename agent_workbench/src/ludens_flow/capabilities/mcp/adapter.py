@@ -8,9 +8,9 @@ exposes raw external MCP tool names directly to agents.
 from __future__ import annotations
 
 import json
-import re
 from typing import Any, Callable, Dict, List, Optional
 
+from ludens_flow.capabilities.mcp.adapters import get_engine_adapter
 from ludens_flow.capabilities.mcp.health import (
     McpClientError,
     call_mcp_tool,
@@ -28,66 +28,6 @@ WRITE_CAPABILITIES = {
     "engine_save_scene",
     "engine_run_project",
     "engine_create_script",
-}
-
-ENGINE_TOOL_CANDIDATES: Dict[str, Dict[str, List[str]]] = {
-    "unity": {
-        "engine_list_scene": [
-            "get_scene_hierarchy",
-            "get_current_scene_hierarchy",
-            "list_scene",
-            "list_gameobjects",
-            "get_hierarchy",
-        ],
-        "engine_create_object": [
-            "create_gameobject",
-            "create_object",
-            "create_prefab",
-            "add_gameobject",
-        ],
-        "engine_move_object": [
-            "move_gameobject",
-            "set_transform",
-            "modify_gameobject",
-            "update_transform",
-        ],
-        "engine_save_scene": ["save_scene", "save_current_scene"],
-        "engine_read_console": [
-            "read_console",
-            "get_console_logs",
-            "get_logs",
-            "get_log_entries",
-        ],
-        "engine_run_project": ["start_play_mode", "run_tests", "play_unity_game"],
-        "engine_create_script": ["create_script", "create_csharp_script"],
-    },
-    "godot": {
-        "engine_list_scene": ["get_project_info", "get_scene_tree", "list_scenes"],
-        "engine_create_object": ["add_node", "create_scene"],
-        "engine_move_object": ["set_node_properties", "update_node", "move_node"],
-        "engine_save_scene": ["save_scene"],
-        "engine_read_console": ["get_debug_output"],
-        "engine_run_project": ["run_project", "launch_editor"],
-        "engine_create_script": ["create_script", "create_gdscript"],
-    },
-    "blender": {
-        "engine_list_scene": ["get_scene_info", "get_scene_objects"],
-        "engine_create_object": ["create_object", "add_object"],
-        "engine_move_object": ["modify_object", "set_object_transform"],
-        "engine_save_scene": ["save_file", "save_blend_file"],
-        "engine_read_console": ["get_logs", "get_console_output"],
-        "engine_run_project": ["render_scene"],
-        "engine_create_script": ["run_script", "execute_blender_code"],
-    },
-    "unreal": {
-        "engine_list_scene": ["list_actors", "get_scene_hierarchy", "get_level_actors"],
-        "engine_create_object": ["spawn_actor", "create_actor"],
-        "engine_move_object": ["set_actor_transform", "move_actor"],
-        "engine_save_scene": ["save_level", "save_scene"],
-        "engine_read_console": ["get_output_log", "read_console"],
-        "engine_run_project": ["play_in_editor", "run_project"],
-        "engine_create_script": ["create_blueprint", "create_cpp_class"],
-    },
 }
 
 
@@ -171,6 +111,14 @@ ENGINE_SAVE_SCENE_TOOL_SCHEMA = {
             "properties": {
                 **_base_properties(),
                 "scene_path": {"type": "string"},
+                "workspace_id": {
+                    "type": "string",
+                    "description": "Optional approved workspace id. Required when multiple workspaces are available.",
+                },
+                "allow_current_file": {
+                    "type": "boolean",
+                    "description": "For Blender only: explicitly allow saving the currently opened .blend file when scene_path is omitted.",
+                },
             },
             "required": ["engine"],
         },
@@ -206,6 +154,10 @@ ENGINE_RUN_PROJECT_TOOL_SCHEMA = {
                 "project_path": {"type": "string"},
                 "scene_path": {"type": "string"},
                 "mode": {"type": "string"},
+                "max_size": {
+                    "type": "integer",
+                    "description": "Optional viewport screenshot size for Blender-like tools.",
+                },
             },
             "required": ["engine"],
         },
@@ -226,7 +178,7 @@ ENGINE_CREATE_SCRIPT_TOOL_SCHEMA = {
                 "language": {"type": "string"},
                 "content": {"type": "string"},
             },
-            "required": ["engine", "path"],
+            "required": ["engine"],
         },
     },
 }
@@ -279,39 +231,62 @@ def dispatch_engine_tool_call(
         tool_event_handler=tool_event_handler,
     )
 
-    _emit(tool_event_handler, {"type": "tool_started", "tool_name": tool_name, "args": args})
     status = check_mcp_connection(connection)
     available_tools = status.get("tools") or []
+    transport = str(status.get("transport") or "").strip() or None
     if status.get("status") not in {"tools_loaded", "reachable"}:
         raise McpClientError(status.get("message") or "MCP connection is not reachable.")
 
-    raw_tool_name = _select_underlying_tool(engine, tool_name, available_tools)
-    if not raw_tool_name:
+    engine_adapter = get_engine_adapter(engine)
+    mapped_call = engine_adapter.map_call(
+        tool_name,
+        args,
+        available_tools,
+        project_id=project_id,
+    )
+    if not mapped_call:
         available = ", ".join(tool.get("name", "") for tool in available_tools[:30])
         raise McpClientError(
             f"No mapped MCP tool for {engine}.{tool_name}. Available tools: {available}"
         )
 
-    _emit(
-        tool_event_handler,
-        {
-            "type": "tool_progress",
-            "tool_name": tool_name,
-            "args": args,
-            "message": f"Calling {engine} MCP tool: {raw_tool_name}",
-        },
-    )
-    result = call_mcp_tool(connection, raw_tool_name, _to_underlying_arguments(args))
+    attempted_arguments = [mapped_call.arguments]
+    try:
+        result = call_mcp_tool(
+            connection,
+            mapped_call.tool_name,
+            mapped_call.arguments,
+            transport=transport,
+        )
+    except McpClientError as exc:
+        if "Invalid request parameters" not in str(exc):
+            raise
+        last_error = exc
+        for fallback_arguments in engine_adapter.fallback_arguments(
+            tool_name,
+            mapped_call.tool_name,
+            mapped_call.arguments,
+        ):
+            attempted_arguments.append(fallback_arguments)
+            try:
+                result = call_mcp_tool(
+                    connection,
+                    mapped_call.tool_name,
+                    fallback_arguments,
+                    transport=transport,
+                )
+                break
+            except McpClientError as retry_exc:
+                last_error = retry_exc
+        else:
+            attempts = "; ".join(
+                json.dumps(item, ensure_ascii=False, sort_keys=True)
+                for item in attempted_arguments
+            )
+            raise McpClientError(f"{last_error} Tried arguments: {attempts}") from last_error
     text = _format_tool_result(result)
-    _emit(
-        tool_event_handler,
-        {
-            "type": "tool_completed",
-            "tool_name": tool_name,
-            "args": args,
-            "result": text,
-        },
-    )
+    if tool_name == "engine_list_scene":
+        text = _limit_scene_result_text(text, _coerce_max_items(args.get("max_items")))
     return text
 
 
@@ -364,7 +339,7 @@ def _ensure_permission(
             "message": f"Engine MCP operation requires permission: {tool_name}",
         },
     )
-    if approved is False:
+    if approved is not True:
         _emit(
             tool_event_handler,
             {
@@ -374,7 +349,7 @@ def _ensure_permission(
                 "message": f"Permission denied for engine operation: {tool_name}",
             },
         )
-        raise McpClientError("User denied this engine MCP operation.")
+        raise McpClientError("User denied this engine MCP operation, or no permission handler was available.")
 
     _emit(
         tool_event_handler,
@@ -385,38 +360,6 @@ def _ensure_permission(
             "message": f"Permission granted for engine operation: {tool_name}",
         },
     )
-
-
-def _select_underlying_tool(engine: str, capability: str, available_tools: List[dict]) -> str:
-    names = [str(tool.get("name") or "") for tool in available_tools]
-    candidates = ENGINE_TOOL_CANDIDATES.get(engine, {}).get(capability, [])
-    normalized_names = {_normalize_tool_name(name): name for name in names}
-
-    for candidate in candidates:
-        if candidate in names:
-            return candidate
-        normalized = _normalize_tool_name(candidate)
-        if normalized in normalized_names:
-            return normalized_names[normalized]
-
-    capability_hint = capability.removeprefix("engine_")
-    for name in names:
-        normalized = _normalize_tool_name(name)
-        if _normalize_tool_name(capability_hint) in normalized:
-            return name
-    return ""
-
-
-def _normalize_tool_name(name: str) -> str:
-    return re.sub(r"[^a-z0-9]", "", name.lower())
-
-
-def _to_underlying_arguments(args: Dict[str, Any]) -> Dict[str, Any]:
-    return {
-        key: value
-        for key, value in args.items()
-        if key not in {"engine", "connection_id"} and value is not None
-    }
 
 
 def _format_tool_result(result: dict) -> str:
@@ -435,8 +378,68 @@ def _format_tool_result(result: dict) -> str:
     return json.dumps(result, ensure_ascii=False, indent=2)
 
 
+def _coerce_max_items(value: Any) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return 200
+    return max(1, min(parsed, 1000))
+
+
+def _limit_scene_result_text(text: str, max_items: int) -> str:
+    stripped = text.strip()
+    if not stripped:
+        return text
+    try:
+        payload = json.loads(stripped)
+    except json.JSONDecodeError:
+        lines = text.splitlines()
+        if len(lines) <= max_items:
+            return text
+        omitted = len(lines) - max_items
+        return "\n".join(lines[:max_items] + [f"... truncated {omitted} scene items by max_items={max_items}"])
+
+    limiter = _SceneResultLimiter(max_items)
+    limited = limiter.limit(payload)
+    if limiter.omitted:
+        if isinstance(limited, dict):
+            limited["truncated"] = True
+            limited["omitted_items"] = limiter.omitted
+            limited["max_items"] = max_items
+        else:
+            limited = {
+                "items": limited,
+                "truncated": True,
+                "omitted_items": limiter.omitted,
+                "max_items": max_items,
+            }
+    return json.dumps(limited, ensure_ascii=False, indent=2)
+
+
+class _SceneResultLimiter:
+    def __init__(self, max_items: int):
+        self.max_items = max_items
+        self.seen = 0
+        self.omitted = 0
+
+    def limit(self, value: Any) -> Any:
+        if isinstance(value, list):
+            if not any(isinstance(item, (dict, list)) for item in value):
+                return value
+            result = []
+            for item in value:
+                if self.seen >= self.max_items:
+                    self.omitted += 1
+                    continue
+                self.seen += 1
+                result.append(self.limit(item))
+            return result
+        if isinstance(value, dict):
+            return {key: self.limit(item) for key, item in value.items()}
+        return value
+
+
 def _emit(event_handler: ToolEventHandler, payload: dict[str, Any]) -> Any:
     if event_handler:
         return event_handler(payload)
     return None
-

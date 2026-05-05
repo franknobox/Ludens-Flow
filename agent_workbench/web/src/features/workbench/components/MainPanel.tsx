@@ -1,4 +1,11 @@
-import type { RefObject } from "react";
+import {
+  Suspense,
+  lazy,
+  useEffect,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 
 import { agentName } from "../utils";
 import type {
@@ -10,15 +17,40 @@ import type {
   WorkflowAction,
   WorkspaceFileItem,
 } from "../types";
-import { GithubPage } from "../../github/components/GithubPage";
-import { AigcPage } from "../../aigc/components/AigcPage";
-import { CopywritingPage } from "../../copywriting/components/CopywritingPage";
-import { GameModelPage } from "../../game-model/components/GameModelPage";
-import { McpPage } from "../../mcp/components/McpPage";
-import { SkillsWorkbenchPage } from "../../skills/components/SkillsWorkbenchPage";
 import { AgentMessages } from "./mainPanel/AgentMessages";
 import { Composer } from "./mainPanel/Composer";
 import { FileView } from "./mainPanel/FileView";
+
+const GithubPage = lazy(() =>
+  import("../../github/components/GithubPage").then((module) => ({
+    default: module.GithubPage,
+  })),
+);
+const AigcPage = lazy(() =>
+  import("../../aigc/components/AigcPage").then((module) => ({
+    default: module.AigcPage,
+  })),
+);
+const CopywritingPage = lazy(() =>
+  import("../../copywriting/components/CopywritingPage").then((module) => ({
+    default: module.CopywritingPage,
+  })),
+);
+const GameModelPage = lazy(() =>
+  import("../../game-model/components/GameModelPage").then((module) => ({
+    default: module.GameModelPage,
+  })),
+);
+const McpPage = lazy(() =>
+  import("../../mcp/components/McpPage").then((module) => ({
+    default: module.McpPage,
+  })),
+);
+const SkillsWorkbenchPage = lazy(() =>
+  import("../../skills/components/SkillsWorkbenchPage").then((module) => ({
+    default: module.SkillsWorkbenchPage,
+  })),
+);
 
 interface MainPanelProps {
   currentView: ViewState;
@@ -34,6 +66,7 @@ interface MainPanelProps {
   transientChat: TransientChat | null;
   actions: WorkflowAction[];
   requestInFlight: boolean;
+  mcpMode: boolean;
   fileItems: WorkspaceFileItem[];
   fileCache: Record<string, string>;
   fileEditable: boolean;
@@ -42,12 +75,41 @@ interface MainPanelProps {
   contentAreaRef: RefObject<HTMLElement>;
   onSend: (message: string, attachments: ComposerAttachment[]) => Promise<void>;
   onAction: (actionId: string) => void;
+  onToggleMcpMode: (enabled: boolean) => void;
   onSaveFile: (fileId: string, content: string) => Promise<void>;
   onUploadFileAsset: (
     fileId: string,
     name: string,
     dataUrl: string,
   ) => Promise<{ markdown: string }>;
+}
+
+function LazyPersistentView({
+  active,
+  children,
+}: {
+  active: boolean;
+  children: ReactNode;
+}) {
+  const [shouldMount, setShouldMount] = useState(active);
+
+  useEffect(() => {
+    if (active) {
+      setShouldMount(true);
+    }
+  }, [active]);
+
+  if (!shouldMount) {
+    return null;
+  }
+
+  return (
+    <div className="persistent-view" hidden={!active}>
+      <Suspense fallback={<div className="empty">加载中...</div>}>
+        {children}
+      </Suspense>
+    </div>
+  );
 }
 
 export function MainPanel(props: MainPanelProps) {
@@ -65,6 +127,7 @@ export function MainPanel(props: MainPanelProps) {
     transientChat,
     actions,
     requestInFlight,
+    mcpMode,
     fileItems,
     fileCache,
     fileEditable,
@@ -73,6 +136,7 @@ export function MainPanel(props: MainPanelProps) {
     contentAreaRef,
     onSend,
     onAction,
+    onToggleMcpMode,
     onSaveFile,
     onUploadFileAsset,
   } = props;
@@ -94,37 +158,74 @@ export function MainPanel(props: MainPanelProps) {
             <h1 className="hero-title">{title}</h1>
             <div className="hero-sub">{subtitle}</div>
           </div>
-          <div className="meta">
-            <span className="badge project">{projectName}</span>
-            <span className="badge phase">{phaseLabel}</span>
-            <span className="badge mode">{modeBadge}</span>
-            {readOnly && currentView.type === "agent" ? (
-              <span className="badge readonly">只读 · {agentName(currentAgent)}</span>
+          <div className="meta-stack">
+            <div className="meta">
+              <span className="badge project">{projectName}</span>
+              <span className="badge phase">{phaseLabel}</span>
+              <span className="badge mode">{modeBadge}</span>
+              {readOnly && currentView.type === "agent" ? (
+                <span className="badge readonly">只读 · {agentName(currentAgent)}</span>
+              ) : null}
+            </div>
+            {currentView.type === "agent" && currentAgent === "engineering" ? (
+              <button
+                type="button"
+                className={`mcp-mode-toggle${mcpMode ? " is-on" : ""}`}
+                onClick={() => onToggleMcpMode(!mcpMode)}
+                title={
+                  mcpMode
+                    ? "MCP 模式已开启：工程 Agent 会强制进入工具调用路径。"
+                    : "MCP 模式已关闭：工程 Agent 会提示你打开后再调用外部编辑器工具。"
+                }
+              >
+                <span className="mcp-mode-dot" />
+                MCP {mcpMode ? "on" : "off"}
+              </button>
             ) : null}
           </div>
         </header>
       )}
 
       <section className="content" ref={contentAreaRef}>
-        {isSpecialView ? (
-          <div className="special-view-container">
-            {currentView.type === "github" ? (
-              <GithubPage />
-            ) : currentView.type === "aigc" ? (
-              <AigcPage />
-            ) : currentView.type === "copywriting" ? (
-              <CopywritingPage />
-            ) : currentView.type === "mcp" ? (
-              <McpPage tool={currentView.tool} />
-            ) : currentView.type === "skills" ? (
-              <SkillsWorkbenchPage projectId={currentProjectId} />
-            ) : (
-              <GameModelPage />
-            )}
-          </div>
-        ) : currentView.type === "agent" ? (
+        <div className="special-view-container" hidden={!isSpecialView}>
+          <LazyPersistentView active={currentView.type === "github"}>
+            <GithubPage />
+          </LazyPersistentView>
+          <LazyPersistentView active={currentView.type === "aigc"}>
+            <AigcPage />
+          </LazyPersistentView>
+          <LazyPersistentView active={currentView.type === "copywriting"}>
+            <CopywritingPage key={currentProjectId} />
+          </LazyPersistentView>
+          <LazyPersistentView active={currentView.type === "game-model"}>
+            <GameModelPage key={currentProjectId} />
+          </LazyPersistentView>
+          <LazyPersistentView active={currentView.type === "skills"}>
+            <SkillsWorkbenchPage key={currentProjectId} projectId={currentProjectId} />
+          </LazyPersistentView>
+          <LazyPersistentView
+            active={currentView.type === "mcp" && currentView.tool === "unity"}
+          >
+            <McpPage key={`${currentProjectId}::unity`} tool="unity" />
+          </LazyPersistentView>
+          <LazyPersistentView
+            active={currentView.type === "mcp" && currentView.tool === "godot"}
+          >
+            <McpPage key={`${currentProjectId}::godot`} tool="godot" />
+          </LazyPersistentView>
+          <LazyPersistentView
+            active={currentView.type === "mcp" && currentView.tool === "blender"}
+          >
+            <McpPage key={`${currentProjectId}::blender`} tool="blender" />
+          </LazyPersistentView>
+          <LazyPersistentView active={currentView.type === "mcp" && currentView.tool === "ue"}>
+            <McpPage key={`${currentProjectId}::ue`} tool="ue" />
+          </LazyPersistentView>
+        </div>
+
+        <div className="persistent-view" hidden={isSpecialView || currentView.type !== "agent"}>
           <AgentMessages
-            agentKey={currentView.id}
+            agentKey={currentView.type === "agent" ? currentView.id : currentAgent}
             currentAgent={currentAgent}
             readOnly={readOnly}
             requestInFlight={requestInFlight}
@@ -133,7 +234,9 @@ export function MainPanel(props: MainPanelProps) {
             actions={actions}
             onAction={onAction}
           />
-        ) : (
+        </div>
+
+        <div className="persistent-view" hidden={isSpecialView || currentView.type !== "file"}>
           <FileView
             currentView={currentView}
             currentProjectId={currentProjectId}
@@ -143,7 +246,7 @@ export function MainPanel(props: MainPanelProps) {
             onSaveFile={onSaveFile}
             onUploadFileAsset={onUploadFileAsset}
           />
-        )}
+        </div>
       </section>
 
       {!isSpecialView && currentView.type === "agent" ? (

@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import type {
   McpConnectionConfig,
   McpConnectionStatus,
@@ -644,6 +646,7 @@ interface EngineConnectionsSectionProps {
   onCommandChange: (value: string) => void;
   onArgsChange: (value: string) => void;
   onEnvChange: (value: string) => void;
+  onFillBlenderPreset: () => void;
   onAddConnection: () => void;
   onUpdateConnection: (
     connectionId: string,
@@ -652,6 +655,128 @@ interface EngineConnectionsSectionProps {
   onRemoveConnection: (connectionId: string) => void;
   onCheckConnection: (connectionId: string) => void;
   onCheckAll: () => void;
+}
+
+function BlenderInstallGuideModal({
+  onClose,
+  onFillPreset,
+}: {
+  onClose: () => void;
+  onFillPreset: () => void;
+}) {
+  return (
+    <div className="settings-guide-overlay" role="dialog" aria-modal="true">
+      <div className="settings-guide-panel">
+        <button
+          type="button"
+          className="settings-guide-close"
+          aria-label="关闭 Blender MCP 安装指引"
+          onClick={onClose}
+        >
+          ×
+        </button>
+
+        <div className="settings-guide-head">
+          <span className="settings-guide-kicker">Blender MCP</span>
+          <h2>安装指引</h2>
+          <p>
+            这一步会把 Blender 和 Ludens-Flow 连接起来。先完成 Blender 插件安装，
+            再在当前项目里保存 MCP 启动配置，最后回到这里做健康检查。
+          </p>
+        </div>
+
+        <div className="settings-guide-body">
+          <section className="settings-guide-step">
+            <div className="settings-guide-step-index">1</div>
+            <div>
+              <h3>确认本机环境</h3>
+              <p>需要先安装 Blender 3.0+、Python 3.10+，并确保已经安装 uv。</p>
+              <p>如果还没有 uv，在 Windows PowerShell 里运行：</p>
+              <pre><code>powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"</code></pre>
+              <p>安装完成后重新打开终端，确认 uv 可用：</p>
+              <pre><code>uv --version</code></pre>
+            </div>
+          </section>
+
+          <section className="settings-guide-step">
+            <div className="settings-guide-step-index">2</div>
+            <div>
+              <h3>下载 Blender 插件</h3>
+              <p>
+                打开 GitHub 文件页，将 <code>addon.py</code> 下载并保存到本地。
+                也可以用下面的 PowerShell 命令直接保存到下载目录。
+              </p>
+              <pre><code>{`Invoke-WebRequest -Uri "https://raw.githubusercontent.com/ahujasid/blender-mcp/main/addon.py" -OutFile "$env:USERPROFILE\\Downloads\\addon.py"`}</code></pre>
+              <a
+                className="settings-guide-link"
+                href="https://github.com/ahujasid/blender-mcp/blob/main/addon.py"
+                target="_blank"
+                rel="noreferrer"
+              >
+                打开 GitHub 文件页
+              </a>
+            </div>
+          </section>
+
+          <section className="settings-guide-step">
+            <div className="settings-guide-step-index">3</div>
+            <div>
+              <h3>在 Blender 中启用插件</h3>
+              <ol>
+                <li>打开 Blender。</li>
+                <li>进入 Edit / Preferences / Add-ons。</li>
+                <li>点击 Install，选择刚下载的 <code>addon.py</code>。</li>
+                <li>启用 <code>Interface: Blender MCP</code>。</li>
+                <li>回到 3D View，按键盘 <code>N</code> 呼出右侧侧边栏。</li>
+                <li>在右侧侧边栏里找到 BlenderMCP 面板，点击连接按钮。</li>
+              </ol>
+            </div>
+          </section>
+
+          <section className="settings-guide-step">
+            <div className="settings-guide-step-index">4</div>
+            <div>
+              <h3>在 Ludens-Flow 中保存 MCP 配置</h3>
+              <p>Windows 推荐使用下面这组配置，并默认关闭第三方 telemetry。</p>
+              <button
+                type="button"
+                className="settings-guide-inline-button"
+                onClick={onFillPreset}
+              >
+                一键填入添加表单
+              </button>
+              <div className="settings-guide-config-grid">
+                <div>
+                  <span>启动命令</span>
+                  <pre><code>cmd</code></pre>
+                </div>
+                <div>
+                  <span>启动参数，每行一个</span>
+                  <pre><code>{"/c\nuvx\nblender-mcp"}</code></pre>
+                </div>
+                <div>
+                  <span>环境变量</span>
+                  <pre><code>DISABLE_TELEMETRY=true</code></pre>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="settings-guide-step">
+            <div className="settings-guide-step-index">5</div>
+            <div>
+              <h3>回到设置页检查连接</h3>
+              <p>
+                保存配置后点击“检查”。如果能读取到底层工具列表，再去工作台的
+                Blender MCP 页面查看能力映射。
+              </p>
+            </div>
+          </section>
+        </div>
+
+      </div>
+    </div>
+  );
 }
 
 export function EngineConnectionsSection(props: EngineConnectionsSectionProps) {
@@ -671,6 +796,7 @@ export function EngineConnectionsSection(props: EngineConnectionsSectionProps) {
     onCommandChange,
     onArgsChange,
     onEnvChange,
+    onFillBlenderPreset,
     onAddConnection,
     onUpdateConnection,
     onRemoveConnection,
@@ -679,13 +805,21 @@ export function EngineConnectionsSection(props: EngineConnectionsSectionProps) {
   } = props;
 
   const busy = loading || submitting || checking;
+  const [showBlenderGuide, setShowBlenderGuide] = useState(false);
   const configuredEngines = new Set(connections.map((connection) => connection.engine));
   const missingEngines = MCP_ENGINE_OPTIONS.filter(
     (engine) => !configuredEngines.has(engine.value),
   );
 
   return (
-    <div className="settings-detail-stack settings-detail-stack--fill">
+    <>
+      {showBlenderGuide ? (
+        <BlenderInstallGuideModal
+          onClose={() => setShowBlenderGuide(false)}
+          onFillPreset={onFillBlenderPreset}
+        />
+      ) : null}
+      <div className="settings-detail-stack settings-detail-stack--fill">
       <section className="settings-pane-card settings-pane-card-main settings-engine-whole">
         <div className="settings-card-head">
           <h2 className="settings-card-title">引擎连接</h2>
@@ -745,6 +879,15 @@ export function EngineConnectionsSection(props: EngineConnectionsSectionProps) {
                     ) : null}
 
                     <div className="settings-engine-actions">
+                      {connection.engine === "blender" ? (
+                        <button
+                          type="button"
+                          className="settings-pill-button"
+                          onClick={() => setShowBlenderGuide(true)}
+                        >
+                          安装指引
+                        </button>
+                      ) : null}
                       <label className="settings-toggle compact">
                         <input
                           type="checkbox"
@@ -790,6 +933,17 @@ export function EngineConnectionsSection(props: EngineConnectionsSectionProps) {
                 <p className="settings-engine-message">
                   尚未为当前项目配置 {engine.label} MCP。填写右侧表单后可进行健康检查。
                 </p>
+                {engine.value === "blender" ? (
+                  <div className="settings-engine-actions align-right">
+                    <button
+                      type="button"
+                      className="settings-pill-button"
+                      onClick={() => setShowBlenderGuide(true)}
+                    >
+                      安装指引
+                    </button>
+                  </div>
+                ) : null}
               </article>
             ))}
           </div>
@@ -863,7 +1017,8 @@ export function EngineConnectionsSection(props: EngineConnectionsSectionProps) {
           </div>
         </div>
       </section>
-    </div>
+      </div>
+    </>
   );
 }
 

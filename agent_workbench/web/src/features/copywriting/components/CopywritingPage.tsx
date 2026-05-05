@@ -1,7 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { ChangeEvent } from "react";
 
-import { generateDesignCopywriting } from "../api/copywriting";
+import { startDesignCopywritingJob } from "../api/copywriting";
 import type { DesignCopywritingCandidate, DesignCopywritingResponse } from "../types";
+import { useProjectRuntime } from "../../workbench/state/ProjectRuntimeContext";
 import { toErrorMessage } from "../../workbench/utils";
 import "../styles/copywriting.css";
 
@@ -10,6 +12,14 @@ type CopyType = {
   name: string;
   desc: string;
   examples: string[];
+};
+
+type ExternalReferenceFile = {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  dataUrl: string;
 };
 
 const COPY_TYPES: CopyType[] = [
@@ -47,12 +57,35 @@ const COPY_TYPES: CopyType[] = [
 
 const STYLE_PRESETS = ["简洁直接", "细腻叙事", "口语自然", "诗性凝练"];
 const LENGTH_PRESETS = ["极短", "短句", "标准", "较长"];
-const PROJECT_REFERENCE_IDS = ["gdd", "project_plan"];
+const PROJECT_REFERENCE_IDS = ["gdd"];
+const MAX_EXTERNAL_REFERENCES = 6;
+const MAX_EXTERNAL_REFERENCE_BYTES = 5 * 1024 * 1024;
+const EXTERNAL_REFERENCE_ACCEPT =
+  ".txt,.md,.json,.yaml,.yml,.csv,.cs,.js,.ts,.tsx,.py,.shader,.hlsl,.uxml,.uss,.asmdef,.meta,application/pdf,.pdf";
+const EXTERNAL_REFERENCE_EXTENSIONS = new Set([
+  ".txt",
+  ".md",
+  ".json",
+  ".yaml",
+  ".yml",
+  ".csv",
+  ".cs",
+  ".js",
+  ".ts",
+  ".tsx",
+  ".py",
+  ".shader",
+  ".hlsl",
+  ".uxml",
+  ".uss",
+  ".asmdef",
+  ".meta",
+  ".pdf",
+]);
 const FUTURE_REFERENCE_ITEMS = [
   { id: "characters", name: "角色资料", desc: "角色身份、关系、口癖和语气边界" },
   { id: "world_terms", name: "世界观与术语", desc: "地区、阵营、道具、技能和统一命名" },
   { id: "style_rules", name: "文案规则", desc: "风格样本、禁用词、长度和用途限制" },
-  { id: "external_files", name: "外部资料", desc: "后续支持上传参考文件、设定表和样本文案" },
 ];
 
 function splitList(value: string): string[] {
@@ -81,6 +114,56 @@ function downloadTextFile(filename: string, content: string, mimeType: string) {
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
+}
+
+function readFileAsDataUrl(file: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function isSupportedExternalReference(file: File): boolean {
+  const lowerName = file.name.toLowerCase();
+  return Array.from(EXTERNAL_REFERENCE_EXTENSIONS).some((ext) => lowerName.endsWith(ext));
+}
+
+function referenceFileMeta(file: ExternalReferenceFile): string {
+  const sizeKb = Math.max(1, Math.round(file.size / 1024));
+  return `${sizeKb} KB`;
+}
+
+async function collectExternalReferences(
+  files: File[],
+): Promise<{ references: ExternalReferenceFile[]; warnings: string[] }> {
+  const references: ExternalReferenceFile[] = [];
+  const warnings: string[] = [];
+
+  for (const file of files.slice(0, MAX_EXTERNAL_REFERENCES)) {
+    if (!isSupportedExternalReference(file)) {
+      warnings.push(`${file.name}：不支持的文件类型。`);
+      continue;
+    }
+    if (file.size > MAX_EXTERNAL_REFERENCE_BYTES) {
+      warnings.push(`${file.name}：文件超过 5 MB。`);
+      continue;
+    }
+    try {
+      references.push({
+        id: `${file.name}-${file.size}-${file.lastModified}-${Math.random().toString(36).slice(2, 8)}`,
+        name: file.name,
+        mimeType: file.type || "application/octet-stream",
+        size: file.size,
+        dataUrl: await readFileAsDataUrl(file),
+      });
+    } catch {
+      warnings.push(`${file.name}：读取文件失败。`);
+    }
+  }
+
+  return { references, warnings };
 }
 
 function buildMarkdownExport(response: DesignCopywritingResponse, copyTypeName: string): string {
@@ -117,6 +200,16 @@ function buildMarkdownExport(response: DesignCopywritingResponse, copyTypeName: 
 }
 
 function buildCsvExport(response: DesignCopywritingResponse, copyTypeName: string): string {
+  if (response.table?.columns.length && response.table.rows.length) {
+    const rows = [
+      response.table.columns,
+      ...response.table.rows.map((row) =>
+        response.table?.columns.map((column) => row[column] || "") || [],
+      ),
+    ];
+    return rows.map((row) => row.map(csvCell).join(",")).join("\n");
+  }
+
   const rows = [
     ["index", "type", "purpose", "style", "length", "text", "tags", "notes"],
     ...response.candidates.map((candidate, index) => [
@@ -133,7 +226,16 @@ function buildCsvExport(response: DesignCopywritingResponse, copyTypeName: strin
   return rows.map((row) => row.map(csvCell).join(",")).join("\n");
 }
 
+function isDesignCopywritingResponse(value: unknown): value is DesignCopywritingResponse {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return Array.isArray(record.candidates) && Boolean(record.request);
+}
+
 export function CopywritingPage() {
+  const { subscribeEvents } = useProjectRuntime();
   const [activeTypeId, setActiveTypeId] = useState(COPY_TYPES[0].id);
   const [selectedStyle, setSelectedStyle] = useState(STYLE_PRESETS[0]);
   const [selectedLength, setSelectedLength] = useState(LENGTH_PRESETS[2]);
@@ -142,11 +244,17 @@ export function CopywritingPage() {
   const [purpose, setPurpose] = useState("");
   const [mustInclude, setMustInclude] = useState("");
   const [mustAvoid, setMustAvoid] = useState("");
+  const [mustIncludeExpanded, setMustIncludeExpanded] = useState(false);
+  const [mustAvoidExpanded, setMustAvoidExpanded] = useState(false);
   const [includeProjectArtifacts, setIncludeProjectArtifacts] = useState(true);
+  const [externalReferences, setExternalReferences] = useState<ExternalReferenceFile[]>([]);
   const [response, setResponse] = useState<DesignCopywritingResponse | null>(null);
   const [errorText, setErrorText] = useState("");
   const [statusText, setStatusText] = useState("");
+  const [progressText, setProgressText] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [activeJobId, setActiveJobId] = useState("");
+  const externalReferenceInputRef = useRef<HTMLInputElement>(null);
 
   const activeType = useMemo(
     () => COPY_TYPES.find((item) => item.id === activeTypeId) || COPY_TYPES[0],
@@ -156,6 +264,70 @@ export function CopywritingPage() {
   const canGenerate = brief.trim().length > 0 && !submitting;
   const contextItems = response?.context?.artifacts || [];
 
+  useEffect(
+    () =>
+      subscribeEvents((event) => {
+        if (!activeJobId || event.job_id !== activeJobId) {
+          return;
+        }
+        if (
+          event.type === "copywriting_job_queued" ||
+          event.type === "copywriting_job_progress"
+        ) {
+          setProgressText(event.message || "文案生成任务正在执行。");
+          return;
+        }
+        if (event.type === "copywriting_job_completed") {
+          if (isDesignCopywritingResponse(event.response)) {
+            const result = event.response;
+            setResponse(result);
+            const tableRows = result.table?.rows.length || 0;
+            setStatusText(
+              tableRows
+                ? `已生成 ${result.candidates.length} 条候选，Dialogue CSV ${tableRows} 行`
+                : `已生成 ${result.candidates.length} 条候选`,
+            );
+          } else {
+            setErrorText("文案生成完成，但返回结果格式异常。");
+          }
+          setProgressText("");
+          setActiveJobId("");
+          setSubmitting(false);
+          return;
+        }
+        if (event.type === "copywriting_job_failed") {
+          setErrorText(event.error || "文案生成失败。");
+          setProgressText("");
+          setActiveJobId("");
+          setSubmitting(false);
+        }
+      }),
+    [activeJobId, subscribeEvents],
+  );
+
+  const handleExternalReferenceChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = "";
+    if (!files.length) {
+      return;
+    }
+
+    const availableSlots = Math.max(0, MAX_EXTERNAL_REFERENCES - externalReferences.length);
+    if (!availableSlots) {
+      setErrorText(`一次最多只能添加 ${MAX_EXTERNAL_REFERENCES} 个外部资料。`);
+      return;
+    }
+
+    const { references, warnings } = await collectExternalReferences(files.slice(0, availableSlots));
+    setExternalReferences((prev) =>
+      [...prev, ...references].slice(0, MAX_EXTERNAL_REFERENCES),
+    );
+    setErrorText(warnings.join("\n"));
+    if (references.length) {
+      setStatusText(`已添加 ${references.length} 个外部资料`);
+    }
+  };
+
   const handleGenerate = async () => {
     if (!brief.trim()) {
       setErrorText("请先填写具体需求。");
@@ -164,8 +336,11 @@ export function CopywritingPage() {
     setSubmitting(true);
     setErrorText("");
     setStatusText("");
+    setResponse(null);
+    setActiveJobId("");
+    setProgressText("正在提交文案生成任务...");
     try {
-      const result = await generateDesignCopywriting({
+      const job = await startDesignCopywritingJob({
         copy_type: activeTypeId,
         brief,
         purpose,
@@ -175,14 +350,21 @@ export function CopywritingPage() {
         must_include: splitList(mustInclude),
         must_avoid: splitList(mustAvoid),
         reference_ids: includeProjectArtifacts ? PROJECT_REFERENCE_IDS : ["__none__"],
+        external_references: externalReferences.map((file) => ({
+          kind: "file",
+          name: file.name,
+          mime_type: file.mimeType,
+          size: file.size,
+          data_url: file.dataUrl,
+        })),
         language: "zh-CN",
       });
-      setResponse(result);
-      setStatusText(`已生成 ${result.candidates.length} 条候选`);
+      setActiveJobId(job.job_id);
+      setProgressText("文案生成任务已创建。");
     } catch (error) {
       setErrorText(toErrorMessage(error));
-    } finally {
       setSubmitting(false);
+      setProgressText("");
     }
   };
 
@@ -213,7 +395,7 @@ export function CopywritingPage() {
       buildCsvExport(response, activeType.name),
       "text/csv",
     );
-    setStatusText("已导出 CSV");
+    setStatusText(response.table ? "已导出游戏表 CSV" : "已导出 CSV");
   };
 
   return (
@@ -245,10 +427,6 @@ export function CopywritingPage() {
               <span className="copywriting-kicker">Copy Workshop</span>
               <h2>{activeType.name}</h2>
             </div>
-          </header>
-
-          <div className="copywriting-section-head">
-            <h3>加工要求</h3>
             <button
               type="button"
               className={`copywriting-ghost-btn${includeProjectArtifacts ? " is-active" : ""}`}
@@ -256,7 +434,7 @@ export function CopywritingPage() {
             >
               {includeProjectArtifacts ? "已载入项目工件" : "不载入项目工件"}
             </button>
-          </div>
+          </header>
 
           <div className="copywriting-form-grid">
             <label className="copywriting-field copywriting-field-wide">
@@ -328,24 +506,44 @@ export function CopywritingPage() {
           </div>
 
           <div className="copywriting-constraint-grid">
-            <label className="copywriting-field">
-              <span>必须包含</span>
-              <input
-                type="text"
-                value={mustInclude}
-                onChange={(event) => setMustInclude(event.target.value)}
-                placeholder="关键词、角色名、道具名"
-              />
-            </label>
-            <label className="copywriting-field">
-              <span>必须避免</span>
-              <input
-                type="text"
-                value={mustAvoid}
-                onChange={(event) => setMustAvoid(event.target.value)}
-                placeholder="禁词、出戏表达、设定冲突"
-              />
-            </label>
+            <div className="copywriting-field copywriting-collapsible-field">
+              <button
+                type="button"
+                className="copywriting-field-toggle"
+                onClick={() => setMustIncludeExpanded((value) => !value)}
+                aria-expanded={mustIncludeExpanded}
+              >
+                <span>必须包含</span>
+                <strong>{mustIncludeExpanded ? "-" : "+"}</strong>
+              </button>
+              {mustIncludeExpanded ? (
+                <input
+                  type="text"
+                  value={mustInclude}
+                  onChange={(event) => setMustInclude(event.target.value)}
+                  placeholder="关键词、角色名、道具名"
+                />
+              ) : null}
+            </div>
+            <div className="copywriting-field copywriting-collapsible-field">
+              <button
+                type="button"
+                className="copywriting-field-toggle"
+                onClick={() => setMustAvoidExpanded((value) => !value)}
+                aria-expanded={mustAvoidExpanded}
+              >
+                <span>必须避免</span>
+                <strong>{mustAvoidExpanded ? "-" : "+"}</strong>
+              </button>
+              {mustAvoidExpanded ? (
+                  <input
+                    type="text"
+                    value={mustAvoid}
+                    onChange={(event) => setMustAvoid(event.target.value)}
+                    placeholder="禁词、出戏表达、设定冲突"
+                  />
+              ) : null}
+            </div>
           </div>
 
           <div className="copywriting-actions">
@@ -376,11 +574,10 @@ export function CopywritingPage() {
                 导出 MD
               </button>
               <button type="button" disabled={!response?.candidates.length} onClick={exportCsv}>
-                导出 CSV
+                {response?.table ? "导出游戏 CSV" : "导出 CSV"}
               </button>
             </div>
           </div>
-
           {response?.candidates.length ? (
             <div className="copywriting-result-list">
               {response.candidates.map((candidate, index) => (
@@ -412,11 +609,24 @@ export function CopywritingPage() {
                   ) : null}
                 </article>
               ))}
+              {response.table?.rows.length ? (
+                <div className="copywriting-table-preview">
+                  <strong>游戏表预览</strong>
+                  <span>
+                    {response.table.kind} · {response.table.rows.length} 行 ·{" "}
+                    {response.table.columns.join(", ")}
+                  </span>
+                </div>
+              ) : null}
             </div>
           ) : (
             <div className="copywriting-empty-result">
               <strong>{submitting ? "正在生成" : "等待生成"}</strong>
-              <span>这里会展示策划 Agent 返回的多条候选文案。</span>
+              <span>
+                {submitting
+                  ? progressText || "正在等待策划 Agent 返回候选文案。"
+                  : "这里会展示策划 Agent 返回的多条候选文案。"}
+              </span>
             </div>
           )}
         </section>
@@ -432,7 +642,7 @@ export function CopywritingPage() {
         <div className="copywriting-codex-list">
           {(contextItems.length ? contextItems : PROJECT_REFERENCE_IDS.map((id) => ({
             id,
-            name: id === "gdd" ? "GDD.md" : "PROJECT_PLAN.md",
+            name: "GDD.md",
             source: "artifact",
             content: "",
           }))).map((item) => (
@@ -456,6 +666,55 @@ export function CopywritingPage() {
               <small>待接入</small>
             </div>
           ))}
+          <div className="copywriting-codex-item copywriting-external-reference-card">
+            <div className="copywriting-external-reference-main">
+              <strong>外部资料</strong>
+              <span>上传参考文件、设定表和样本文案</span>
+              {externalReferences.length ? (
+                <div className="copywriting-external-reference-list">
+                  {externalReferences.map((file) => (
+                    <div key={file.id} className="copywriting-external-reference-file">
+                      <span className="copywriting-external-file-icon">文件</span>
+                      <div>
+                        <strong>{file.name}</strong>
+                        <small>{referenceFileMeta(file)}</small>
+                      </div>
+                      <button
+                        type="button"
+                        aria-label={`删除 ${file.name}`}
+                        onClick={() =>
+                          setExternalReferences((prev) =>
+                            prev.filter((item) => item.id !== file.id),
+                          )
+                        }
+                      >
+                        x
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              className="copywriting-add-reference-btn"
+              aria-label="添加外部资料"
+              title="添加本地文件"
+              onClick={() => externalReferenceInputRef.current?.click()}
+            >
+              +
+            </button>
+            <input
+              ref={externalReferenceInputRef}
+              type="file"
+              accept={EXTERNAL_REFERENCE_ACCEPT}
+              multiple
+              hidden
+              onChange={(event) => {
+                void handleExternalReferenceChange(event);
+              }}
+            />
+          </div>
         </div>
       </aside>
     </div>

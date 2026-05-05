@@ -200,9 +200,27 @@ def dispatch_tool_call(
                 tool_name,
                 args,
                 project_id=project_id,
-                tool_event_handler=tool_event_handler,
+                tool_event_handler=_permission_only_event_handler(tool_event_handler),
             )
     except (UnityToolError, WorkspaceAccessError, McpClientError):
         raise
 
     raise RuntimeError(f"[TOOL_ERROR:TOOL_NOT_FOUND] Tool '{tool_name}' not found.")
+
+
+def _permission_only_event_handler(
+    event_handler: Optional[Callable[[Dict[str, Any]], None]],
+) -> Optional[Callable[[Dict[str, Any]], None]]:
+    if event_handler is None:
+        return None
+
+    def emit(event: Dict[str, Any]):
+        if str(event.get("type") or "") not in {
+            "permission_required",
+            "permission_granted",
+            "permission_denied",
+        }:
+            return None
+        return event_handler(event)
+
+    return emit

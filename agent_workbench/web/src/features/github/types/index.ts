@@ -1,27 +1,19 @@
 export interface GithubBranch {
   name: string;
-  isDefault: boolean;
-  isProtected: boolean;
-  lastCommit: string;
-  lastCommitTime: string;
+  is_default: boolean;
+  is_protected: boolean;
+  last_commit: string;
+  last_commit_time: string;
 }
 
 export interface GithubCommit {
   sha: string;
-  shortSha: string;
+  short_sha: string;
   message: string;
   author: string;
-  authorAvatar?: string;
   timestamp: string;
   branch: string;
-}
-
-export interface GithubCommitNode {
-  sha: string;
-  message: string;
-  author: string;
-  timestamp: string;
-  parents: string[];
+  url?: string;
 }
 
 export interface GithubPR {
@@ -30,34 +22,71 @@ export interface GithubPR {
   title: string;
   state: "open" | "closed" | "merged";
   author: string;
-  authorAvatar?: string;
-  sourceBranch: string;
-  targetBranch: string;
-  createdAt: string;
-  updatedAt: string;
-  additions: number;
-  deletions: number;
-  reviewDecision?: "approved" | "changes_requested" | "pending";
-  checksStatus?: "success" | "failure" | "pending" | "running";
+  source_branch: string;
+  target_branch: string;
+  created_at: string;
+  updated_at: string;
+  review_decision?: "approved" | "changes_requested" | "pending";
+  checks_status?: "success" | "failure" | "pending" | "running" | "unknown";
+  url?: string;
 }
 
 export interface GithubRepoInfo {
   owner: string;
   repo: string;
-  defaultBranch: string;
+  default_branch: string;
   description?: string;
+  url?: string;
+  private?: boolean;
+  stars?: number;
+  forks?: number;
+  open_issues_count?: number;
 }
 
-export type GithubViewTab = "branches" | "commits" | "pulls";
+export interface GithubIssue {
+  id: number;
+  number: number;
+  title: string;
+  state: string;
+  author: string;
+  updated_at: string;
+  labels: string[];
+  url?: string;
+}
+
+export interface GithubWorkflowRun {
+  id: number;
+  name: string;
+  status: string;
+  conclusion: string;
+  branch: string;
+  event: string;
+  updated_at: string;
+  url?: string;
+}
+
+export interface GithubSummary {
+  branch_count?: number;
+  recent_commit_count?: number;
+  open_pr_count?: number;
+  open_issue_count?: number;
+  failing_ci_count?: number;
+  active_authors?: string[];
+}
+
+export type GithubViewTab = "overview" | "issues" | "pulls" | "commits" | "ci";
 
 export interface GithubState {
-  repoInfo: GithubRepoInfo | null;
+  project_id: string;
+  configured: boolean;
+  repo: GithubRepoInfo | null;
+  summary: GithubSummary;
   branches: GithubBranch[];
   commits: GithubCommit[];
-  commitGraph: GithubCommitNode[];
-  pullRequests: GithubPR[];
-  activeTab: GithubViewTab;
-  branchFilter: string;
-  loading: boolean;
-  error: string;
+  pull_requests: GithubPR[];
+  issues: GithubIssue[];
+  workflow_runs: GithubWorkflowRun[];
+  errors: string[];
+  fetched_at: string;
+  auth?: { token_configured?: boolean };
 }

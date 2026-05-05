@@ -1,3 +1,11 @@
+export interface DesignCopywritingExternalReference {
+  kind?: "file";
+  name: string;
+  mime_type?: string;
+  size?: number;
+  data_url: string;
+}
+
 export interface DesignCopywritingRequest {
   copy_type: string;
   brief?: string;
@@ -8,6 +16,7 @@ export interface DesignCopywritingRequest {
   must_include?: string[];
   must_avoid?: string[];
   reference_ids?: string[];
+  external_references?: DesignCopywritingExternalReference[];
   language?: string;
 }
 
@@ -22,21 +31,29 @@ export interface DesignCopywritingContextItem {
   id: string;
   name: string;
   source: string;
-  content: string;
+  content_chars?: number;
 }
 
 export interface DesignCopywritingContext {
   project_id: string;
   artifacts: DesignCopywritingContextItem[];
+  external_files: DesignCopywritingContextItem[];
   characters: DesignCopywritingContextItem[];
   terms: DesignCopywritingContextItem[];
   constraints: DesignCopywritingContextItem[];
+}
+
+export interface DesignCopywritingTable {
+  kind: string;
+  columns: string[];
+  rows: Record<string, string>[];
 }
 
 export interface DesignCopywritingResponse {
   status: "mock" | "generated";
   request: Required<DesignCopywritingRequest>;
   candidates: DesignCopywritingCandidate[];
+  table: DesignCopywritingTable | null;
   context: DesignCopywritingContext | null;
-  prompt_preview: string;
+  prompt_preview?: string;
 }

@@ -34,12 +34,18 @@ def _normalize_route_entry(raw: Any) -> Dict[str, Any]:
         except (TypeError, ValueError):
             pass
 
+    if "timeout" in raw and raw.get("timeout") is not None:
+        try:
+            entry["timeout"] = float(raw.get("timeout"))
+        except (TypeError, ValueError):
+            pass
+
     return entry
 
 
 def _merge_route(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
     merged = dict(base)
-    for key in ("profile", "provider", "model", "base_url", "temperature", "api_key_env"):
+    for key in ("profile", "provider", "model", "base_url", "temperature", "timeout", "api_key_env"):
         if key in override and override[key] not in (None, ""):
             merged[key] = override[key]
     return merged
@@ -138,6 +144,7 @@ def resolve_model_config(
         model=route.get("model") or base_cfg.model,
         base_url=route.get("base_url"),
         temperature=route.get("temperature"),
+        timeout=route.get("timeout"),
         api_key=explicit_api_key,
         strict=False,
     )

@@ -9,7 +9,40 @@
 - 外部导入的 Skills 默认落在 `workspace/skills/installed/<skill_id>/`
 - 首次启动时会自动创建第一个项目 `project-1`
 - 如果旧版单项目文件还直接放在 `workspace/` 根目录，系统会在首次启动时自动迁移到 `workspace/projects/project-1/`
-- `reset` 现在是“当前项目级”操作，不再是整个 `workspace/` 的全局重置
+- `reset` 现在是"当前项目级"操作，不再是整个 `workspace/` 的全局重置
+
+## 多项目工作区结构
+
+当前推荐的工作区结构如下：
+
+```text
+workspace/
+├── .active_project
+├── skills/
+│   └── installed/
+│       └── <skill_id>/
+│           ├── skill.json
+│           └── prompt.md
+└── projects/
+    ├── project-1/
+    │   ├── state.json
+    │   ├── USER_PROFILE.md
+    │   ├── GDD.md
+    │   ├── PROJECT_PLAN.md
+    │   ├── IMPLEMENTATION_PLAN.md
+    │   ├── REVIEW_REPORT.md
+    │   ├── logs/
+    │   ├── images/
+    │   ├── dev_notes/
+    │   └── patches/
+    └── <another_project>/
+```
+
+说明：
+
+- `state.json`、工件、日志、用户画像都按项目隔离
+- Web 工作台显示和操作的也是当前项目目录
+- 项目切换不会混用别的项目状态
 
 主要内容（历史单项目结构的说明仍保留，便于理解运行时文件类型）：
 
@@ -32,6 +65,14 @@
 - `skills/installed/<skill_id>/prompt.md`：Skill 提示词或使用说明
 
 Skills 是全局安装、项目级启用；启用关系保存在对应项目目录中。
+
+## 项目元数据持久化
+
+项目目录下的元数据（如 `mcp_connections`、`model_routing` 等）与运行时数据统一持久化在项目级，不会意外丢失：
+
+- 元数据写入采用**原子写**（先写临时文件，再 `os.replace` 替换），避免写一半导致文件损坏。
+- 如果某项目元数据损坏（如 JSON 解析失败），`list_projects()` 会将其隔离并标记 `metadata_error`，不会阻塞其他项目的正常加载。
+- 删除操作（清空 `workspaces` 或 `mcp_connections`）后，通用的 `touch_project()` 不会把旧的 stale 快照重新写回，防止已删除的配置被意外"复活"。
 
 说明：
 

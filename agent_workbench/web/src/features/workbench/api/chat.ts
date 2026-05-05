@@ -7,6 +7,7 @@ export function getState() {
 
 export function postChat(body: {
   message: string;
+  mcp_mode?: boolean;
   attachments?: Array<{
     kind: ComposerAttachment["kind"];
     name: string;

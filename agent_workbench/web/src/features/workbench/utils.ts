@@ -10,7 +10,13 @@ import type {
 } from "./types";
 
 export function toErrorMessage(error: unknown): string {
+  if (error instanceof DOMException && error.name === "AbortError") {
+    return "请求超时，请稍后重试，或换一个更快的模型。";
+  }
   if (error instanceof Error) {
+    if (error.name === "AbortError") {
+      return "请求超时，请稍后重试，或换一个更快的模型。";
+    }
     return error.message;
   }
   return String(error);
@@ -111,6 +117,7 @@ export function buildHistoryByAgent(state: WorkbenchStateModel): HistoryByAgent 
         phase: item.phase || state.phase,
       });
     });
+    attachRecentToolEvents(rows, state.recent_tool_events || {});
     return rows;
   }
 
@@ -122,5 +129,26 @@ export function buildHistoryByAgent(state: WorkbenchStateModel): HistoryByAgent 
       phase: state.phase,
     });
   });
+  attachRecentToolEvents(rows, state.recent_tool_events || {});
   return rows;
+}
+
+function attachRecentToolEvents(
+  rows: HistoryByAgent,
+  eventsByAgent: WorkbenchStateModel["recent_tool_events"],
+) {
+  Object.entries(eventsByAgent || {}).forEach(([rawAgent, events]) => {
+    if (!events?.length) return;
+    const agent = rawAgent as AgentKey;
+    const agentRows = rows[agent];
+    if (!agentRows?.length) return;
+    for (let index = agentRows.length - 1; index >= 0; index -= 1) {
+      if (agentRows[index].role === "assistant") {
+        const nextRows = [...agentRows];
+        nextRows[index] = { ...nextRows[index], toolEvents: events };
+        rows[agent] = nextRows;
+        return;
+      }
+    }
+  });
 }

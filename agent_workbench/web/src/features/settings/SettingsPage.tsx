@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { workbenchApi } from "../workbench/api";
 import { ProjectToolbar } from "../workbench/components/ProjectToolbar";
@@ -145,6 +145,7 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
   const [modelRoutingDraft, setModelRoutingDraft] = useState("{}");
   const [modelRoutingDirty, setModelRoutingDirty] = useState(false);
   const [modelRoutingProjectId, setModelRoutingProjectId] = useState("");
+  const refreshSeqRef = useRef(0);
   const [theme, setTheme] = useState(
     () => document.documentElement.getAttribute("data-theme") || "light",
   );
@@ -210,6 +211,7 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
   }, [modelRoutingDraft]);
 
   const refresh = async () => {
+    const refreshSeq = ++refreshSeqRef.current;
     setLoading(true);
     setErrorText("");
     try {
@@ -230,36 +232,34 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
           workbenchApi.getCurrentUserProfile(),
         ]);
 
-      setWorkspaces(
-        workspacesResult.status === "fulfilled"
-          ? workspacesResult.value.workspaces || []
-          : [],
-      );
+      if (refreshSeq !== refreshSeqRef.current) {
+        return;
+      }
+
+      if (workspacesResult.status === "fulfilled") {
+        setWorkspaces(workspacesResult.value.workspaces || []);
+      }
       setTools(
         toolsResult.status === "fulfilled" ? toolsResult.value.tools || [] : [],
       );
-      const nextProjectSettings =
-        projectSettingsResult.status === "fulfilled"
-          ? projectSettingsResult.value
-          : {
-              project_id: runtimeState?.project_id || "",
-              agent_file_write_enabled: true,
-              agent_file_write_confirm_required: false,
-              mcp_connections: [],
-            };
-      setProjectSettings(nextProjectSettings);
-      const nextMcpConnections = normalizeMcpConnections(
-        nextProjectSettings.mcp_connections,
-      );
-      setMcpConnections(nextMcpConnections);
-      setMcpStatuses(
-        Object.fromEntries(
-          nextMcpConnections.map((connection) => [
-            connection.id,
-            defaultMcpStatus(connection),
-          ]),
-        ),
-      );
+      if (projectSettingsResult.status === "fulfilled") {
+        const nextProjectSettings = projectSettingsResult.value;
+        setProjectSettings(nextProjectSettings);
+        const nextMcpConnections = normalizeMcpConnections(
+          nextProjectSettings.mcp_connections,
+        );
+        setMcpConnections(nextMcpConnections);
+        setMcpStatuses(
+          Object.fromEntries(
+            nextMcpConnections.map((connection) => [
+              connection.id,
+              defaultMcpStatus(connection),
+            ]),
+          ),
+        );
+      } else {
+        setErrorText(toErrorMessage(projectSettingsResult.reason));
+      }
       setModelProfiles(
         modelProfilesResult.status === "fulfilled"
           ? modelProfilesResult.value.profiles || []
@@ -271,9 +271,13 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
         setUserProfileDirty(false);
       }
     } catch (error) {
-      setErrorText(toErrorMessage(error));
+      if (refreshSeq === refreshSeqRef.current) {
+        setErrorText(toErrorMessage(error));
+      }
     } finally {
-      setLoading(false);
+      if (refreshSeq === refreshSeqRef.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -346,6 +350,8 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
 
     setSubmitting(true);
     clearMessages();
+    refreshSeqRef.current += 1;
+    setLoading(false);
     try {
       const response = await workbenchApi.addCurrentWorkspace({
         root,
@@ -375,6 +381,8 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
     if (!confirmed) return;
 
     clearMessages();
+    refreshSeqRef.current += 1;
+    setLoading(false);
     try {
       const response = await workbenchApi.deleteCurrentWorkspace(workspace.id);
       setWorkspaces(response.workspaces || []);
@@ -449,9 +457,26 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
     const target = mcpConnections.find((connection) => connection.id === connectionId);
     if (!target) return;
     if (!window.confirm(`要移除 ${target.label} 的 MCP 连接配置吗？`)) return;
-    await saveMcpConnections(
-      mcpConnections.filter((connection) => connection.id !== connectionId),
-    );
+    setSettingsSubmitting(true);
+    clearMessages();
+    try {
+      const response = await workbenchApi.deleteCurrentMcpConnection(connectionId);
+      setProjectSettings(response);
+      const normalized = normalizeMcpConnections(response.mcp_connections);
+      setMcpConnections(normalized);
+      setMcpStatuses((prev) => {
+        const next = { ...prev };
+        delete next[connectionId];
+        return next;
+      });
+      setSuccessText("MCP 连接已移除。");
+      setActiveSection("engines");
+    } catch (error) {
+      setErrorText(toErrorMessage(error));
+      setActiveSection("engines");
+    } finally {
+      setSettingsSubmitting(false);
+    }
   };
 
   const handleCheckMcpConnections = async (connectionId?: string) => {
@@ -719,6 +744,13 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
               onCommandChange={setMcpCommandInput}
               onArgsChange={setMcpArgsInput}
               onEnvChange={setMcpEnvInput}
+              onFillBlenderPreset={() => {
+                setMcpEngineInput("blender");
+                setMcpLabelInput("Blender MCP");
+                setMcpCommandInput("cmd");
+                setMcpArgsInput("/c\nuvx\nblender-mcp");
+                setMcpEnvInput("DISABLE_TELEMETRY=true");
+              }}
               onAddConnection={() => {
                 void handleAddMcpConnection();
               }}
