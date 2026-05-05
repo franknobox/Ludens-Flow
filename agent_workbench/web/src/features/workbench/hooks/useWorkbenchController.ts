@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { workbenchApi } from "../api";
 import { useProjectRuntime } from "../state/ProjectRuntimeContext";
@@ -149,6 +149,7 @@ export function useWorkbenchController() {
   const lastSyncedProjectIdRef = useRef("");
   const permissionDecisionRef = useRef<Set<string>>(new Set());
   const currentToolEventsRef = useRef<ToolProgressEvent[]>([]);
+  const transientTimeoutRef = useRef<number | null>(null);
 
   const historyByAgent = useMemo(() => buildHistoryByAgent(model), [model]);
   const activeProject = useMemo(
@@ -317,12 +318,13 @@ export function useWorkbenchController() {
           permission_request_id: event.permission_request_id,
           error: event.error,
         };
-        currentToolEventsRef.current = [...currentToolEventsRef.current, nextEvent];
+        const nextToolEvents = [...currentToolEventsRef.current, nextEvent].slice(-200);
+        currentToolEventsRef.current = nextToolEvents;
 
         if (prev) {
           return {
             ...prev,
-            toolEvents: [...(prev.toolEvents || []), nextEvent],
+            toolEvents: nextToolEvents,
           };
         }
 
@@ -332,7 +334,7 @@ export function useWorkbenchController() {
           userText: "[处理中]",
           thinking: true,
           assistantText: "",
-          toolEvents: [nextEvent],
+          toolEvents: nextToolEvents,
         };
       });
       return;
@@ -412,6 +414,7 @@ export function useWorkbenchController() {
         }));
       }
       currentToolEventsRef.current = [];
+      permissionDecisionRef.current.clear();
       setCurrentView((prev) =>
         prev.type === "agent"
           ? {
@@ -429,6 +432,7 @@ export function useWorkbenchController() {
 
     if (event.type === "run_failed") {
       currentToolEventsRef.current = [];
+      permissionDecisionRef.current.clear();
       clearTransientChat();
       setRequestInFlight(false);
       setErrorText(event.error || "请求失败。");
@@ -542,7 +546,7 @@ export function useWorkbenchController() {
   };
 
   const sendMessage = async (text: string, attachments: ComposerAttachment[]) => {
-    if (!text && !attachments.length) {
+    if ((!text && !attachments.length) || requestInFlight) {
       return;
     }
 
@@ -550,6 +554,11 @@ export function useWorkbenchController() {
     setWarningText("");
     setRequestInFlight(true);
     currentToolEventsRef.current = [];
+    if (transientTimeoutRef.current) {
+      window.clearTimeout(transientTimeoutRef.current);
+      transientTimeoutRef.current = null;
+    }
+    const projectIdAtStart = model.project_id;
     setTransientChat({
       agentKey: model.current_agent,
       phase: model.phase,
@@ -570,10 +579,14 @@ export function useWorkbenchController() {
           size: item.size,
         })),
       });
+      if (model.project_id !== projectIdAtStart) return;
       if (response.error) {
         setErrorText(response.error);
       }
       setWarningText((response.attachment_warnings || []).join("\n"));
+      setTransientChat((prev) =>
+        prev ? { ...prev, assistantText: response.reply || prev.assistantText } : prev,
+      );
       setModel((prev) => mergeChatResponse(prev, response));
       if (currentToolEventsRef.current.length) {
         const completedToolEvents = currentToolEventsRef.current;
@@ -593,13 +606,14 @@ export function useWorkbenchController() {
           : prev,
       );
       setFileCache({});
-      window.setTimeout(() => {
+      transientTimeoutRef.current = window.setTimeout(() => {
         if (Date.now() - lastEventAtRef.current > 800) {
           void refreshRuntime();
           clearTransientChat();
         }
       }, 600);
     } catch (error) {
+      if (model.project_id !== projectIdAtStart) return;
       setTransientChat((prev) => (prev ? { ...prev, thinking: false } : prev));
       setErrorText("请求失败：" + toErrorMessage(error));
       setWarningText("");
@@ -617,6 +631,11 @@ export function useWorkbenchController() {
     setWarningText("");
     setRequestInFlight(true);
     currentToolEventsRef.current = [];
+    if (transientTimeoutRef.current) {
+      window.clearTimeout(transientTimeoutRef.current);
+      transientTimeoutRef.current = null;
+    }
+    const projectIdAtStart = model.project_id;
     setTransientChat({
       agentKey: currentView.id,
       phase: model.phase,
@@ -627,6 +646,7 @@ export function useWorkbenchController() {
 
     try {
       const response = await workbenchApi.postAction(actionId);
+      if (model.project_id !== projectIdAtStart) return;
       if (response.error) {
         setErrorText(response.error);
       }
@@ -650,13 +670,14 @@ export function useWorkbenchController() {
           : prev,
       );
       setFileCache({});
-      window.setTimeout(() => {
+      transientTimeoutRef.current = window.setTimeout(() => {
         if (Date.now() - lastEventAtRef.current > 800) {
           void refreshRuntime();
           clearTransientChat();
         }
       }, 600);
     } catch (error) {
+      if (model.project_id !== projectIdAtStart) return;
       setTransientChat((prev) => (prev ? { ...prev, thinking: false } : prev));
       setErrorText("执行操作失败：" + toErrorMessage(error));
       setWarningText("");

@@ -15,7 +15,7 @@ from ludens_flow.capabilities.artifacts.artifacts import (
 from ludens_flow.capabilities.context.prompt_templates import load_prompt_template
 from llm.modelrouter import resolve_model_config
 from ludens_flow.core.state import LudensState, save_state, write_trace_log
-from ludens_flow.core.router import ludens_router_logic_with_action, Phase
+from ludens_flow.core.router import ludens_router_logic_with_action, Phase, phase_to_agent_name
 from ludens_flow.core.agents.base import AgentResult
 
 # 引入各个单体 Agent，避免重复实例化
@@ -49,20 +49,6 @@ def _mode_to_capability(mode: str) -> str:
         "COACH": "coach",
     }
     return mapping.get(mode, "default")
-
-
-def _phase_to_agent_name(phase: str) -> str:
-    if not phase:
-        return "System"
-    if phase.startswith("GDD_"):
-        return "DesignAgent"
-    if phase.startswith("PM_"):
-        return "PMAgent"
-    if phase.startswith("ENG_") or phase == "DEV_COACHING":
-        return "EngineeringAgent"
-    if phase.startswith("REVIEW") or phase == "POST_REVIEW_DECISION":
-        return "ReviewAgent"
-    return "System"
 
 
 def _user_input_to_text(user_input: Any) -> str:
@@ -660,7 +646,7 @@ class RouterNode:
                         "assistant",
                         full_greeting,
                         to_phase,
-                        _phase_to_agent_name(to_phase),
+                        phase_to_agent_name(to_phase),
                     )
 
         state.phase = to_phase

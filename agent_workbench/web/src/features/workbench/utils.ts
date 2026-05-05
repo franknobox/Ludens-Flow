@@ -144,10 +144,9 @@ function attachRecentToolEvents(
     if (!agentRows?.length) return;
     for (let index = agentRows.length - 1; index >= 0; index -= 1) {
       if (agentRows[index].role === "assistant") {
-        agentRows[index] = {
-          ...agentRows[index],
-          toolEvents: events,
-        };
+        const nextRows = [...agentRows];
+        nextRows[index] = { ...nextRows[index], toolEvents: events };
+        rows[agent] = nextRows;
         return;
       }
     }

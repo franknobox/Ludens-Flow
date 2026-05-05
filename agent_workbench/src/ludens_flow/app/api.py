@@ -41,6 +41,7 @@ from ludens_flow.capabilities.skills.registry import (
 )
 from ludens_flow.capabilities.tools.registry import list_common_tools
 from ludens_flow.core.graph import graph_step
+from ludens_flow.core.router import phase_to_agent_key
 from ludens_flow.core.paths import (
     add_project_workspace,
     archive_project,
@@ -213,20 +214,6 @@ class ProjectRenameRequest(BaseModel):
     display_name: str
 
 
-def _phase_to_agent_key(phase: str | None) -> str:
-    if not phase:
-        return "system"
-    if phase.startswith("GDD_"):
-        return "design"
-    if phase.startswith("PM_"):
-        return "pm"
-    if phase.startswith("ENG_") or phase == "DEV_COACHING":
-        return "engineering"
-    if phase.startswith("REVIEW") or phase == "POST_REVIEW_DECISION":
-        return "review"
-    return "system"
-
-
 def _hide_obsolete_transition_message(item: dict) -> bool:
     if not isinstance(item, dict):
         return False
@@ -252,7 +239,7 @@ def _state_to_json(state) -> dict:
         "project_id": getattr(state, "project_id", None),
         "schema_version": getattr(state, "schema_version", None),
         "phase": state.phase,
-        "current_agent": _phase_to_agent_key(state.phase),
+        "current_agent": phase_to_agent_key(state.phase),
         "iteration_count": state.iteration_count,
         "artifact_frozen": getattr(state, "artifact_frozen", False),
         "chat_history": _visible_history(getattr(state, "chat_history", [])),
@@ -338,7 +325,7 @@ def _event_payload(
     if state is not None:
         payload["state"] = _state_to_json(state)
         payload["phase"] = getattr(state, "phase", "")
-        payload["current_agent"] = _phase_to_agent_key(getattr(state, "phase", ""))
+        payload["current_agent"] = phase_to_agent_key(getattr(state, "phase", ""))
     if error:
         payload["error"] = error
     if message:

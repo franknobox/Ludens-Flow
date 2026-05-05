@@ -1,5 +1,6 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -167,12 +168,12 @@ export function ProjectRuntimeProvider({ children }: { children: ReactNode }) {
     };
   }, [runtimeState?.project_id]);
 
-  const subscribeEvents = (listener: ProjectEventListener) => {
+  const subscribeEvents = useCallback((listener: ProjectEventListener) => {
     listenersRef.current.add(listener);
     return () => {
       listenersRef.current.delete(listener);
     };
-  };
+  }, []);
 
   const value = useMemo<ProjectRuntimeContextValue>(
     () => ({

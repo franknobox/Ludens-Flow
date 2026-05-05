@@ -28,7 +28,7 @@
 }
 
 [data-theme="dark"] .shell {
-  background: var(--shell) !important;
+  background: var(--shell);
 }
 
 /* 直角和基础覆盖 */
@@ -40,10 +40,10 @@
 [data-theme="dark"] .message-actions,
 [data-theme="dark"] .tool-process-card,
 [data-theme="dark"] .status-card {
-  background: var(--panel) !important;
-  border: 1px solid var(--line) !important;
-  border-radius: var(--radius) !important;
-  box-shadow: var(--shadow) !important;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -76,7 +76,7 @@
 [data-theme="dark"] .badge,
 [data-theme="dark"] .input-row,
 [data-theme="dark"] textarea {
-  border-radius: var(--radius) !important;
+  border-radius: var(--radius);
   border-color: var(--line);
   color: var(--text);
 }
@@ -92,16 +92,16 @@
 [data-theme="dark"] .create-box input,
 [data-theme="dark"] .message-actions button,
 [data-theme="dark"] .input-row {
-  background-color: #262626 !important;
+  background-color: #262626;
 }
 
 [data-theme="dark"] .topbar-tab.is-active,
 [data-theme="dark"] .item.active,
 [data-theme="dark"] .project-toolbar-item:hover,
 [data-theme="dark"] .project-toolbar-item.is-active {
-  background: var(--primary-soft) !important;
-  border-color: var(--primary) !important;
-  color: var(--primary) !important;
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
 [data-theme="dark"] .topbar-title,
@@ -110,69 +110,69 @@
 [data-theme="dark"] .hero-title,
 [data-theme="dark"] .item-title,
 [data-theme="dark"] .tool-process-head {
-  color: #fff !important;
+  color: #fff;
 }
 
 [data-theme="dark"] .project-toolbar-item-sub {
-  color: var(--muted) !important;
+  color: var(--muted);
 }
 
 [data-theme="dark"] .mcp-mode-toggle {
-  background: #262626 !important;
-  border-color: var(--line) !important;
-  color: var(--muted) !important;
+  background: #262626;
+  border-color: var(--line);
+  color: var(--muted);
 }
 
 [data-theme="dark"] .mcp-mode-toggle.is-on {
-  background: var(--primary-soft) !important;
-  border-color: var(--primary) !important;
-  color: var(--primary) !important;
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
 [data-theme="dark"] .tool-process-item.is-started {
-  background: var(--primary-soft) !important;
-  border-color: var(--primary) !important;
+  background: var(--primary-soft);
+  border-color: var(--primary);
 }
 
 [data-theme="dark"] .tool-process-item.is-completed {
-  background: var(--green-soft) !important;
-  border-color: var(--green) !important;
+  background: var(--green-soft);
+  border-color: var(--green);
 }
 
 [data-theme="dark"] .tool-process-item.is-failed {
-  background: var(--warn-soft) !important;
-  border-color: var(--warn) !important;
+  background: var(--warn-soft);
+  border-color: var(--warn);
 }
 
 [data-theme="dark"] .tool-summary-line {
-  border-top-color: var(--line) !important;
-  color: var(--muted) !important;
+  border-top-color: var(--line);
+  color: var(--muted);
 }
 
 [data-theme="dark"] .tool-summary-tag {
-  background: rgba(255, 255, 255, 0.08) !important;
-  color: var(--muted) !important;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
 }
 
 [data-theme="dark"] .msg.user .bubble,
 [data-theme="dark"] .bubble.bubble-user {
-  background: var(--primary-soft) !important;
-  border: 1px solid rgba(88, 166, 255, 0.25) !important;
+  background: var(--primary-soft);
+  border: 1px solid rgba(88, 166, 255, 0.25);
 }
 
 [data-theme="dark"] .msg.agent .bubble,
 [data-theme="dark"] .bubble.bubble-agent {
-  background: #262626 !important;
-  border: 1px solid var(--line) !important;
+  background: #262626;
+  border: 1px solid var(--line);
 }
 
 [data-theme="dark"] .content,
 [data-theme="dark"] .file-editor {
-  background: transparent !important;
+  background: transparent;
 }
 
 [data-theme="dark"] .file-editor {
-  color: var(--text) !important;
+  color: var(--text);
 }
 
 /* =========================================================
@@ -204,8 +204,8 @@
 [data-theme="dark"] .settings-inline-help,
 [data-theme="dark"] .settings-inline-error,
 [data-theme="dark"] .settings-toggle {
-  border-radius: var(--radius) !important;
-  border-color: var(--line) !important;
+  border-radius: var(--radius);
+  border-color: var(--line);
   color: var(--text);
   background-color: transparent;
 }
@@ -219,7 +219,7 @@
 [data-theme="dark"] .settings-profile-path,
 [data-theme="dark"] .settings-toggle,
 [data-theme="dark"] .settings-pill-button {
-  background-color: #262626 !important;
+  background-color: #262626;
 }
 
 [data-theme="dark"] .settings-field input,
@@ -227,17 +227,17 @@
 [data-theme="dark"] .settings-field textarea,
 [data-theme="dark"] .settings-note-item,
 [data-theme="dark"] .settings-chip {
-  background-color: rgba(255, 255, 255, 0.04) !important;
+  background-color: rgba(255, 255, 255, 0.04);
 }
 
 [data-theme="dark"] .settings-nav-item.is-active {
-  background: var(--primary-soft) !important;
-  border-color: var(--primary) !important;
+  background: var(--primary-soft);
+  border-color: var(--primary);
 }
 
 [data-theme="dark"] .settings-primary-button {
-  background-color: var(--primary) !important;
-  color: #fff !important;
+  background-color: var(--primary);
+  color: #fff;
 }
 
 [data-theme="dark"] .settings-card-title,
@@ -246,14 +246,14 @@
 [data-theme="dark"] .workspace-title-row h3,
 [data-theme="dark"] .tool-group-head h3,
 [data-theme="dark"] .tool-card-head h4 {
-  color: #fff !important;
+  color: #fff;
 }
 
 [data-theme="dark"] .settings-nav-text,
 [data-theme="dark"] .settings-card-subtitle,
 [data-theme="dark"] .settings-stat-label,
 [data-theme="dark"] .workspace-source {
-  color: var(--muted) !important;
+  color: var(--muted);
 }
 
 /* =========================================================
@@ -262,66 +262,66 @@
 
 [data-theme="dark"] .settings-engine-card,
 [data-theme="dark"] .settings-engine-form {
-  background: var(--panel) !important;
-  border-color: var(--line) !important;
-  border-radius: var(--radius) !important;
+  background: var(--panel);
+  border-color: var(--line);
+  border-radius: var(--radius);
 }
 
 [data-theme="dark"] .settings-engine-card.is-empty {
-  background: rgba(255, 255, 255, 0.03) !important;
-  border-color: var(--line) !important;
+  background: rgba(255, 255, 255, 0.03);
+  border-color: var(--line);
 }
 
 [data-theme="dark"] .settings-engine-card-head h3 {
-  color: var(--text) !important;
+  color: var(--text);
 }
 
 [data-theme="dark"] .settings-engine-card-head span {
-  color: var(--muted) !important;
+  color: var(--muted);
 }
 
 [data-theme="dark"] .settings-engine-command {
-  background: rgba(255, 255, 255, 0.05) !important;
-  border-color: var(--line) !important;
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--line);
 }
 
 [data-theme="dark"] .settings-engine-command code {
-  color: var(--text) !important;
+  color: var(--text);
 }
 
 [data-theme="dark"] .settings-engine-command small,
 [data-theme="dark"] .settings-engine-message {
-  color: var(--muted) !important;
+  color: var(--muted);
 }
 
 [data-theme="dark"] .settings-engine-guide-entry {
-  background: rgba(232, 125, 13, 0.1) !important;
-  border-color: rgba(232, 125, 13, 0.28) !important;
-  color: #e6a35d !important;
+  background: rgba(232, 125, 13, 0.1);
+  border-color: rgba(232, 125, 13, 0.28);
+  color: #e6a35d;
 }
 
 [data-theme="dark"] .settings-guide-overlay {
-  background: rgba(0, 0, 0, 0.62) !important;
+  background: rgba(0, 0, 0, 0.62);
 }
 
 [data-theme="dark"] .settings-guide-panel {
-  background: var(--panel) !important;
-  border-color: var(--line) !important;
-  border-radius: var(--radius) !important;
-  box-shadow: var(--shadow) !important;
+  background: var(--panel);
+  border-color: var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
 }
 
 [data-theme="dark"] .settings-guide-close,
 [data-theme="dark"] .settings-guide-step,
 [data-theme="dark"] .settings-guide-step pre,
 [data-theme="dark"] .settings-guide-inline-button {
-  background: #262626 !important;
-  border-color: var(--line) !important;
-  border-radius: var(--radius) !important;
+  background: #262626;
+  border-color: var(--line);
+  border-radius: var(--radius);
 }
 
 [data-theme="dark"] .settings-guide-head {
-  border-color: var(--line) !important;
+  border-color: var(--line);
 }
 
 [data-theme="dark"] .settings-guide-head h2,
@@ -329,32 +329,32 @@
 [data-theme="dark"] .settings-guide-step pre,
 [data-theme="dark"] .settings-guide-close,
 [data-theme="dark"] .settings-guide-inline-button {
-  color: var(--text) !important;
+  color: var(--text);
 }
 
 [data-theme="dark"] .settings-guide-head p,
 [data-theme="dark"] .settings-guide-step p,
 [data-theme="dark"] .settings-guide-step li {
-  color: var(--muted) !important;
+  color: var(--muted);
 }
 
 [data-theme="dark"] .settings-chip.ok {
-  background: var(--green-soft) !important;
-  border-color: var(--green) !important;
-  color: var(--green) !important;
+  background: var(--green-soft);
+  border-color: var(--green);
+  color: var(--green);
 }
 
 [data-theme="dark"] .settings-chip.danger {
-  background: var(--warn-soft) !important;
-  border-color: var(--danger) !important;
-  color: var(--danger) !important;
+  background: var(--warn-soft);
+  border-color: var(--danger);
+  color: var(--danger);
 }
 
 [data-theme="dark"] .settings-chip.muted,
 [data-theme="dark"] .settings-chip.neutral {
-  background: rgba(255, 255, 255, 0.06) !important;
-  border-color: var(--line) !important;
-  color: var(--muted) !important;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--line);
+  color: var(--muted);
 }
 
 /* =========================================================
@@ -362,19 +362,19 @@
    ========================================================= */
 
 [data-theme="dark"] .btn-line {
-  background-color: transparent !important;
-  color: var(--text) !important;
-  border-color: var(--line) !important;
+  background-color: transparent;
+  color: var(--text);
+  border-color: var(--line);
 }
 
 [data-theme="dark"] .btn-line:hover {
-  background-color: rgba(255, 255, 255, 0.08) !important;
+  background-color: rgba(255, 255, 255, 0.08);
 }
 
 [data-theme="dark"] .badge {
-  background-color: rgba(255, 255, 255, 0.08) !important;
-  color: var(--text) !important;
-  border-color: transparent !important;
+  background-color: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  border-color: transparent;
 }
 
 /* =========================================================
@@ -409,121 +409,121 @@
    ========================================================= */
 
 [data-theme="dark"] .game-model-title {
-  color: var(--text) !important;
+  color: var(--text);
 }
 
 [data-theme="dark"] .game-model-subtitle {
-  color: var(--muted) !important;
+  color: var(--muted);
 }
 
 [data-theme="dark"] .game-model-content {
-  background: var(--bg) !important;
-  border-radius: 0 0 var(--radius) var(--radius) !important;
+  background: var(--bg);
+  border-radius: 0 0 var(--radius) var(--radius);
 }
 
 [data-theme="dark"] .game-model-tabs {
-  border-bottom-color: var(--line) !important;
+  border-bottom-color: var(--line);
 }
 
 [data-theme="dark"] .game-model-tab {
-  color: var(--muted) !important;
+  color: var(--muted);
 }
 
 [data-theme="dark"] .game-model-tab:hover {
-  color: var(--text) !important;
+  color: var(--text);
 }
 
 [data-theme="dark"] .game-model-tab.is-active {
-  color: var(--primary) !important;
+  color: var(--primary);
 }
 
 [data-theme="dark"] .game-model-tab.is-active::after {
-  background: var(--primary) !important;
+  background: var(--primary);
 }
 
 [data-theme="dark"] .game-model-action-btn {
-  background: transparent !important;
-  border-color: var(--line) !important;
-  color: var(--text) !important;
+  background: transparent;
+  border-color: var(--line);
+  color: var(--text);
 }
 
 [data-theme="dark"] .game-model-action-btn:hover {
-  background: rgba(255, 255, 255, 0.06) !important;
+  background: rgba(255, 255, 255, 0.06);
 }
 
 [data-theme="dark"] .game-model-filter-btn {
-  background: transparent !important;
-  border-color: var(--line) !important;
-  color: var(--muted) !important;
+  background: transparent;
+  border-color: var(--line);
+  color: var(--muted);
 }
 
 [data-theme="dark"] .game-model-filter-btn:hover {
-  color: var(--text) !important;
-  border-color: rgba(88, 166, 255, 0.3) !important;
+  color: var(--text);
+  border-color: rgba(88, 166, 255, 0.3);
 }
 
 [data-theme="dark"] .game-model-filter-btn.is-active {
-  background: var(--primary-soft) !important;
-  border-color: var(--primary) !important;
-  color: var(--primary) !important;
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
 [data-theme="dark"] .game-model-card {
-  background: var(--panel) !important;
-  border-color: var(--line) !important;
+  background: var(--panel);
+  border-color: var(--line);
 }
 
 [data-theme="dark"] .game-model-card:hover {
-  border-color: var(--primary) !important;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
+  border-color: var(--primary);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
 [data-theme="dark"] .game-model-card-name {
-  color: var(--text) !important;
+  color: var(--text);
 }
 
 [data-theme="dark"] .game-model-card-provider {
-  color: var(--muted) !important;
+  color: var(--muted);
 }
 
 [data-theme="dark"] .game-model-card-desc {
-  color: var(--muted) !important;
+  color: var(--muted);
 }
 
 [data-theme="dark"] .game-model-badge.popular,
 [data-theme="dark"] .game-model-badge.coming-soon {
-  background: rgba(255, 255, 255, 0.06) !important;
-  border-color: var(--line) !important;
-  color: var(--muted) !important;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--line);
+  color: var(--muted);
 }
 
 [data-theme="dark"] .game-model-cat-chip {
-  background: var(--primary-soft) !important;
-  color: var(--primary) !important;
+  background: var(--primary-soft);
+  color: var(--primary);
 }
 
 [data-theme="dark"] .game-model-strength-tag {
-  background: rgba(255, 255, 255, 0.06) !important;
-  border-color: var(--line) !important;
-  color: var(--muted) !important;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--line);
+  color: var(--muted);
 }
 
 [data-theme="dark"] .game-model-meta-item,
 [data-theme="dark"] .game-model-recommended-label {
-  color: var(--muted) !important;
+  color: var(--muted);
 }
 
 [data-theme="dark"] .game-model-recommended-tag {
-  background: var(--green-soft) !important;
-  color: var(--green) !important;
+  background: var(--green-soft);
+  color: var(--green);
 }
 
 [data-theme="dark"] .game-model-detail-card,
 [data-theme="dark"] .game-model-edit-card,
 [data-theme="dark"] .game-export-panel {
-  background: #1c1c1c !important;
-  border-radius: var(--radius) !important;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7) !important;
+  background: #1c1c1c;
+  border-radius: var(--radius);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
 }
 
 [data-theme="dark"] .game-model-detail-name,
@@ -532,7 +532,7 @@
 [data-theme="dark"] .game-export-info-title,
 [data-theme="dark"] .game-export-section-title,
 [data-theme="dark"] .game-scene-name {
-  color: var(--text) !important;
+  color: var(--text);
 }
 
 [data-theme="dark"] .game-model-detail-provider,
@@ -546,17 +546,17 @@
 [data-theme="dark"] .game-scene-preview-label,
 [data-theme="dark"] .game-scene-preview-text,
 [data-theme="dark"] .game-custom-intro p {
-  color: var(--muted) !important;
+  color: var(--muted);
 }
 
 [data-theme="dark"] .game-model-detail-param {
-  background: rgba(255, 255, 255, 0.05) !important;
-  border-color: var(--line) !important;
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--line);
 }
 
 [data-theme="dark"] .game-model-detail-recommended-tag {
-  background: var(--green-soft) !important;
-  color: var(--green) !important;
+  background: var(--green-soft);
+  color: var(--green);
 }
 
 [data-theme="dark"] .game-model-detail-btn,
@@ -564,79 +564,79 @@
 [data-theme="dark"] .game-export-copy-btn,
 [data-theme="dark"] .game-model-action-btn,
 [data-theme="dark"] .game-export-format-tab {
-  background: var(--panel) !important;
-  border-color: var(--line) !important;
-  color: var(--text) !important;
+  background: var(--panel);
+  border-color: var(--line);
+  color: var(--text);
 }
 
 [data-theme="dark"] .game-model-detail-btn:hover,
 [data-theme="dark"] .game-scene-btn:hover,
 [data-theme="dark"] .game-export-copy-btn:hover {
-  background: rgba(255, 255, 255, 0.08) !important;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 [data-theme="dark"] .game-model-detail-close,
 [data-theme="dark"] .game-export-close {
-  background: transparent !important;
-  border-color: var(--line) !important;
-  color: var(--muted) !important;
+  background: transparent;
+  border-color: var(--line);
+  color: var(--muted);
 }
 
 [data-theme="dark"] .game-model-edit-field span,
 [data-theme="dark"] .game-model-edit-field label span {
-  color: var(--muted) !important;
+  color: var(--muted);
 }
 
 [data-theme="dark"] .game-model-edit-field input,
 [data-theme="dark"] .game-model-edit-field select,
 [data-theme="dark"] .game-model-edit-field textarea {
-  background: #262626 !important;
-  border-color: var(--line) !important;
-  color: var(--text) !important;
+  background: #262626;
+  border-color: var(--line);
+  color: var(--text);
 }
 
 [data-theme="dark"] .game-model-edit-field input:focus,
 [data-theme="dark"] .game-model-edit-field select:focus,
 [data-theme="dark"] .game-model-edit-field textarea:focus {
-  border-color: var(--primary) !important;
-  background: #2a2a2a !important;
+  border-color: var(--primary);
+  background: #2a2a2a;
 }
 
 [data-theme="dark"] .game-scene-item {
-  background: var(--panel) !important;
-  border-color: var(--line) !important;
-  border-radius: var(--radius) !important;
+  background: var(--panel);
+  border-color: var(--line);
+  border-radius: var(--radius);
 }
 
 [data-theme="dark"] .game-scene-cat-chip {
-  background: var(--primary-soft) !important;
-  color: var(--primary) !important;
+  background: var(--primary-soft);
+  color: var(--primary);
 }
 
 [data-theme="dark"] .game-scene-model-badge,
 [data-theme="dark"] .game-scene-param {
-  background: rgba(255, 255, 255, 0.06) !important;
-  border-color: var(--line) !important;
-  color: var(--muted) !important;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--line);
+  color: var(--muted);
 }
 
 [data-theme="dark"] .game-scenes-add-btn {
-  background: var(--primary-soft) !important;
-  border-color: var(--primary) !important;
-  color: var(--primary) !important;
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
 [data-theme="dark"] .game-export-format-tab.is-active {
-  background: var(--primary-soft) !important;
-  border-color: var(--primary) !important;
-  color: var(--primary) !important;
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
 [data-theme="dark"] .game-export-feature-list span {
-  color: var(--green) !important;
+  color: var(--green);
 }
 
-/* 游戏模型页面统一小圆角 */
+/* 游戏模型页面统一小圆�?*/
 [data-theme="dark"] .game-model-card,
 [data-theme="dark"] .game-model-filter-btn,
 [data-theme="dark"] .game-model-badge,
@@ -653,7 +653,7 @@
 [data-theme="dark"] .game-scene-param,
 [data-theme="dark"] .game-scenes-add-btn,
 [data-theme="dark"] .game-model-detail-recommended-tag {
-  border-radius: var(--radius) !important;
+  border-radius: var(--radius);
 }
 
 /* =========================================================
@@ -663,49 +663,49 @@
 /* Toolbar buttons in topbar */
 [data-theme="dark"] .project-toolbar-github,
 [data-theme="dark"] .project-toolbar-settings {
-  background: #262626 !important;
-  border-color: var(--line) !important;
-  color: var(--muted) !important;
-  border-radius: var(--radius) !important;
+  background: #262626;
+  border-color: var(--line);
+  color: var(--muted);
+  border-radius: var(--radius);
 }
 
 [data-theme="dark"] .project-toolbar-github:hover,
 [data-theme="dark"] .project-toolbar-settings:hover,
 [data-theme="dark"] .project-toolbar-settings.is-active {
-  background: rgba(255, 255, 255, 0.08) !important;
-  border-color: var(--primary) !important;
-  color: var(--primary) !important;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
 /* Page frame */
 [data-theme="dark"] .github-header,
 [data-theme="dark"] .github-tabs {
-  background: var(--panel) !important;
-  border-color: var(--line) !important;
+  background: var(--panel);
+  border-color: var(--line);
 }
 
 [data-theme="dark"] .github-header {
-  border-radius: var(--radius) var(--radius) 0 0 !important;
+  border-radius: var(--radius) var(--radius) 0 0;
 }
 
 [data-theme="dark"] .github-content {
-  background: var(--bg) !important;
-  border-color: var(--line) !important;
-  border-radius: 0 0 var(--radius) var(--radius) !important;
+  background: var(--bg);
+  border-color: var(--line);
+  border-radius: 0 0 var(--radius) var(--radius);
 }
 
 [data-theme="dark"] .github-icon {
-  color: var(--muted) !important;
+  color: var(--muted);
 }
 
 [data-theme="dark"] .github-repo-name {
-  color: var(--text) !important;
+  color: var(--text);
 }
 
 [data-theme="dark"] .github-subtitle,
 [data-theme="dark"] .github-bind-copy span,
 [data-theme="dark"] .github-stat-card span {
-  color: var(--muted) !important;
+  color: var(--muted);
 }
 
 [data-theme="dark"] .github-auth-chip,
@@ -713,287 +713,287 @@
 [data-theme="dark"] .github-stat-card,
 [data-theme="dark"] .github-message,
 [data-theme="dark"] .github-empty-state {
-  background: var(--panel) !important;
-  border-color: var(--line) !important;
+  background: var(--panel);
+  border-color: var(--line);
 }
 
 [data-theme="dark"] .github-bind-copy strong,
 [data-theme="dark"] .github-stat-card strong {
-  color: var(--text) !important;
+  color: var(--text);
 }
 
 [data-theme="dark"] .github-message.danger {
-  background: var(--danger-soft, rgba(220, 80, 70, 0.12)) !important;
-  border-color: rgba(220, 80, 70, 0.24) !important;
-  color: var(--danger, #e05252) !important;
+  background: var(--danger-soft, rgba(220, 80, 70, 0.12));
+  border-color: rgba(220, 80, 70, 0.24);
+  color: var(--danger, #e05252);
 }
 
 /* Topbar action buttons */
 [data-theme="dark"] .github-action-btn {
-  background: transparent !important;
-  border-color: var(--line) !important;
-  color: var(--muted) !important;
+  background: transparent;
+  border-color: var(--line);
+  color: var(--muted);
 }
 
 [data-theme="dark"] .github-action-btn.primary {
-  background: var(--primary) !important;
-  border-color: var(--primary) !important;
-  color: #fff !important;
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
 }
 
 [data-theme="dark"] .github-action-btn:hover {
-  background: rgba(255, 255, 255, 0.06) !important;
-  color: var(--text) !important;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
 }
 
 /* Tabs */
 [data-theme="dark"] .github-tab {
-  color: var(--muted) !important;
+  color: var(--muted);
 }
 
 [data-theme="dark"] .github-tab:hover {
-  background: rgba(255, 255, 255, 0.06) !important;
-  color: var(--text) !important;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
 }
 
 [data-theme="dark"] .github-tab.is-active {
-  background: var(--primary-soft) !important;
-  color: var(--primary) !important;
+  background: var(--primary-soft);
+  color: var(--primary);
 }
 
 /* Filter inputs / selects */
 [data-theme="dark"] .github-filter-input,
 [data-theme="dark"] .github-filter-select {
-  background: #262626 !important;
-  border-color: var(--line) !important;
-  color: var(--text) !important;
+  background: #262626;
+  border-color: var(--line);
+  color: var(--text);
 }
 
 [data-theme="dark"] .github-filter-input:focus,
 [data-theme="dark"] .github-filter-select:focus {
-  border-color: var(--primary) !important;
-  background: #2a2a2a !important;
-  box-shadow: none !important;
+  border-color: var(--primary);
+  background: #2a2a2a;
+  box-shadow: none;
 }
 
 /* Section panels */
 [data-theme="dark"] .github-section-panel {
-  background: var(--panel) !important;
-  border-color: var(--line) !important;
-  border-radius: var(--radius) !important;
+  background: var(--panel);
+  border-color: var(--line);
+  border-radius: var(--radius);
 }
 
 [data-theme="dark"] .github-section-title {
-  color: var(--muted) !important;
+  color: var(--muted);
 }
 
 /* List items */
 [data-theme="dark"] .github-list-item {
-  background: rgba(255, 255, 255, 0.04) !important;
-  border-color: var(--line) !important;
-  border-radius: var(--radius) !important;
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--line);
+  border-radius: var(--radius);
 }
 
 [data-theme="dark"] .github-list-item:hover {
-  background: rgba(255, 255, 255, 0.07) !important;
-  border-color: rgba(88, 166, 255, 0.2) !important;
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(88, 166, 255, 0.2);
 }
 
 [data-theme="dark"] .github-list-item.is-active {
-  background: var(--primary-soft) !important;
-  border-color: rgba(88, 166, 255, 0.3) !important;
+  background: var(--primary-soft);
+  border-color: rgba(88, 166, 255, 0.3);
 }
 
 [data-theme="dark"] .github-list-item-meta {
-  color: var(--muted) !important;
+  color: var(--muted);
 }
 
 [data-theme="dark"] .github-meta-sep {
-  color: rgba(255, 255, 255, 0.2) !important;
+  color: rgba(255, 255, 255, 0.2);
 }
 
 [data-theme="dark"] .github-branch-name,
 [data-theme="dark"] .github-commit-message,
 [data-theme="dark"] .github-pr-title {
-  color: var(--text) !important;
+  color: var(--text);
 }
 
 [data-theme="dark"] .github-commit-hash {
-  color: var(--muted) !important;
+  color: var(--muted);
 }
 
 [data-theme="dark"] .github-badge-protected {
-  background: rgba(255, 255, 255, 0.06) !important;
-  border-color: var(--line) !important;
-  color: var(--muted) !important;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--line);
+  color: var(--muted);
 }
 
 [data-theme="dark"] .github-branch-chip {
-  background: var(--primary-soft) !important;
-  color: var(--primary) !important;
+  background: var(--primary-soft);
+  color: var(--primary);
 }
 
 /* PR states */
 [data-theme="dark"] .github-pr-number {
-  color: var(--muted) !important;
+  color: var(--muted);
 }
 
 [data-theme="dark"] .github-pr-open {
-  background: var(--green-soft) !important;
-  color: var(--green) !important;
+  background: var(--green-soft);
+  color: var(--green);
 }
 
 [data-theme="dark"] .github-pr-merged {
-  background: rgba(131, 63, 210, 0.15) !important;
-  color: #b57bee !important;
+  background: rgba(131, 63, 210, 0.15);
+  color: #b57bee;
 }
 
 [data-theme="dark"] .github-pr-closed {
-  background: rgba(255, 255, 255, 0.06) !important;
-  color: var(--muted) !important;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted);
 }
 
 /* Review & checks badges */
 [data-theme="dark"] .github-review-badge.approved,
 [data-theme="dark"] .github-checks-badge.success {
-  background: var(--green-soft) !important;
-  color: var(--green) !important;
+  background: var(--green-soft);
+  color: var(--green);
 }
 
 [data-theme="dark"] .github-review-badge.changes_requested,
 [data-theme="dark"] .github-checks-badge.failure {
-  background: var(--danger-soft, rgba(220, 80, 70, 0.12)) !important;
-  color: var(--danger, #e05252) !important;
+  background: var(--danger-soft, rgba(220, 80, 70, 0.12));
+  color: var(--danger, #e05252);
 }
 
 [data-theme="dark"] .github-review-badge.pending,
 [data-theme="dark"] .github-checks-badge.pending,
 [data-theme="dark"] .github-checks-badge.running {
-  background: rgba(255, 255, 255, 0.06) !important;
-  color: var(--muted) !important;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted);
 }
 
 /* Tree & graph decorations */
 [data-theme="dark"] .github-tree-dot {
-  background: rgba(255, 255, 255, 0.3) !important;
+  background: rgba(255, 255, 255, 0.3);
 }
 
 [data-theme="dark"] .github-tree-line,
 [data-theme="dark"] .github-graph-line {
-  background: var(--line) !important;
+  background: var(--line);
 }
 
 [data-theme="dark"] .github-graph-dot {
-  background: var(--primary) !important;
+  background: var(--primary);
 }
 
 [data-theme="dark"] .github-graph-meta {
-  color: var(--muted) !important;
+  color: var(--muted);
 }
 
 /* ── File panel dark overrides ──────────────────────────── */
 
 [data-theme="dark"] .file-panel {
-  background: var(--panel) !important;
-  border-color: var(--line) !important;
+  background: var(--panel);
+  border-color: var(--line);
 }
 
 [data-theme="dark"] .file-render-view {
-  background: transparent !important;
+  background: transparent;
 }
 
 [data-theme="dark"] .file-mode-badge {
-  background: rgba(88, 166, 255, 0.1) !important;
-  color: #58a6ff !important;
-  border-color: rgba(88, 166, 255, 0.2) !important;
+  background: rgba(88, 166, 255, 0.1);
+  color: #58a6ff;
+  border-color: rgba(88, 166, 255, 0.2);
 }
 
 [data-theme="dark"] .file-editor {
-  background: var(--panel) !important;
-  color: var(--text) !important;
+  background: var(--panel);
+  color: var(--text);
 }
 
 [data-theme="dark"] .file-content {
-  color: var(--text) !important;
+  color: var(--text);
 }
 
 /* ── Copywriting page dark overrides ─────────────────────── */
 
 [data-theme="dark"] .copywriting-rail,
 [data-theme="dark"] .copywriting-codex {
-  border-radius: var(--radius) !important;
-  box-shadow: var(--shadow) !important;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
 }
 
 [data-theme="dark"] .copywriting-type-card.is-active {
-  border-color: var(--primary) !important;
-  background: var(--primary-soft) !important;
+  border-color: var(--primary);
+  background: var(--primary-soft);
 }
 
 [data-theme="dark"] .copywriting-codex-note {
-  background: var(--bg) !important;
-  color: var(--text) !important;
+  background: var(--bg);
+  color: var(--text);
 }
 
 [data-theme="dark"] .copywriting-codex-note span {
-  color: var(--muted) !important;
+  color: var(--muted);
 }
 
 [data-theme="dark"] .copywriting-chip.is-active,
 [data-theme="dark"] .copywriting-ghost-btn.is-active,
 [data-theme="dark"] .copywriting-copy-btn {
-  border-color: var(--primary) !important;
-  background: var(--primary-soft) !important;
-  color: var(--primary) !important;
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary);
 }
 
 [data-theme="dark"] .copywriting-result-tags span {
-  background: var(--primary-soft) !important;
-  color: var(--primary) !important;
+  background: var(--primary-soft);
+  color: var(--primary);
 }
 
 [data-theme="dark"] .copywriting-result-card {
-  background: var(--panel) !important;
-  border-color: var(--line) !important;
+  background: var(--panel);
+  border-color: var(--line);
 }
 
 [data-theme="dark"] .copywriting-empty-result {
-  background: var(--bg) !important;
-  border-color: var(--line) !important;
+  background: var(--bg);
+  border-color: var(--line);
 }
 
 [data-theme="dark"] .copywriting-codex-item.is-active {
-  border-color: var(--primary) !important;
-  background: var(--primary-soft) !important;
+  border-color: var(--primary);
+  background: var(--primary-soft);
 }
 
 [data-theme="dark"] .copywriting-primary-btn {
-  background: var(--primary) !important;
+  background: var(--primary);
 }
 
 /* MCP console dark overrides */
 [data-theme="dark"] .mcp-console-page {
-  color: var(--text) !important;
+  color: var(--text);
 }
 
 [data-theme="dark"] .mcp-console-hero,
 [data-theme="dark"] .mcp-panel {
-  background: var(--panel) !important;
-  border-color: var(--line) !important;
-  border-radius: var(--radius) !important;
-  box-shadow: var(--shadow) !important;
+  background: var(--panel);
+  border-color: var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
 }
 
 [data-theme="dark"] .mcp-console-icon {
-  background: #202225 !important;
-  box-shadow: inset 0 0 0 1px var(--line) !important;
+  background: #202225;
+  box-shadow: inset 0 0 0 1px var(--line);
 }
 
 [data-theme="dark"] .mcp-console-kicker,
 [data-theme="dark"] .mcp-hero-status span,
 [data-theme="dark"] .mcp-panel-head span,
 [data-theme="dark"] .mcp-status-list span {
-  color: var(--muted) !important;
+  color: var(--muted);
 }
 
 [data-theme="dark"] .mcp-console-hero h1,
@@ -1005,49 +1005,49 @@
 [data-theme="dark"] .mcp-status-list strong,
 [data-theme="dark"] .mcp-status-list code,
 [data-theme="dark"] .mcp-tool-list strong {
-  color: var(--text) !important;
+  color: var(--text);
 }
 
 [data-theme="dark"] .mcp-console-button,
 [data-theme="dark"] .mcp-status-chip,
 [data-theme="dark"] .mcp-mini-chip {
-  background: rgba(255, 255, 255, 0.05) !important;
-  border-color: var(--line) !important;
-  color: var(--text) !important;
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--line);
+  color: var(--text);
 }
 
 [data-theme="dark"] .mcp-status-chip.ok,
 [data-theme="dark"] .mcp-mini-chip.ok {
-  background: var(--green-soft) !important;
-  border-color: rgba(63, 185, 128, 0.22) !important;
-  color: var(--green) !important;
+  background: var(--green-soft);
+  border-color: rgba(63, 185, 128, 0.22);
+  color: var(--green);
 }
 
 [data-theme="dark"] .mcp-status-chip.danger,
 [data-theme="dark"] .mcp-mini-chip.danger {
-  background: var(--danger-soft, rgba(220, 80, 70, 0.12)) !important;
-  border-color: rgba(220, 80, 70, 0.22) !important;
-  color: var(--danger, #e05252) !important;
+  background: var(--danger-soft, rgba(220, 80, 70, 0.12));
+  border-color: rgba(220, 80, 70, 0.22);
+  color: var(--danger, #e05252);
 }
 
 [data-theme="dark"] .mcp-status-chip.muted,
 [data-theme="dark"] .mcp-status-chip.neutral,
 [data-theme="dark"] .mcp-mini-chip.muted {
-  background: rgba(255, 255, 255, 0.05) !important;
-  color: var(--muted) !important;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted);
 }
 
 [data-theme="dark"] .mcp-status-list div,
 [data-theme="dark"] .mcp-hero-status div,
 [data-theme="dark"] .mcp-capability-card,
 [data-theme="dark"] .mcp-tool-list article {
-  background: rgba(255, 255, 255, 0.04) !important;
-  border-color: var(--line) !important;
-  border-radius: var(--radius) !important;
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--line);
+  border-radius: var(--radius);
 }
 
 [data-theme="dark"] .mcp-capability-card code {
-  color: var(--primary) !important;
+  color: var(--primary);
 }
 
 [data-theme="dark"] .mcp-capability-card p,
@@ -1055,29 +1055,29 @@
 [data-theme="dark"] .mcp-message,
 [data-theme="dark"] .mcp-empty,
 [data-theme="dark"] .mcp-tool-list p {
-  color: var(--muted) !important;
+  color: var(--muted);
 }
 
 [data-theme="dark"] .mcp-message.danger {
-  color: var(--danger, #e05252) !important;
+  color: var(--danger, #e05252);
 }
 
 /* Skills */
 [data-theme="dark"] .settings-skill-card {
-  background: var(--panel) !important;
-  border-color: var(--line) !important;
-  box-shadow: var(--shadow) !important;
+  background: var(--panel);
+  border-color: var(--line);
+  box-shadow: var(--shadow);
 }
 
 [data-theme="dark"] .skill-card.is-enabled {
-  background: var(--primary-soft) !important;
+  background: var(--primary-soft);
 }
 
 [data-theme="dark"] .skills-page-head h1,
 [data-theme="dark"] .skill-card h3,
 [data-theme="dark"] .settings-skill-card h3,
 [data-theme="dark"] .skill-switch {
-  color: var(--text) !important;
+  color: var(--text);
 }
 
 [data-theme="dark"] .skills-kicker,
@@ -1086,7 +1086,7 @@
 [data-theme="dark"] .skill-card p,
 [data-theme="dark"] .settings-skill-card p,
 [data-theme="dark"] .skills-empty {
-  color: var(--muted) !important;
+  color: var(--muted);
 }
 
 [data-theme="dark"] .skills-page-head,
@@ -1097,21 +1097,21 @@
 [data-theme="dark"] .skills-empty,
 [data-theme="dark"] .settings-skill-format,
 [data-theme="dark"] .settings-skill-message {
-  background: rgba(255, 255, 255, 0.04) !important;
-  border-color: var(--line) !important;
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--line);
 }
 
 [data-theme="dark"] .settings-skill-format strong {
-  color: var(--text) !important;
+  color: var(--text);
 }
 
 [data-theme="dark"] .settings-skill-format code,
 [data-theme="dark"] .settings-skill-message {
-  color: var(--muted) !important;
+  color: var(--muted);
 }
 
 [data-theme="dark"] .skills-filter-chip.is-active {
-  background: var(--primary-soft) !important;
-  border-color: rgba(78, 140, 255, 0.34) !important;
-  color: var(--primary) !important;
+  background: var(--primary-soft);
+  border-color: rgba(78, 140, 255, 0.34);
+  color: var(--primary);
 }

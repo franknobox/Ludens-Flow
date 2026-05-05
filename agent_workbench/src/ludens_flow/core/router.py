@@ -118,6 +118,41 @@ def get_available_actions(state: LudensState) -> List[Dict[str, str]]:
     return actions
 
 
+_PHASE_TO_AGENT_KEY = {
+    "GDD_": "design",
+    "PM_": "pm",
+    "ENG_": "engineering",
+    "REVIEW": "review",
+    "DEV_COACHING": "engineering",
+}
+
+_PHASE_TO_AGENT_NAME = {
+    "GDD_": "DesignAgent",
+    "PM_": "PMAgent",
+    "ENG_": "EngineeringAgent",
+    "REVIEW": "ReviewAgent",
+    "DEV_COACHING": "EngineeringAgent",
+}
+
+
+def phase_to_agent_key(phase: str | None) -> str:
+    if not phase:
+        return "system"
+    for prefix, key in _PHASE_TO_AGENT_KEY.items():
+        if phase.startswith(prefix) or phase == prefix:
+            return key
+    return "system"
+
+
+def phase_to_agent_name(phase: str | None) -> str:
+    if not phase:
+        return "System"
+    for prefix, name in _PHASE_TO_AGENT_NAME.items():
+        if phase.startswith(prefix) or phase == prefix:
+            return name
+    return "System"
+
+
 def action_user_input(action_id: str) -> str:
     return ACTION_USER_TEXT.get(action_id, f"[ACTION] {action_id}")
 
