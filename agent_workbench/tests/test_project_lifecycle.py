@@ -7,10 +7,12 @@
 import json
 import os
 import shutil
+import subprocess
 import sys
 import unittest
 import base64
 from pathlib import Path
+from unittest.mock import patch
 
 _ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_ROOT))
@@ -20,9 +22,17 @@ os.chdir(_ROOT)
 
 import ludens_flow.core.state as st
 import ludens_flow.app.api as api
+import ludens_flow.core.agents.base as base_mod
+import ludens_flow.capabilities.mcp.adapter as mcp_adapter
+from ludens_flow.capabilities.mcp import health as mcp_health
+from ludens_flow.core import paths as path_mod
 from fastapi import HTTPException
 from ludens_flow.capabilities.artifacts.artifacts import read_artifact, write_artifact
+from ludens_flow.capabilities.mcp.adapter import ENGINE_TOOL_SCHEMAS
+from ludens_flow.capabilities.mcp.adapters import get_engine_adapter
+from ludens_flow.capabilities.mcp.health import McpClientError
 from ludens_flow.capabilities.tools.registry import dispatch_tool_call, list_common_tools
+from ludens_flow.core.agents.base import AgentResult, BaseAgent
 from ludens_flow.core.paths import (
     PROJECT_META_SCHEMA_VERSION,
     add_project_workspace,
@@ -40,6 +50,7 @@ from ludens_flow.core.paths import (
     list_project_workspaces,
     rename_project,
     restore_project,
+    touch_project,
 )
 from ludens_flow.core.state import (
     STATE_SCHEMA_VERSION,
@@ -50,6 +61,18 @@ from ludens_flow.core.state import (
     migrate_legacy_workspace_to_project,
     save_state,
 )
+from llm.provider import LLMConfig
+
+
+class _ToolPolicyTestAgent(BaseAgent):
+    name = "ToolPolicyTestAgent"
+    system_prompt = "test"
+
+    def discuss(self, *args, **kwargs):
+        return AgentResult(assistant_message="")
+
+    def commit(self, *args, **kwargs):
+        return AgentResult(assistant_message="")
 
 
 class ProjectLifecycleTests(unittest.TestCase):
@@ -250,6 +273,229 @@ class ProjectLifecycleTests(unittest.TestCase):
         self.assertEqual(health["connections"][0]["status"], "not_configured")
         self.assertEqual(health["connections"][0]["tool_count"], 0)
 
+    def test_api_refuses_accidental_mcp_connection_clear(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+        api.post_current_project_settings(
+            api.ProjectSettingsRequest(
+                mcp_connections=[
+                    {
+                        "id": "blender-mcp",
+                        "engine": "blender",
+                        "label": "Blender MCP",
+                        "command": "cmd",
+                        "args": ["/c", "uvx", "blender-mcp"],
+                        "enabled": True,
+                    }
+                ]
+            )
+        )
+
+        with self.assertRaises(HTTPException) as ctx:
+            api.post_current_project_settings(
+                api.ProjectSettingsRequest(mcp_connections=[])
+            )
+        self.assertEqual(ctx.exception.status_code, 409)
+
+        with self.assertRaises(HTTPException) as ctx:
+            api.post_current_project_settings(
+                api.ProjectSettingsRequest(
+                    mcp_connections=[
+                        {
+                            "id": "unity-mcp",
+                            "engine": "unity",
+                            "label": "Unity MCP",
+                            "command": "",
+                            "args": [],
+                            "enabled": True,
+                        }
+                    ]
+                )
+            )
+        self.assertEqual(ctx.exception.status_code, 409)
+
+        after_failed_save = api.get_current_project_settings()
+        self.assertEqual(after_failed_save["mcp_connections"][0]["id"], "blender-mcp")
+
+        deleted = api.delete_current_project_mcp_connection("blender-mcp")
+        self.assertEqual(deleted["mcp_connections"], [])
+
+    def test_project_touch_preserves_workspace_after_stale_meta_read(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+        external_root = self.workspace_root / "external-root"
+        external_root.mkdir(parents=True)
+        add_project_workspace(
+            str(external_root),
+            project_id="alpha",
+            kind="generic",
+            writable=True,
+        )
+
+        original_read = path_mod._read_project_meta
+        calls = {"count": 0}
+
+        def stale_first_read(project_id):
+            if project_id == "alpha" and calls["count"] == 0:
+                calls["count"] += 1
+                stale = dict(original_read(project_id))
+                stale["workspaces"] = []
+                stale["unity_root"] = ""
+                return stale
+            return original_read(project_id)
+
+        path_mod._read_project_meta = stale_first_read
+        try:
+            path_mod.touch_project("alpha", last_phase="PM_DISCUSS")
+        finally:
+            path_mod._read_project_meta = original_read
+
+        workspaces = list_project_workspaces(project_id="alpha", include_disabled=True)
+        self.assertEqual([item["id"] for item in workspaces], ["generic-workspace"])
+        self.assertEqual(workspaces[0]["root"], str(external_root.resolve()))
+
+    def test_project_touch_preserves_mcp_connections_after_stale_meta_read(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+        api.post_current_project_settings(
+            api.ProjectSettingsRequest(
+                mcp_connections=[
+                    {
+                        "id": "blender-mcp",
+                        "engine": "blender",
+                        "label": "Blender MCP",
+                        "command": "cmd",
+                        "args": ["/c", "uvx", "blender-mcp"],
+                        "enabled": True,
+                    }
+                ]
+            )
+        )
+
+        original_read = path_mod._read_project_meta
+        calls = {"count": 0}
+
+        def stale_first_read(project_id):
+            if project_id == "alpha" and calls["count"] == 0:
+                calls["count"] += 1
+                stale = dict(original_read(project_id))
+                stale["mcp_connections"] = []
+                return stale
+            return original_read(project_id)
+
+        path_mod._read_project_meta = stale_first_read
+        try:
+            path_mod.touch_project("alpha", last_phase="PM_DISCUSS")
+        finally:
+            path_mod._read_project_meta = original_read
+
+        settings = api.get_current_project_settings()
+        self.assertEqual(settings["mcp_connections"][0]["id"], "blender-mcp")
+
+    def test_project_touch_does_not_resurrect_deleted_workspace_from_stale_read(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+        external_root = self.workspace_root / "external-root"
+        external_root.mkdir(parents=True)
+        add_project_workspace(
+            str(external_root),
+            project_id="alpha",
+            kind="generic",
+            workspace_id="external-main",
+            writable=True,
+        )
+        stale_meta = path_mod._read_project_meta("alpha")
+
+        api.delete_current_project_workspace("external-main")
+        self.assertEqual(list_project_workspaces(project_id="alpha"), [])
+
+        original_read = path_mod._read_project_meta
+        calls = {"count": 0}
+
+        def stale_first_read(project_id):
+            if project_id == "alpha" and calls["count"] == 0:
+                calls["count"] += 1
+                return dict(stale_meta)
+            return original_read(project_id)
+
+        path_mod._read_project_meta = stale_first_read
+        try:
+            path_mod.touch_project("alpha", last_phase="PM_DISCUSS")
+        finally:
+            path_mod._read_project_meta = original_read
+
+        self.assertEqual(list_project_workspaces(project_id="alpha"), [])
+
+    def test_project_touch_does_not_resurrect_deleted_mcp_from_stale_read(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+        api.post_current_project_settings(
+            api.ProjectSettingsRequest(
+                mcp_connections=[
+                    {
+                        "id": "blender-mcp",
+                        "engine": "blender",
+                        "label": "Blender MCP",
+                        "command": "cmd",
+                        "args": ["/c", "uvx", "blender-mcp"],
+                        "enabled": True,
+                    }
+                ]
+            )
+        )
+        stale_meta = path_mod._read_project_meta("alpha")
+
+        api.delete_current_project_mcp_connection("blender-mcp")
+        self.assertEqual(api.get_current_project_settings()["mcp_connections"], [])
+
+        original_read = path_mod._read_project_meta
+        calls = {"count": 0}
+
+        def stale_first_read(project_id):
+            if project_id == "alpha" and calls["count"] == 0:
+                calls["count"] += 1
+                return dict(stale_meta)
+            return original_read(project_id)
+
+        path_mod._read_project_meta = stale_first_read
+        try:
+            path_mod.touch_project("alpha", last_phase="PM_DISCUSS")
+        finally:
+            path_mod._read_project_meta = original_read
+
+        self.assertEqual(api.get_current_project_settings()["mcp_connections"], [])
+
+    def test_list_projects_isolates_broken_project_metadata(self):
+        create_project("alpha")
+        create_project("broken")
+        get_project_meta_file("broken").write_text("{broken-json", encoding="utf-8")
+
+        projects = {item["id"]: item for item in list_projects()}
+
+        self.assertIn("alpha", projects)
+        self.assertIn("broken", projects)
+        self.assertIn("metadata_error", projects["broken"])
+
+    def test_mcp_write_confirmation_requires_explicit_approval_handler(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+        api.post_current_project_settings(
+            api.ProjectSettingsRequest(
+                agent_file_write_confirm_required=True,
+                mcp_connections=[
+                    {
+                        "id": "blender-mcp",
+                        "engine": "blender",
+                        "label": "Blender MCP",
+                        "command": "cmd",
+                        "args": ["/c", "uvx", "blender-mcp"],
+                        "enabled": True,
+                    }
+                ],
+            )
+        )
+
+        with self.assertRaisesRegex(McpClientError, "no permission handler"):
+            dispatch_tool_call(
+                "engine_create_object",
+                {"engine": "blender", "name": "Denied Cube"},
+                project_id="alpha",
+            )
+
     def test_api_can_import_enable_and_delete_external_skill(self):
         api.post_project(api.ProjectRequest(project_id="alpha"))
         self.assertEqual(api.get_skill_catalog()["skills"], [])
@@ -326,6 +572,39 @@ class ProjectLifecycleTests(unittest.TestCase):
         self.assertNotIn("create_script", tool_names)
         self.assertNotIn("add_node", tool_names)
 
+    def test_base_agent_uses_explicit_tool_policy(self):
+        captured = []
+        original_generate = base_mod.generate
+
+        def fake_generate(**kwargs):
+            captured.append(kwargs.get("tools"))
+            return "ok"
+
+        base_mod.generate = fake_generate
+        try:
+            agent = _ToolPolicyTestAgent()
+            cfg = LLMConfig(provider="openai", model="test", api_key="test")
+
+            agent._call("hello", cfg=cfg, tools=None)
+            self.assertEqual(captured[-1], [])
+
+            agent._call("hello", cfg=cfg, tools=ENGINE_TOOL_SCHEMAS)
+            exposed_names = {
+                item["function"]["name"] for item in captured[-1]
+            }
+            self.assertTrue(exposed_names)
+            self.assertTrue(all(name.startswith("engine_") for name in exposed_names))
+            self.assertNotIn("web_search", exposed_names)
+            self.assertNotIn("workspace_write_text_file", exposed_names)
+            self.assertNotIn("unity_read_file", exposed_names)
+
+            agent._call("hello", cfg=cfg, tools="common")
+            common_names = {item["function"]["name"] for item in captured[-1]}
+            self.assertIn("web_search", common_names)
+            self.assertIn("engine_list_scene", common_names)
+        finally:
+            base_mod.generate = original_generate
+
     def test_engine_mcp_adapter_requires_configured_connection(self):
         api.post_project(api.ProjectRequest(project_id="alpha"))
 
@@ -334,6 +613,543 @@ class ProjectLifecycleTests(unittest.TestCase):
                 "engine_list_scene",
                 {"engine": "unity"},
                 project_id="alpha",
+            )
+
+    def test_blender_adapter_translates_ludens_capabilities_to_blender_operations(self):
+        adapter = get_engine_adapter("blender")
+        available_tools = [{"name": "execute_blender_code"}]
+
+        list_call = adapter.map_call(
+            "engine_list_scene",
+            {"engine": "blender"},
+            [
+                {
+                    "name": "get_scene_info",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {"user_prompt": {"type": "string"}},
+                        "required": ["user_prompt"],
+                    },
+                }
+            ],
+        )
+        self.assertIsNotNone(list_call)
+        self.assertEqual(list_call.tool_name, "get_scene_info")
+        self.assertEqual(
+            list_call.arguments["user_prompt"],
+            "Ludens-Flow blender.scene.inspect",
+        )
+
+        create_call = adapter.map_call(
+            "engine_create_object",
+            {
+                "engine": "blender",
+                "name": "Test Cube",
+                "object_type": "cube",
+                "position": {"x": 1, "y": 2, "z": 3},
+            },
+            available_tools,
+        )
+        self.assertIsNotNone(create_call)
+        self.assertEqual(create_call.tool_name, "execute_blender_code")
+        self.assertEqual(create_call.operation_name, "blender.object.create")
+        self.assertIn("primitive_cube_add", create_call.arguments["code"])
+        self.assertIn("Test Cube", create_call.arguments["code"])
+        self.assertIn("user_prompt", create_call.arguments)
+
+        save_call = adapter.map_call(
+            "engine_save_scene",
+            {"engine": "blender", "scene_path": "E:/tmp/test.blend"},
+            available_tools,
+        )
+        self.assertIsNotNone(save_call)
+        self.assertEqual(save_call.operation_name, "blender.file.save")
+        self.assertIn("save_as_mainfile", save_call.arguments["code"])
+
+    def test_blender_adapter_passes_scene_max_items_when_supported(self):
+        adapter = get_engine_adapter("blender")
+
+        list_call = adapter.map_call(
+            "engine_list_scene",
+            {"engine": "blender", "max_items": 12},
+            [
+                {
+                    "name": "get_scene_info",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "user_prompt": {"type": "string"},
+                            "max_items": {"type": "integer"},
+                        },
+                    },
+                }
+            ],
+        )
+
+        self.assertIsNotNone(list_call)
+        self.assertEqual(list_call.arguments["max_items"], 12)
+
+    def test_blender_scene_fallback_is_limited_to_known_legacy_schema(self):
+        adapter = get_engine_adapter("blender")
+
+        self.assertEqual(
+            adapter.fallback_arguments(
+                "engine_list_scene",
+                "get_scene_info",
+                {"user_prompt": "Ludens-Flow blender.scene.inspect"},
+            ),
+            [{}],
+        )
+        self.assertEqual(
+            adapter.fallback_arguments(
+                "engine_list_scene",
+                "get_scene_info",
+                {"random_string": "ludens-flow"},
+            ),
+            [],
+        )
+        self.assertEqual(
+            adapter.fallback_arguments(
+                "engine_list_scene",
+                "get_scene_info",
+                {"dummy": "ludens-flow"},
+            ),
+            [],
+        )
+
+    def test_mcp_health_check_uses_ttl_cache(self):
+        mcp_health.clear_mcp_connection_cache()
+        config = {
+            "id": "cached-blender",
+            "engine": "blender",
+            "command": "cmd",
+            "args": ["/c", "uvx", "blender-mcp"],
+            "enabled": True,
+        }
+        calls = []
+
+        def fake_run(command, *, input, **kwargs):
+            calls.append(input)
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout=(
+                    b'{"jsonrpc":"2.0","id":1,"result":{}}\n'
+                    b'{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"get_scene_info"}]}}\n'
+                ),
+                stderr=b"",
+            )
+
+        with patch("ludens_flow.capabilities.mcp.health.subprocess.run", side_effect=fake_run):
+            first = mcp_health.check_mcp_connection(config)
+            second = mcp_health.check_mcp_connection(config)
+
+        self.assertEqual(first["status"], "tools_loaded")
+        self.assertEqual(second["tools"][0]["name"], "get_scene_info")
+        self.assertEqual(len(calls), 1)
+        mcp_health.clear_mcp_connection_cache()
+
+    def test_engine_list_scene_result_is_limited_by_max_items(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+        api.post_current_project_settings(
+            api.ProjectSettingsRequest(
+                mcp_connections=[
+                    {
+                        "id": "blender-mcp",
+                        "engine": "blender",
+                        "label": "Blender MCP",
+                        "command": "cmd",
+                        "args": ["/c", "uvx", "blender-mcp"],
+                        "enabled": True,
+                    }
+                ]
+            )
+        )
+
+        def fake_check(connection):
+            return {
+                "status": "tools_loaded",
+                "transport": "line",
+                "tools": [{"name": "get_scene_info"}],
+            }
+
+        def fake_call(connection, tool_name, arguments, *, transport=None):
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps({"objects": [{"name": f"Obj{i}"} for i in range(5)]}),
+                    }
+                ]
+            }
+
+        with patch.object(mcp_adapter, "check_mcp_connection", side_effect=fake_check), patch.object(
+            mcp_adapter,
+            "call_mcp_tool",
+            side_effect=fake_call,
+        ):
+            output = dispatch_tool_call(
+                "engine_list_scene",
+                {"engine": "blender", "max_items": 2},
+                project_id="alpha",
+            )
+
+        payload = json.loads(output)
+        self.assertEqual([item["name"] for item in payload["objects"]], ["Obj0", "Obj1"])
+        self.assertTrue(payload["truncated"])
+        self.assertEqual(payload["omitted_items"], 3)
+
+    def test_engine_mcp_adapter_does_not_emit_progress_events(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+        api.post_current_project_settings(
+            api.ProjectSettingsRequest(
+                mcp_connections=[
+                    {
+                        "id": "blender-mcp",
+                        "engine": "blender",
+                        "label": "Blender MCP",
+                        "command": "cmd",
+                        "args": ["/c", "uvx", "blender-mcp"],
+                        "enabled": True,
+                    }
+                ]
+            )
+        )
+        events = []
+
+        def fake_check(connection):
+            return {
+                "status": "tools_loaded",
+                "transport": "line",
+                "tools": [{"name": "get_scene_info"}],
+            }
+
+        def fake_call(connection, tool_name, arguments, *, transport=None):
+            return {"content": [{"type": "text", "text": "{}"}]}
+
+        with patch.object(mcp_adapter, "check_mcp_connection", side_effect=fake_check), patch.object(
+            mcp_adapter,
+            "call_mcp_tool",
+            side_effect=fake_call,
+        ):
+            dispatch_tool_call(
+                "engine_list_scene",
+                {"engine": "blender"},
+                project_id="alpha",
+                tool_event_handler=events.append,
+            )
+
+        self.assertEqual(events, [])
+
+    def test_engine_mcp_write_only_emits_permission_events_from_adapter(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+        api.post_current_project_settings(
+            api.ProjectSettingsRequest(
+                mcp_connections=[
+                    {
+                        "id": "blender-mcp",
+                        "engine": "blender",
+                        "label": "Blender MCP",
+                        "command": "cmd",
+                        "args": ["/c", "uvx", "blender-mcp"],
+                        "enabled": True,
+                    }
+                ]
+            )
+        )
+        events = []
+
+        def fake_check(connection):
+            return {
+                "status": "tools_loaded",
+                "transport": "line",
+                "tools": [{"name": "execute_blender_code"}],
+            }
+
+        def fake_call(connection, tool_name, arguments, *, transport=None):
+            return {"content": [{"type": "text", "text": "created"}]}
+
+        def event_handler(event):
+            events.append(event)
+            return event.get("type") == "permission_required"
+
+        with patch.object(mcp_adapter, "check_mcp_connection", side_effect=fake_check), patch.object(
+            mcp_adapter,
+            "call_mcp_tool",
+            side_effect=fake_call,
+        ):
+            dispatch_tool_call(
+                "engine_create_object",
+                {"engine": "blender", "name": "Cube"},
+                project_id="alpha",
+                tool_event_handler=event_handler,
+            )
+
+        self.assertEqual(
+            [event["type"] for event in events],
+            ["permission_required", "permission_granted"],
+        )
+
+    def test_engine_mcp_fallback_error_reports_attempted_arguments(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+        api.post_current_project_settings(
+            api.ProjectSettingsRequest(
+                mcp_connections=[
+                    {
+                        "id": "blender-mcp",
+                        "engine": "blender",
+                        "label": "Blender MCP",
+                        "command": "cmd",
+                        "args": ["/c", "uvx", "blender-mcp"],
+                        "enabled": True,
+                    }
+                ]
+            )
+        )
+
+        def fake_check(connection):
+            return {
+                "status": "tools_loaded",
+                "transport": "line",
+                "tools": [
+                    {
+                        "name": "get_scene_info",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {"user_prompt": {"type": "string"}},
+                        },
+                    }
+                ],
+            }
+
+        def fake_call(connection, tool_name, arguments, *, transport=None):
+            raise McpClientError("Invalid request parameters")
+
+        with patch.object(mcp_adapter, "check_mcp_connection", side_effect=fake_check), patch.object(
+            mcp_adapter,
+            "call_mcp_tool",
+            side_effect=fake_call,
+        ):
+            with self.assertRaisesRegex(McpClientError, "Tried arguments") as ctx:
+                dispatch_tool_call("engine_list_scene", {"engine": "blender"}, project_id="alpha")
+
+        message = str(ctx.exception)
+        self.assertIn("user_prompt", message)
+        self.assertNotIn("random_string", message)
+        self.assertNotIn("dummy", message)
+
+    def test_blender_adapter_enforces_safe_scene_save_workspace(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+        blender_root = self.workspace_root / "blender_project"
+        blender_root.mkdir(parents=True)
+        add_project_workspace(
+            str(blender_root),
+            project_id="alpha",
+            kind="blender",
+            workspace_id="main-blender",
+            writable=True,
+        )
+
+        adapter = get_engine_adapter("blender")
+        save_call = adapter.map_call(
+            "engine_save_scene",
+            {
+                "engine": "blender",
+                "workspace_id": "main-blender",
+                "scene_path": "scenes/demo.blend",
+            },
+            [{"name": "execute_blender_code"}],
+            project_id="alpha",
+        )
+
+        self.assertIsNotNone(save_call)
+        self.assertIn("demo.blend", save_call.arguments["code"])
+        self.assertIn("save_as_mainfile", save_call.arguments["code"])
+
+        with self.assertRaisesRegex(McpClientError, "approved writable"):
+            adapter.map_call(
+                "engine_save_scene",
+                {"engine": "blender", "scene_path": str(self.workspace_root / "outside.blend")},
+                [{"name": "execute_blender_code"}],
+                project_id="alpha",
+            )
+
+    def test_unity_adapter_sandboxes_script_creation_to_writable_workspace(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+        unity_root = self.workspace_root / "unity_project"
+        (unity_root / "Assets" / "Scripts").mkdir(parents=True)
+        (unity_root / "ProjectSettings").mkdir(parents=True)
+        add_project_workspace(
+            str(unity_root),
+            project_id="alpha",
+            kind="unity",
+            workspace_id="unity-main",
+            writable=True,
+        )
+
+        adapter = get_engine_adapter("unity")
+        script_call = adapter.map_call(
+            "engine_create_script",
+            {
+                "engine": "unity",
+                "workspace_id": "unity-main",
+                "path": "Assets/Scripts/Foo.cs",
+                "class_name": "Foo",
+                "content": "public class Foo {}",
+            },
+            [{"name": "create_script"}],
+            project_id="alpha",
+        )
+
+        self.assertIsNotNone(script_call)
+        self.assertEqual(script_call.arguments["path"], str(unity_root / "Assets" / "Scripts" / "Foo.cs"))
+        self.assertNotIn("workspace_id", script_call.arguments)
+
+        with self.assertRaisesRegex(McpClientError, "PATH_ESCAPE"):
+            adapter.map_call(
+                "engine_create_script",
+                {
+                    "engine": "unity",
+                    "workspace_id": "unity-main",
+                    "path": "../Outside.cs",
+                    "content": "public class Outside {}",
+                },
+                [{"name": "create_script"}],
+                project_id="alpha",
+            )
+
+        with self.assertRaisesRegex(McpClientError, "extensions"):
+            adapter.map_call(
+                "engine_create_script",
+                {
+                    "engine": "unity",
+                    "workspace_id": "unity-main",
+                    "path": "Assets/Scripts/Foo.txt",
+                    "content": "bad",
+                },
+                [{"name": "create_script"}],
+                project_id="alpha",
+            )
+
+    def test_godot_and_unreal_adapters_require_workspace_sandbox_for_writes(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+        generic_root = self.workspace_root / "generic_engine_project"
+        (generic_root / "scripts").mkdir(parents=True)
+        (generic_root / "Content" / "Maps").mkdir(parents=True)
+        add_project_workspace(
+            str(generic_root),
+            project_id="alpha",
+            kind="generic",
+            workspace_id="engine-main",
+            writable=True,
+        )
+
+        godot = get_engine_adapter("godot")
+        godot_call = godot.map_call(
+            "engine_create_script",
+            {
+                "engine": "godot",
+                "workspace_id": "engine-main",
+                "path": "scripts/player.gd",
+                "content": "extends Node",
+            },
+            [{"name": "create_script"}],
+            project_id="alpha",
+        )
+        self.assertIsNotNone(godot_call)
+        self.assertEqual(godot_call.arguments["path"], str(generic_root / "scripts" / "player.gd"))
+
+        unreal = get_engine_adapter("unreal")
+        save_call = unreal.map_call(
+            "engine_save_scene",
+            {
+                "engine": "unreal",
+                "workspace_id": "engine-main",
+                "scene_path": "Content/Maps/Demo.umap",
+            },
+            [{"name": "save_level"}],
+            project_id="alpha",
+        )
+        self.assertIsNotNone(save_call)
+        self.assertEqual(save_call.arguments["scene_path"], str(generic_root / "Content" / "Maps" / "Demo.umap"))
+
+        with self.assertRaisesRegex(McpClientError, "Project id is required"):
+            godot.map_call(
+                "engine_create_script",
+                {
+                    "engine": "godot",
+                    "workspace_id": "engine-main",
+                    "path": "scripts/player.gd",
+                    "content": "extends Node",
+                },
+                [{"name": "create_script"}],
+                project_id=None,
+            )
+
+    def test_safe_engine_adapters_validate_run_mode_and_scene_extension(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+        unity_root = self.workspace_root / "unity_project"
+        (unity_root / "Assets" / "Scenes").mkdir(parents=True)
+        (unity_root / "ProjectSettings").mkdir(parents=True)
+        add_project_workspace(
+            str(unity_root),
+            project_id="alpha",
+            kind="unity",
+            workspace_id="unity-main",
+            writable=True,
+        )
+
+        adapter = get_engine_adapter("unity")
+        run_call = adapter.map_call(
+            "engine_run_project",
+            {
+                "engine": "unity",
+                "workspace_id": "unity-main",
+                "mode": "play",
+                "scene_path": "Assets/Scenes/Main.unity",
+            },
+            [{"name": "start_play_mode"}],
+            project_id="alpha",
+        )
+        self.assertIsNotNone(run_call)
+        self.assertEqual(run_call.arguments["mode"], "play")
+        self.assertEqual(run_call.arguments["scene_path"], str(unity_root / "Assets" / "Scenes" / "Main.unity"))
+
+        with self.assertRaisesRegex(McpClientError, "Unsupported Unity run mode"):
+            adapter.map_call(
+                "engine_run_project",
+                {
+                    "engine": "unity",
+                    "workspace_id": "unity-main",
+                    "mode": "shell",
+                },
+                [{"name": "start_play_mode"}],
+                project_id="alpha",
+            )
+
+        with self.assertRaisesRegex(McpClientError, "extensions"):
+            adapter.map_call(
+                "engine_save_scene",
+                {
+                    "engine": "unity",
+                    "workspace_id": "unity-main",
+                    "scene_path": "Assets/Scenes/Main.txt",
+                },
+                [{"name": "save_scene"}],
+                project_id="alpha",
+            )
+
+    def test_blender_adapter_rejects_unsafe_python(self):
+        adapter = get_engine_adapter("blender")
+
+        with self.assertRaisesRegex(McpClientError, "forbidden"):
+            adapter.map_call(
+                "engine_create_script",
+                {
+                    "engine": "blender",
+                    "content": "import os\nos.remove('bad')",
+                },
+                [{"name": "execute_blender_code"}],
             )
 
     def test_api_allows_manual_workspace_edit_when_artifacts_are_frozen(self):
@@ -538,6 +1354,29 @@ class ProjectLifecycleTests(unittest.TestCase):
         self.assertEqual(listing["workspaces"][0]["id"], "unity-alpha")
 
         deleted = api.delete_current_project_workspace("unity-alpha")
+        self.assertEqual(deleted["workspaces"], [])
+
+    def test_project_workspace_list_refuses_accidental_clear(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+        workspace_root = (self.workspace_root / "game_workspace").resolve()
+        workspace_root.mkdir(parents=True, exist_ok=True)
+
+        add_project_workspace(
+            str(workspace_root),
+            project_id="alpha",
+            kind="generic",
+            workspace_id="game-main",
+            writable=True,
+        )
+
+        with self.assertRaisesRegex(ValueError, "Refusing to remove"):
+            touch_project("alpha", workspaces=[])
+
+        workspaces = list_project_workspaces(project_id="alpha")
+        self.assertEqual(len(workspaces), 1)
+        self.assertEqual(workspaces[0]["id"], "game-main")
+
+        deleted = api.delete_current_project_workspace("game-main")
         self.assertEqual(deleted["workspaces"], [])
 
     def test_api_can_read_and_update_current_project_settings(self):

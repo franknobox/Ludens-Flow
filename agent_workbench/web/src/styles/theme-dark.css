@@ -117,6 +117,18 @@
   color: var(--muted) !important;
 }
 
+[data-theme="dark"] .mcp-mode-toggle {
+  background: #262626 !important;
+  border-color: var(--line) !important;
+  color: var(--muted) !important;
+}
+
+[data-theme="dark"] .mcp-mode-toggle.is-on {
+  background: var(--primary-soft) !important;
+  border-color: var(--primary) !important;
+  color: var(--primary) !important;
+}
+
 [data-theme="dark"] .tool-process-item.is-started {
   background: var(--primary-soft) !important;
   border-color: var(--primary) !important;
@@ -130,6 +142,16 @@
 [data-theme="dark"] .tool-process-item.is-failed {
   background: var(--warn-soft) !important;
   border-color: var(--warn) !important;
+}
+
+[data-theme="dark"] .tool-summary-line {
+  border-top-color: var(--line) !important;
+  color: var(--muted) !important;
+}
+
+[data-theme="dark"] .tool-summary-tag {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: var(--muted) !important;
 }
 
 [data-theme="dark"] .msg.user .bubble,
@@ -269,6 +291,50 @@
 
 [data-theme="dark"] .settings-engine-command small,
 [data-theme="dark"] .settings-engine-message {
+  color: var(--muted) !important;
+}
+
+[data-theme="dark"] .settings-engine-guide-entry {
+  background: rgba(232, 125, 13, 0.1) !important;
+  border-color: rgba(232, 125, 13, 0.28) !important;
+  color: #e6a35d !important;
+}
+
+[data-theme="dark"] .settings-guide-overlay {
+  background: rgba(0, 0, 0, 0.62) !important;
+}
+
+[data-theme="dark"] .settings-guide-panel {
+  background: var(--panel) !important;
+  border-color: var(--line) !important;
+  border-radius: var(--radius) !important;
+  box-shadow: var(--shadow) !important;
+}
+
+[data-theme="dark"] .settings-guide-close,
+[data-theme="dark"] .settings-guide-step,
+[data-theme="dark"] .settings-guide-step pre,
+[data-theme="dark"] .settings-guide-inline-button {
+  background: #262626 !important;
+  border-color: var(--line) !important;
+  border-radius: var(--radius) !important;
+}
+
+[data-theme="dark"] .settings-guide-head {
+  border-color: var(--line) !important;
+}
+
+[data-theme="dark"] .settings-guide-head h2,
+[data-theme="dark"] .settings-guide-step h3,
+[data-theme="dark"] .settings-guide-step pre,
+[data-theme="dark"] .settings-guide-close,
+[data-theme="dark"] .settings-guide-inline-button {
+  color: var(--text) !important;
+}
+
+[data-theme="dark"] .settings-guide-head p,
+[data-theme="dark"] .settings-guide-step p,
+[data-theme="dark"] .settings-guide-step li {
   color: var(--muted) !important;
 }
 

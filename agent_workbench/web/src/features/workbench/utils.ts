@@ -117,6 +117,7 @@ export function buildHistoryByAgent(state: WorkbenchStateModel): HistoryByAgent 
         phase: item.phase || state.phase,
       });
     });
+    attachRecentToolEvents(rows, state.recent_tool_events || {});
     return rows;
   }
 
@@ -128,5 +129,27 @@ export function buildHistoryByAgent(state: WorkbenchStateModel): HistoryByAgent 
       phase: state.phase,
     });
   });
+  attachRecentToolEvents(rows, state.recent_tool_events || {});
   return rows;
+}
+
+function attachRecentToolEvents(
+  rows: HistoryByAgent,
+  eventsByAgent: WorkbenchStateModel["recent_tool_events"],
+) {
+  Object.entries(eventsByAgent || {}).forEach(([rawAgent, events]) => {
+    if (!events?.length) return;
+    const agent = rawAgent as AgentKey;
+    const agentRows = rows[agent];
+    if (!agentRows?.length) return;
+    for (let index = agentRows.length - 1; index >= 0; index -= 1) {
+      if (agentRows[index].role === "assistant") {
+        agentRows[index] = {
+          ...agentRows[index],
+          toolEvents: events,
+        };
+        return;
+      }
+    }
+  });
 }

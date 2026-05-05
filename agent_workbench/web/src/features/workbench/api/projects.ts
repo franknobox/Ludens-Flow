@@ -48,6 +48,15 @@ export function updateCurrentProjectSettings(body: {
   });
 }
 
+export function deleteCurrentMcpConnection(connectionId: string) {
+  return fetchJson<ProjectSettingsResponse>(
+    `/api/projects/current/mcp-connections/${encodeURIComponent(connectionId)}`,
+    {
+      method: "DELETE",
+    },
+  );
+}
+
 export function checkCurrentMcpConnections(body: {
   connection_id?: string | null;
   engine?: string | null;

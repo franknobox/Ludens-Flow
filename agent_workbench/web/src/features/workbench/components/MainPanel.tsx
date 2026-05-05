@@ -66,6 +66,7 @@ interface MainPanelProps {
   transientChat: TransientChat | null;
   actions: WorkflowAction[];
   requestInFlight: boolean;
+  mcpMode: boolean;
   fileItems: WorkspaceFileItem[];
   fileCache: Record<string, string>;
   fileEditable: boolean;
@@ -74,6 +75,7 @@ interface MainPanelProps {
   contentAreaRef: RefObject<HTMLElement>;
   onSend: (message: string, attachments: ComposerAttachment[]) => Promise<void>;
   onAction: (actionId: string) => void;
+  onToggleMcpMode: (enabled: boolean) => void;
   onSaveFile: (fileId: string, content: string) => Promise<void>;
   onUploadFileAsset: (
     fileId: string,
@@ -125,6 +127,7 @@ export function MainPanel(props: MainPanelProps) {
     transientChat,
     actions,
     requestInFlight,
+    mcpMode,
     fileItems,
     fileCache,
     fileEditable,
@@ -133,6 +136,7 @@ export function MainPanel(props: MainPanelProps) {
     contentAreaRef,
     onSend,
     onAction,
+    onToggleMcpMode,
     onSaveFile,
     onUploadFileAsset,
   } = props;
@@ -154,12 +158,29 @@ export function MainPanel(props: MainPanelProps) {
             <h1 className="hero-title">{title}</h1>
             <div className="hero-sub">{subtitle}</div>
           </div>
-          <div className="meta">
-            <span className="badge project">{projectName}</span>
-            <span className="badge phase">{phaseLabel}</span>
-            <span className="badge mode">{modeBadge}</span>
-            {readOnly && currentView.type === "agent" ? (
-              <span className="badge readonly">只读 · {agentName(currentAgent)}</span>
+          <div className="meta-stack">
+            <div className="meta">
+              <span className="badge project">{projectName}</span>
+              <span className="badge phase">{phaseLabel}</span>
+              <span className="badge mode">{modeBadge}</span>
+              {readOnly && currentView.type === "agent" ? (
+                <span className="badge readonly">只读 · {agentName(currentAgent)}</span>
+              ) : null}
+            </div>
+            {currentView.type === "agent" && currentAgent === "engineering" ? (
+              <button
+                type="button"
+                className={`mcp-mode-toggle${mcpMode ? " is-on" : ""}`}
+                onClick={() => onToggleMcpMode(!mcpMode)}
+                title={
+                  mcpMode
+                    ? "MCP 模式已开启：工程 Agent 会强制进入工具调用路径。"
+                    : "MCP 模式已关闭：工程 Agent 会提示你打开后再调用外部编辑器工具。"
+                }
+              >
+                <span className="mcp-mode-dot" />
+                MCP {mcpMode ? "on" : "off"}
+              </button>
             ) : null}
           </div>
         </header>

@@ -106,6 +106,7 @@ if STATIC_DIR.exists():
 class ChatRequest(BaseModel):
     message: str
     attachments: list[dict] | None = None
+    mcp_mode: bool = False
 
 
 class ProjectRequest(BaseModel):
@@ -132,6 +133,7 @@ class ProjectSettingsRequest(BaseModel):
     agent_file_write_confirm_required: bool | None = None
     model_routing: dict | None = None
     mcp_connections: list[dict] | None = None
+    allow_clear_mcp_connections: bool = False
 
 
 class GithubRepoBindRequest(BaseModel):
@@ -698,6 +700,7 @@ def post_chat(req: ChatRequest):
                 user_input,
                 stream_handler=stream_handler,
                 tool_event_handler=tool_event_handler,
+                mcp_mode=bool(req.mcp_mode),
             )
             reply = getattr(state, "last_assistant_message", "") or ""
             state.last_assistant_message = None
@@ -1047,12 +1050,53 @@ def post_current_project_settings(req: ProjectSettingsRequest):
         )
 
     if req.mcp_connections is not None:
+        existing_mcp_connections = get_project_mcp_connections(project_id=project_id)
+        existing_mcp_ids = {
+            str(item.get("id", ""))
+            for item in existing_mcp_connections
+            if str(item.get("id", "")).strip()
+        }
+        next_mcp_ids = {
+            str(item.get("id", ""))
+            for item in req.mcp_connections
+            if str(item.get("id", "")).strip()
+        }
+        if (
+            existing_mcp_ids
+            and not existing_mcp_ids.issubset(next_mcp_ids)
+            and not req.allow_clear_mcp_connections
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Refusing to remove existing MCP connections from the generic "
+                    "settings endpoint. Use the explicit MCP delete endpoint."
+                ),
+            )
         set_project_mcp_connections(
             req.mcp_connections,
             project_id=project_id,
+            allow_remove_mcp_connections=req.allow_clear_mcp_connections,
         )
 
     return get_project_settings(project_id=project_id)
+
+
+@app.delete("/api/projects/current/mcp-connections/{connection_id}")
+def delete_current_project_mcp_connection(connection_id: str):
+    project_id = resolve_project_id()
+    connections = get_project_mcp_connections(project_id=project_id)
+    next_connections = [
+        item for item in connections if str(item.get("id", "")) != connection_id
+    ]
+    if len(next_connections) == len(connections):
+        raise HTTPException(status_code=404, detail="MCP connection not found.")
+
+    return set_project_mcp_connections(
+        next_connections,
+        project_id=project_id,
+        allow_remove_mcp_connections=True,
+    )
 
 
 @app.post("/api/projects/current/mcp-connections/check")

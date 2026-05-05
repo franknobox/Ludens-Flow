@@ -212,6 +212,7 @@ def run_agent_step(
     user_input: Any,
     stream_handler=None,
     tool_event_handler=None,
+    mcp_mode: bool = False,
 ) -> LudensState:
     """统一执行单个 Agent 节点，并处理状态、日志与落盘。"""
     node_name = agent.name
@@ -328,6 +329,7 @@ def run_agent_step(
                     user_persona=user_persona_block,
                     stream_handler=stream_handler,
                     tool_event_handler=tool_event_handler,
+                    mcp_mode=mcp_mode,
                 )
             elif mode == "PLAN_COMMIT":
                 result: AgentResult = getattr(agent, "plan_commit")(
@@ -345,6 +347,7 @@ def run_agent_step(
                     user_persona=user_persona_block,
                     stream_handler=stream_handler,
                     tool_event_handler=tool_event_handler,
+                    mcp_mode=mcp_mode,
                 )
             else:
                 raise ValueError(f"Unknown agent mode: {mode}")
@@ -701,7 +704,12 @@ class PMNode:
 
 class ENGNode:
     def execute(
-        self, state: LudensState, user_input: str, stream_handler=None, tool_event_handler=None
+        self,
+        state: LudensState,
+        user_input: str,
+        stream_handler=None,
+        tool_event_handler=None,
+        mcp_mode: bool = False,
     ) -> LudensState:
         # 工程节点根据 phase 切到讨论、定稿或辅导模式。
         if state.phase == Phase.DEV_COACHING.value:
@@ -717,6 +725,7 @@ class ENGNode:
             user_input,
             stream_handler=stream_handler if mode in {"COACH", "PLAN_DISCUSS"} else None,
             tool_event_handler=tool_event_handler,
+            mcp_mode=mcp_mode if mode in {"COACH", "PLAN_DISCUSS"} else False,
         )
 
 
@@ -798,6 +807,7 @@ def graph_step(
     explicit_action: Optional[str] = None,
     stream_handler=None,
     tool_event_handler=None,
+    mcp_mode: bool = False,
 ) -> LudensState:
     """执行一次最小图推进：先路由，再决定是否调用目标节点。"""
     old_phase = state.phase
@@ -837,12 +847,21 @@ def graph_step(
     active_node = PHASE_NODE_MAP.get(new_phase)
     logger.debug("graph_step -> active node=%s", active_node)
     if active_node:
-        state = active_node.execute(
-            state,
-            user_input,
-            stream_handler=stream_handler,
-            tool_event_handler=tool_event_handler,
-        )
+        if isinstance(active_node, ENGNode):
+            state = active_node.execute(
+                state,
+                user_input,
+                stream_handler=stream_handler,
+                tool_event_handler=tool_event_handler,
+                mcp_mode=mcp_mode,
+            )
+        else:
+            state = active_node.execute(
+                state,
+                user_input,
+                stream_handler=stream_handler,
+                tool_event_handler=tool_event_handler,
+            )
         state = _auto_advance_after_node(
             state,
             stream_handler=stream_handler,

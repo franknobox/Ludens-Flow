@@ -1,5 +1,6 @@
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -27,6 +28,7 @@ from ludens_flow.core.agents.engineering_agent import EngineeringAgent
 from ludens_flow.core.agents.pm_agent import PMAgent
 from ludens_flow.core.agents.review_agent import ReviewAgent
 from ludens_flow.capabilities.artifacts.artifacts import read_artifact, write_artifact
+from ludens_flow.capabilities.mcp import health as mcp_health
 from ludens_flow.capabilities.context.prompt_templates import load_prompt_template
 from ludens_flow.capabilities.context.user_profile import (
     format_profile_for_prompt,
@@ -566,6 +568,85 @@ class RegressionTests(unittest.TestCase):
         self.assertEqual(result.state_updates.get("style_preset"), "B")
         self.assertIsNotNone(captured["stream_handler"])
         self.assertIn("不要输出 JSON", captured["user_prompt"])
+
+    def test_mcp_framed_parser_uses_utf8_byte_lengths(self):
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {
+                "tools": [
+                    {
+                        "name": "读取场景🔧",
+                        "description": "返回中文说明",
+                    }
+                ]
+            },
+        }
+        output = "启动日志：中文\n".encode("utf-8") + mcp_health._frame_message(payload)
+
+        messages = mcp_health._parse_mcp_messages(output)
+
+        self.assertEqual(messages[0]["result"]["tools"][0]["name"], "读取场景🔧")
+
+    def test_mcp_tool_call_uses_verified_transport(self):
+        mcp_health._TRANSPORT_CACHE.clear()
+        config = {
+            "id": "framed-only-test",
+            "engine": "blender",
+            "command": "fake-mcp",
+            "args": [],
+            "enabled": True,
+        }
+        transports = []
+
+        def fake_run(command, *, input, **kwargs):
+            is_framed = input.startswith(b"Content-Length:")
+            transports.append("framed" if is_framed else "line")
+            if b"tools/list" in input:
+                if not is_framed:
+                    return subprocess.CompletedProcess(command, 0, stdout=b"", stderr=b"")
+                stdout = (
+                    mcp_health._frame_message({"jsonrpc": "2.0", "id": 1, "result": {}})
+                    + mcp_health._frame_message(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": 2,
+                            "result": {
+                                "tools": [
+                                    {
+                                        "name": "读取场景🔧",
+                                        "description": "中文 schema",
+                                    }
+                                ]
+                            },
+                        }
+                    )
+                )
+                return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr=b"")
+            if b"tools/call" in input:
+                stdout = mcp_health._frame_message(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 2,
+                        "result": {"content": [{"type": "text", "text": "ok"}]},
+                    }
+                )
+                return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr=b"")
+            return subprocess.CompletedProcess(command, 0, stdout=b"", stderr=b"")
+
+        with patch("ludens_flow.capabilities.mcp.health.subprocess.run", side_effect=fake_run):
+            status = mcp_health.check_mcp_connection(config)
+            result = mcp_health.call_mcp_tool(
+                config,
+                "读取场景🔧",
+                {},
+                transport=status["transport"],
+            )
+
+        self.assertEqual(status["status"], "tools_loaded")
+        self.assertEqual(status["transport"], "framed")
+        self.assertEqual(result["content"][0]["text"], "ok")
+        self.assertEqual(transports, ["line", "framed", "framed"])
 
 
 if __name__ == "__main__":

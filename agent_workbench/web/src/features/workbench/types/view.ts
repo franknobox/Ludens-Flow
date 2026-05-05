@@ -56,6 +56,7 @@ export interface RenderMessage {
   content: string;
   phase?: string;
   thinking?: boolean;
+  toolEvents?: ToolProgressEvent[];
 }
 
 export interface TransientChat {
@@ -81,6 +82,7 @@ export interface WorkbenchStateModel {
   active_projects: ProjectMeta[];
   archived_projects: ProjectMeta[];
   actions: WorkflowAction[];
+  recent_tool_events?: Partial<Record<AgentKey, ToolProgressEvent[]>>;
 }
 
 export type HistoryByAgent = Record<AgentKey, RenderMessage[]>;

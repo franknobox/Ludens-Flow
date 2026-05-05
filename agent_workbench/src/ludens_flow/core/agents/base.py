@@ -9,7 +9,7 @@ import logging
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Literal, Optional, Union
 
 from ludens_flow.core.schemas import extract_structured_json_object
 from ludens_flow.core.state import LudensState
@@ -98,7 +98,7 @@ class BaseAgent(ABC):
         user_prompt: Union[str, list],
         cfg: Optional[LLMConfig] = None,
         history: Optional[List[Dict[str, Any]]] = None,
-        tools: Optional[list] = None,
+        tools: Optional[Union[list, Literal["common"]]] = None,
         user_persona: Optional[str] = None,
         project_id: Optional[str] = None,
         stream_handler: Optional[Callable[[str], None]] = None,
@@ -124,9 +124,9 @@ class BaseAgent(ABC):
         if user_persona:
             history.append({"role": "user", "content": user_persona})
 
-        # Streaming is the plain-text path. The common tool catalog is still
-        # used for non-streaming calls, but should not silently disable natural
-        # language streaming when the caller did not explicitly request tools.
+        # Streaming is the plain-text path. Tool exposure is explicit: None
+        # means no tools, "common" means the full Ludens catalog, and a list is
+        # used exactly as provided by the caller.
         if stream_handler and tools is None:
             return self._call_streaming(
                 user_prompt,
@@ -135,7 +135,7 @@ class BaseAgent(ABC):
                 stream_handler=stream_handler,
             )
 
-        active_tools = merge_tool_schemas(tools)
+        active_tools = merge_tool_schemas() if tools == "common" else list(tools or [])
 
         response = generate(
             system=self.system_prompt,

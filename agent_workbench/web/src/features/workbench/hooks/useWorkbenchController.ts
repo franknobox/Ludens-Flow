@@ -36,9 +36,11 @@ const INITIAL_MODEL: WorkbenchStateModel = {
   active_projects: [],
   archived_projects: [],
   actions: [],
+  recent_tool_events: {},
 };
 
 const TRANSIENT_CHAT_STORAGE_KEY = "ludensflow.workbench.transientChat";
+const MCP_MODE_STORAGE_PREFIX = "ludensflow.workbench.mcpMode";
 
 function toModelState(state: StateResponse): WorkbenchStateModel {
   return {
@@ -55,6 +57,19 @@ function toModelState(state: StateResponse): WorkbenchStateModel {
     active_projects: [],
     archived_projects: [],
     actions: state.actions || [],
+    recent_tool_events: {},
+  };
+}
+
+function appendRecentToolEvents(
+  prev: Partial<Record<AgentKey, ToolProgressEvent[]>> | undefined,
+  agentKey: AgentKey,
+  events: ToolProgressEvent[],
+): Partial<Record<AgentKey, ToolProgressEvent[]>> {
+  if (!events.length) return prev || {};
+  return {
+    ...(prev || {}),
+    [agentKey]: events,
   };
 }
 
@@ -77,6 +92,10 @@ function responseAgent(response: ChatResponse, fallbackPhase: string): AgentKey 
 
 function fileCacheKey(projectId: string, fileId: string): string {
   return `${projectId}::${fileId}`;
+}
+
+function mcpModeStorageKey(projectId: string): string {
+  return `${MCP_MODE_STORAGE_PREFIX}:${projectId || "default"}`;
 }
 
 function loadStoredTransientChat(): {
@@ -118,6 +137,7 @@ export function useWorkbenchController() {
   });
   const [fileCache, setFileCache] = useState<Record<string, string>>({});
   const [requestInFlight, setRequestInFlight] = useState(false);
+  const [mcpMode, setMcpMode] = useState(false);
   const [transientChat, setTransientChat] = useState<TransientChat | null>(null);
   const [errorText, setErrorText] = useState("");
   const [warningText, setWarningText] = useState("");
@@ -128,6 +148,7 @@ export function useWorkbenchController() {
   const lastEventAtRef = useRef(0);
   const lastSyncedProjectIdRef = useRef("");
   const permissionDecisionRef = useRef<Set<string>>(new Set());
+  const currentToolEventsRef = useRef<ToolProgressEvent[]>([]);
 
   const historyByAgent = useMemo(() => buildHistoryByAgent(model), [model]);
   const activeProject = useMemo(
@@ -238,6 +259,7 @@ export function useWorkbenchController() {
     lastEventAtRef.current = Date.now();
 
     if (event.type === "run_started") {
+      currentToolEventsRef.current = [];
       setRequestInFlight(true);
       setTransientChat((prev) =>
         prev
@@ -295,6 +317,7 @@ export function useWorkbenchController() {
           permission_request_id: event.permission_request_id,
           error: event.error,
         };
+        currentToolEventsRef.current = [...currentToolEventsRef.current, nextEvent];
 
         if (prev) {
           return {
@@ -361,6 +384,34 @@ export function useWorkbenchController() {
     }
 
     if (event.type === "state_updated" || event.type === "connected") {
+      const completedAgent = transientChat?.agentKey || event.current_agent || phaseToAgent(event.phase || "");
+      const completedToolEvents = currentToolEventsRef.current;
+      if (event.type === "state_updated" && event.state && completedToolEvents.length) {
+        setModel((prev) => ({
+          ...prev,
+          ...toModelState(event.state as StateResponse),
+          files: prev.files,
+          projects: prev.projects,
+          active_projects: prev.active_projects,
+          archived_projects: prev.archived_projects,
+          recent_tool_events: appendRecentToolEvents(
+            prev.recent_tool_events,
+            completedAgent,
+            completedToolEvents,
+          ),
+        }));
+      } else if (event.type === "state_updated" && event.state) {
+        setModel((prev) => ({
+          ...prev,
+          ...toModelState(event.state as StateResponse),
+          files: prev.files,
+          projects: prev.projects,
+          active_projects: prev.active_projects,
+          archived_projects: prev.archived_projects,
+          recent_tool_events: prev.recent_tool_events,
+        }));
+      }
+      currentToolEventsRef.current = [];
       setCurrentView((prev) =>
         prev.type === "agent"
           ? {
@@ -377,6 +428,7 @@ export function useWorkbenchController() {
     }
 
     if (event.type === "run_failed") {
+      currentToolEventsRef.current = [];
       clearTransientChat();
       setRequestInFlight(false);
       setErrorText(event.error || "请求失败。");
@@ -478,6 +530,17 @@ export function useWorkbenchController() {
     }
   };
 
+  const updateMcpMode = (enabled: boolean) => {
+    setMcpMode(enabled);
+    try {
+      if (model.project_id) {
+        window.localStorage.setItem(mcpModeStorageKey(model.project_id), enabled ? "1" : "0");
+      }
+    } catch {
+      // local preference persistence is best-effort only
+    }
+  };
+
   const sendMessage = async (text: string, attachments: ComposerAttachment[]) => {
     if (!text && !attachments.length) {
       return;
@@ -486,6 +549,7 @@ export function useWorkbenchController() {
     setErrorText("");
     setWarningText("");
     setRequestInFlight(true);
+    currentToolEventsRef.current = [];
     setTransientChat({
       agentKey: model.current_agent,
       phase: model.phase,
@@ -497,6 +561,7 @@ export function useWorkbenchController() {
     try {
       const response = await workbenchApi.postChat({
         message: text,
+        mcp_mode: mcpMode,
         attachments: attachments.map((item) => ({
           kind: item.kind,
           name: item.name,
@@ -510,6 +575,18 @@ export function useWorkbenchController() {
       }
       setWarningText((response.attachment_warnings || []).join("\n"));
       setModel((prev) => mergeChatResponse(prev, response));
+      if (currentToolEventsRef.current.length) {
+        const completedToolEvents = currentToolEventsRef.current;
+        const completedAgent = responseAgent(response, model.phase);
+        setModel((prev) => ({
+          ...prev,
+          recent_tool_events: appendRecentToolEvents(
+            prev.recent_tool_events,
+            completedAgent,
+            completedToolEvents,
+          ),
+        }));
+      }
       setCurrentView((prev) =>
         prev.type === "agent"
           ? { type: "agent", id: responseAgent(response, model.phase) }
@@ -539,6 +616,7 @@ export function useWorkbenchController() {
     setErrorText("");
     setWarningText("");
     setRequestInFlight(true);
+    currentToolEventsRef.current = [];
     setTransientChat({
       agentKey: currentView.id,
       phase: model.phase,
@@ -554,6 +632,18 @@ export function useWorkbenchController() {
       }
       setWarningText("");
       setModel((prev) => mergeChatResponse(prev, response));
+      if (currentToolEventsRef.current.length) {
+        const completedToolEvents = currentToolEventsRef.current;
+        const completedAgent = responseAgent(response, model.phase);
+        setModel((prev) => ({
+          ...prev,
+          recent_tool_events: appendRecentToolEvents(
+            prev.recent_tool_events,
+            completedAgent,
+            completedToolEvents,
+          ),
+        }));
+      }
       setCurrentView((prev) =>
         prev.type === "agent"
           ? { type: "agent", id: responseAgent(response, model.phase) }
@@ -611,6 +701,7 @@ export function useWorkbenchController() {
       active_projects: runtimeActiveProjects,
       archived_projects: runtimeArchivedProjects,
       files: prev.files,
+      recent_tool_events: prev.recent_tool_events,
     }));
     setCurrentView((prev) =>
       prev.type === "agent"
@@ -631,6 +722,18 @@ export function useWorkbenchController() {
     void syncFilesOnly().catch(() => {
       // keep UI responsive even if artifact list refresh is delayed
     });
+  }, [model.project_id]);
+
+  useEffect(() => {
+    if (!model.project_id) {
+      setMcpMode(false);
+      return;
+    }
+    try {
+      setMcpMode(window.localStorage.getItem(mcpModeStorageKey(model.project_id)) === "1");
+    } catch {
+      setMcpMode(false);
+    }
   }, [model.project_id]);
 
   useEffect(() => {
@@ -716,6 +819,7 @@ export function useWorkbenchController() {
     fileCache,
     historyByAgent,
     model,
+    mcpMode,
     projectName,
     readOnly,
     requestInFlight,
@@ -725,6 +829,7 @@ export function useWorkbenchController() {
     topbarSlot,
     transientChat,
     warningText,
+    setMcpMode: updateMcpMode,
 createProject,
     handleArchiveProject,
     handleRenameProject,

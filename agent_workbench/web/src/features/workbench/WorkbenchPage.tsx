@@ -21,6 +21,7 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
     errorText,
     fileCache,
     historyByAgent,
+    mcpMode,
     model,
     projectName,
     readOnly,
@@ -31,6 +32,7 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
     topbarSlot,
     transientChat,
     warningText,
+    setMcpMode,
     createProject,
     handleArchiveProject,
     handleRenameProject,
@@ -118,6 +120,7 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
           transientChat={transientChat}
           actions={model.actions}
           requestInFlight={requestInFlight}
+          mcpMode={mcpMode}
           fileItems={model.files}
           fileCache={fileCache}
           fileEditable={!activeProject?.archived}
@@ -133,6 +136,7 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
           onAction={(actionId) => {
             void sendAction(actionId);
           }}
+          onToggleMcpMode={setMcpMode}
           onSaveFile={async (fileId, content) => {
             await saveWorkspaceFile(fileId, content);
           }}
