@@ -1,13 +1,53 @@
 ﻿# Ludens-Flow 后续开发计划 (Roadmap)
 
-## V3 收版必做清单
-
-> 以下为 V3 收版前的硬门槛能力，优先级高于扩展性探索项。
+> 以下为 V3 收版的硬门槛能力，优先级高于扩展性探索项。
 
 1. **收版验收基线（必须）**
-   - 建立固定 smoke/benchmark 套件（CLI + API + Web）。
-   - 固定核心指标：成功率、时延、解析失败率、误回流率。
-   - 进度：未完成（保留 smoke 基础能力，benchmark/指标化/ 待补齐）。
+   - 核心链路 smoke 测试通过：项目创建/切换/归档、工作流完整跑完（GDD→PM→ENG→Review→DevCoaching）。
+   - MCP 端到端可用：Blender `engine_list_scene` / `engine_create_object` 在真实环境中稳定调用。
+   - 权限与沙箱正确：写操作必须经 workspace 路径校验 + 用户确认，无 handler 时默认拒绝。
+   - 元数据零丢失：项目 meta 原子写入、坏 meta 隔离、删除项不被 stale touch 复活。
+   - 前端不白屏：Error Boundary 覆盖、SSE 断连有降级（HTTP reply 回填）、无内存泄漏。
+   - 进度：基础 smoke + MCP 实机验证已通过，持续观察稳定性。
+
+---
+
+## 架构债务与文件结构优化 (Post-V3 技术债)
+
+> V3 收版后优先偿还的结构性债务，按 P0/P1/P2 分级。
+
+### P0 — 必须尽早拆分的大文件
+
+1. **backend `api.py` (1,742 行 / 47 端点)**
+   - 现状：项目 CRUD、chat、workspace、settings、SSE、权限、文案任务全在一文件。
+   - 目标：拆成 `app/routers/{projects, chat, workspaces, settings, copywriting, events}.py`，`api.py` 仅做 `include_router` + 全局 middleware。
+   - 风险：大拆易引入 endpoint 路径 regression，建议 V3 后第一周做，配合完整 endpoint smoke 测试。
+
+2. **backend `paths.py` (1,546 行 / ~60 函数)**
+   - 现状：项目元数据 + workspace + MCP + model routing + GitHub + 路径工具混杂。
+   - 目标：拆成 `core/project_meta.py`、`core/workspaces.py`、`core/mcp_config.py`、`core/model_routing.py`、`core/path_utils.py`。
+   - 兼容：过渡期保留 `paths.py` thin re-export，下游逐步迁移，避免一次性改全库 import。
+
+### P1 — 高价值中等成本
+
+3. **frontend `SettingsSections.tsx` (1,243 行)**
+   - 现状：6 个 section 组件 + constants + validation 全在一个文件。
+   - 目标：`features/settings/sections/{General,UserProfile,Tools,EngineConnections,Workspaces,History}.tsx` + `constants.ts` + `utils.ts`。
+
+4. **tests `test_project_lifecycle.py` (1,600+ 行)**
+   - 现状：覆盖 API / state / paths / MCP / skills / workspace / import-export / archive 等 7 个域。
+   - 目标：按域拆到 `tests/api/test_projects.py`、`tests/core/test_project_meta.py`、`tests/capabilities/test_mcp_regressions.py` 等。
+   - 价值：并行跑更快，失败定位更准，减少单文件 merge conflict。
+
+5. **frontend 全局 CSS 垄断 (5,800+ 行)**
+   - 现状：`styles/workbench.css`、`settings.css`、`layout.css`、`theme-dark.css`、`markdown.css` 共 5,800+ 行，部分 feature 有本地 CSS，部分没有。
+   - 目标：逐步把 feature 样式迁入 `features/<name>/styles/`；统一变量系统；V3 已先清理 `theme-dark.css` 的 `!important`。
+
+### P2 — 低成本结构整理
+
+6. **MCP schema 与 adapter 混放**
+   - 现状：`blender_schema.py`、`safe_schema.py` 放在 `mcp/adapters/`。
+   - 目标：建 `mcp/schemas/`，纯 schema/validator 移过去，`adapters/` 只保留运行时映射。
 
 ---
 
@@ -39,10 +79,9 @@
 - **具体方向**：
   - 做稳 Unity 工程文件读写、工程阅读与检索，让 Agent 能围绕 `.cs` 等文本工程文件持续协作，并为 `.prefab`、`.unity` 等高风险文件类型预留扩展位。
   - 推进 Unity 编辑器侧 MCP 接入，将放置 Prefab、移动物体、保存场景等操作做成受控、可确认、可追踪的工具。
-  - 接入 Blender MCP 工具能力，优先覆盖场景读取、对象创建/修改、脚本执行与资产生成协作，并统一纳入工具白名单、权限和过程展示。
   - 将各种类型的文案生成能力补全。
   - 持续优化 GitHub 等协作平台接入与可视化。
-- **进度状态**：Unity 基础工作区边界、首批读写工具、目录创建、patch/delete、权限模式已落地；文案能力的台词案例已经跑通；Blender MCP 前端控制台已接入，下一步推进真实项目验证与后端能力闭环。
+- **进度状态**：Unity 基础工作区边界、首批读写工具、目录创建、patch/delete、权限模式已落地；文案能力的台词案例已经跑通；Blender MCP 能力已基本接入完成，持续优化。
 
 ### 4. Agent 能力 Skills 化 (Skill-based Agent Architecture)
 - **核心目标**：让 Agent 能把重复的任务操作沉淀为可复用的 Skills，实现自我总结与持续进化，而不是每次都依赖固定 Prompt 从零开始。

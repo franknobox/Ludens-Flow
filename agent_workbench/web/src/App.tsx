@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState, Component, type ReactNode } from "react";
 
 import { WelcomePage } from "./features/welcome/WelcomePage";
 import { WorkbenchPage } from "./features/workbench/WorkbenchPage";
@@ -11,6 +11,35 @@ const SettingsPage = lazy(() =>
 );
 
 type TopLevelRoute = "workbench" | "settings";
+
+class ErrorBoundary extends Component<{ children: ReactNode; fallback?: ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: ReactNode; fallback?: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error("[ErrorBoundary]", error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="error-boundary">
+          <p>界面渲染出现错误，请刷新页面重试。</p>
+          <button type="button" onClick={() => window.location.reload()}>
+            刷新页面
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function LazySettingsRoute({ isActive }: { isActive: boolean }) {
   const [shouldMount, setShouldMount] = useState(isActive);
@@ -63,58 +92,62 @@ export default function App() {
   }
 
   return (
-    <ProjectRuntimeProvider>
-      <div className="app-shell">
-        <header className="topbar">
-          <div className="topbar-block topbar-brand-box">
-            <div className="topbar-brand">
-              <div className="topbar-brand-line">
-                <img
-                  className="topbar-logo"
-                  src="/LF.svg?v=2"
-                  alt="Ludens-Flow"
-                  width={44}
-                  height={44}
-                />
-                <div className="topbar-brand-text">
-                  <div className="topbar-title">Ludens-Flow</div>
-                  <div className="topbar-subtitle">游戏开发工作台</div>
+    <ErrorBoundary>
+      <ProjectRuntimeProvider>
+        <ErrorBoundary>
+          <div className="app-shell">
+            <header className="topbar">
+              <div className="topbar-block topbar-brand-box">
+                <div className="topbar-brand">
+                  <div className="topbar-brand-line">
+                    <img
+                      className="topbar-logo"
+                      src="/LF.svg?v=2"
+                      alt="Ludens-Flow"
+                      width={44}
+                      height={44}
+                    />
+                    <div className="topbar-brand-text">
+                      <div className="topbar-title">Ludens-Flow</div>
+                      <div className="topbar-subtitle">游戏开发工作台</div>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
 
-          <div className="topbar-block topbar-center-box">
-            <div id="topbar-center-slot" className="topbar-center-slot" />
-          </div>
+              <div className="topbar-block topbar-center-box">
+                <div id="topbar-center-slot" className="topbar-center-slot" />
+              </div>
 
-          <div className="topbar-block topbar-tabs-box">
-            <nav className="topbar-tabs" aria-label="主导航">
-              <button
-                type="button"
-                className={`topbar-tab${route === "workbench" ? " is-active" : ""}`}
-                onClick={() => setRoute("workbench")}
-              >
-                工作台
-              </button>
-              <button
-                type="button"
-                className={`topbar-tab${route === "settings" ? " is-active" : ""}`}
-                onClick={() => setRoute("settings")}
-              >
-                设置
-              </button>
-            </nav>
-          </div>
-        </header>
+              <div className="topbar-block topbar-tabs-box">
+                <nav className="topbar-tabs" aria-label="主导航">
+                  <button
+                    type="button"
+                    className={`topbar-tab${route === "workbench" ? " is-active" : ""}`}
+                    onClick={() => setRoute("workbench")}
+                  >
+                    工作台
+                  </button>
+                  <button
+                    type="button"
+                    className={`topbar-tab${route === "settings" ? " is-active" : ""}`}
+                    onClick={() => setRoute("settings")}
+                  >
+                    设置
+                  </button>
+                </nav>
+              </div>
+            </header>
 
-        <main className="app-stage">
-          <div className="app-stage-route" hidden={route !== "workbench"}>
-            <WorkbenchPage isActive={route === "workbench"} />
+            <main className="app-stage">
+              <div className="app-stage-route" hidden={route !== "workbench"}>
+                <WorkbenchPage isActive={route === "workbench"} />
+              </div>
+              <LazySettingsRoute isActive={route === "settings"} />
+            </main>
           </div>
-          <LazySettingsRoute isActive={route === "settings"} />
-        </main>
-      </div>
-    </ProjectRuntimeProvider>
+        </ErrorBoundary>
+      </ProjectRuntimeProvider>
+    </ErrorBoundary>
   );
 }
