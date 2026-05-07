@@ -14,6 +14,7 @@ import type {
 export const WORKSPACE_KIND_OPTIONS = [
   { value: "unity", label: "Unity" },
   { value: "generic", label: "Generic" },
+  { value: "godot", label: "Godot" },
   { value: "blender", label: "Blender" },
 ];
 
@@ -208,6 +209,7 @@ function ModelRouteRow(props: {
 
 function kindLabel(kind: string): string {
   if (kind === "unity") return "Unity";
+  if (kind === "godot") return "Godot";
   if (kind === "blender") return "Blender";
   return "Generic";
 }

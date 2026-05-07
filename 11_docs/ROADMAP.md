@@ -34,12 +34,6 @@
    - 现状：`styles/workbench.css`、`settings.css`、`layout.css`、`theme-dark.css`、`markdown.css` 共 5,800+ 行，部分 feature 有本地 CSS，部分没有。
    - 目标：逐步把 feature 样式迁入 `features/<name>/styles/`；统一变量系统；V3 已先清理 `theme-dark.css` 的 `!important`。
 
-### P2 — 低成本结构整理
-
-6. **MCP schema 与 adapter 混放**
-   - 现状：`blender_schema.py`、`safe_schema.py` 放在 `mcp/adapters/`。
-   - 目标：建 `mcp/schemas/`，纯 schema/validator 移过去，`adapters/` 只保留运行时映射。
-
 ---
 
 ## 近期计划 (Near-term)
@@ -74,7 +68,16 @@
   - 持续优化 GitHub 等协作平台接入与可视化。
 - **进度状态**：Unity 基础工作区边界、首批读写工具、目录创建、patch/delete、权限模式已落地；文案能力的台词案例已经跑通；Blender MCP 能力已基本接入完成，持续优化。
 
-### 4. Agent 能力 Skills 化 (Skill-based Agent Architecture)
+### 4. 更多引擎兼容与生态扩展 (Broader Engine Compatibility)
+- **核心目标**：把 Ludens-Flow 从“默认偏 Unity 的游戏开发工作台”收敛为真正的多引擎游戏开发工作台，让 Unity、Godot、Blender、UE 等能力共享同一套项目、工作区、权限、工具和提示词模型。
+- **具体方向**：
+  - 做第一轮“去 Unity 默认化”：将 Agent prompt、工件生成指令和前端默认文案中“Unity 是默认目标”的表达，改为“按项目目标引擎 / 工作区 / MCP 配置决定；未配置时使用通用小团队游戏开发视角”。
+  - 增加项目级 `target_engine` / `engine_profile` 概念，让项目可以明确标记当前主引擎，避免 Design、PM、Engineering、Review 在没有依据时默认输出 Unity 方案。
+  - 拆分引擎专用 prompt 片段，例如 Unity / Godot / Blender / Unreal / Generic，根据项目配置、工作区类型或 MCP 连接状态注入，而不是把 Unity 经验写死进核心角色提示词。
+  - 保留 Unity 作为一个成熟能力分支，继续推进 `.cs` 文件协作和 Unity Editor MCP；同时让 Godot、Blender、UE 复用统一能力层，避免每个引擎长出一套彼此割裂的产品逻辑。
+- **进度状态**：下一步重点是清理 Unity 默认心智，并建立项目级目标引擎与引擎 prompt 注入机制。
+
+### 5. Agent 能力 Skills 化 (Skill-based Agent Architecture)
 - **核心目标**：让 Agent 能把重复的任务操作沉淀为可复用的 Skills，实现自我总结与持续进化，而不是每次都依赖固定 Prompt 从零开始。
 - **具体方向**：
   - 下一步把已启用 Skill 接入 Agent Prompt / Tool 上下文，使 Skill 不只是前端清单，而是真正影响对应 Agent 的行为。
@@ -88,14 +91,7 @@
 
 > 以下为探索性方向，不设硬性排期，将根据近期计划推进情况逐步展开。
 
-### 6. 更多引擎兼容与生态扩展 (Broader Engine Compatibility)
-- **核心目标**：在当前游戏开发辅助能力逐步稳定之后，把能力扩展到更多引擎与生态工具，形成更统一的游戏开发工作台能力框架。
-- **具体方向**：
-  - 支持 Godot 等更开放的引擎方向，优先围绕文本化工程文件、项目阅读、检索、编辑器插件与 MCP 工具桥能力展开。
-  - 将 UE 纳入长期兼容规划，优先考虑项目结构理解、配置与 C++ 工程辅助，再逐步评估编辑器侧与资源侧能力接入。
-  - 与现有工作区、权限、工具目录、执行过程和设置页统一，避免每个引擎都长出一套彼此割裂的能力模型。
-
-### 7. 游戏内模型能力接入 (In-Game LLM Integration)
+### 6. 游戏内模型能力接入 (In-Game LLM Integration)
 - **核心目标**：让开发者可以通过工作台，低门槛地配置、测试并接入面向游戏运行时的大模型能力。
 - **具体方向**：
   - 支持在工作台中定义游戏内可调用的 Agent / Prompt / Tool 组合，用于 NPC 对话、任务提示、剧情回顾、世界观问答等场景。
@@ -104,14 +100,14 @@
   - 在设计上同步考虑成本控制、上下文边界、权限限制与运行时体验，避免把开发态能力直接粗暴搬进游戏运行时。
 - **进度状态**：前端配置与导出页面壳已完成（模型目录、场景配置、自定义接入、导出说明），待推进真实运行时接入与闭环验证。
 
-### 8. Welcome 与启动体验丰富化 (Welcome & Onboarding Experience)
+### 7. Welcome 与启动体验丰富化 (Welcome & Onboarding Experience)
 - **核心目标**：把当前轻量启动页扩展为更完整的产品入口，让用户在进入工作台前快速理解项目状态、配置完整度和下一步可做什么。
 - **具体方向**：
   - 从单纯 Logo / 加载动画逐步扩展到首次使用引导、项目选择、配置检查、能力入口提示和 Demo 模式入口。
   - 在不打断熟练用户的前提下，为新用户提供模型配置、工作区权限、GitHub/Skills/MCP 等关键能力的状态提示。
   - 让 Welcome 页成为“进入工作台前的轻量总览”，而不是额外的登录或阻塞页面。
 
-### 9. 外部 AIGC 能力集成 (External AIGC Integration)
+### 8. 外部 AIGC 能力集成 (External AIGC Integration)
 - **核心目标**：让工作台可以作为游戏开发 AIGC 能力的统一入口，帮助用户更方便地访问外部生成式服务，而不是在多个网站之间来回切换。
 - **具体方向**：
   - 在现有 AIGC 快捷入口目录基础上，继续维护图片、声音、视频、3D 模型、原型设计等主流平台入口。
@@ -119,14 +115,14 @@
   - 逐步形成“在 Ludens-Flow 内选择能力 -> 跳转或调用外部 AIGC 服务 -> 回收结果继续进入项目工作流”的顺滑闭环。
   - 在设计上同步考虑账户体系、权限、结果回流、资产组织和后续可替换性，避免把工作台做成单纯的链接集合页。
 
-### 10. Benchmark 与评测体系构建 (Benchmark & Evaluation)
+### 9. Benchmark 与评测体系构建 (Benchmark & Evaluation)
 - **核心目标**：建立适配 Ludens-Flow 的评测体系，用可重复、可比较的方式衡量工作流质量、稳定性与真实任务完成度。
 - **具体方向**：
   - 构建项目自定义 workflow benchmark，覆盖需求澄清、定稿确认、工件生成、Review 回流、多模态输入与异常场景处理。
   - 参考真实任务型 benchmark 与工具调用 benchmark，评估多 Agent 协作、结构化输出和工具使用质量。
   - 沉淀统一的评估指标，例如阶段推进成功率、误跳转率、工件完整性、响应时延与演示稳定性。
 
-### 11. 桌面安装版与本地应用化 (Desktop App Packaging)
+### 10. 桌面安装版与本地应用化 (Desktop App Packaging)
 - **核心目标**：在 V3 工作台能力稳定后，将 Ludens-Flow 打包成更适合本地游戏开发场景的桌面应用，而不是长期依赖手动启动 Web/后端服务。
 - **具体方向**：
   - 采用 Tauri Shell + Python 后端 Sidecar + 现有 React 前端的路线，尽量保留当前前后端业务结构。

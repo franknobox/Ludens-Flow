@@ -32,7 +32,7 @@ DEFAULT_PROJECT_PREFIX = "project"
 PROJECT_META_SCHEMA_VERSION = 4
 _UNSET = object()
 DEFAULT_UNITY_WORKSPACE_ID = "unity-main"
-SUPPORTED_WORKSPACE_KINDS = {"unity", "generic", "blender"}
+SUPPORTED_WORKSPACE_KINDS = {"unity", "generic", "blender", "godot"}
 _PROJECT_META_LOCKS: Dict[str, threading.RLock] = {}
 _PROJECT_META_LOCKS_GUARD = threading.Lock()
 

@@ -1035,9 +1035,18 @@ class ProjectLifecycleTests(unittest.TestCase):
 
     def test_godot_and_unreal_adapters_require_workspace_sandbox_for_writes(self):
         api.post_project(api.ProjectRequest(project_id="alpha"))
+        godot_root = self.workspace_root / "godot_project"
+        (godot_root / "scenes").mkdir(parents=True)
+        (godot_root / "project.godot").write_text('[application]\nconfig/name="Test"\n', encoding="utf-8")
         generic_root = self.workspace_root / "generic_engine_project"
-        (generic_root / "scripts").mkdir(parents=True)
         (generic_root / "Content" / "Maps").mkdir(parents=True)
+        add_project_workspace(
+            str(godot_root),
+            project_id="alpha",
+            kind="godot",
+            workspace_id="godot-main",
+            writable=True,
+        )
         add_project_workspace(
             str(generic_root),
             project_id="alpha",
@@ -1048,18 +1057,19 @@ class ProjectLifecycleTests(unittest.TestCase):
 
         godot = get_engine_adapter("godot")
         godot_call = godot.map_call(
-            "engine_create_script",
+            "engine_save_scene",
             {
                 "engine": "godot",
-                "workspace_id": "engine-main",
-                "path": "scripts/player.gd",
-                "content": "extends Node",
+                "workspace_id": "godot-main",
+                "scene_path": "scenes/main.tscn",
             },
-            [{"name": "create_script"}],
+            [{"name": "save_scene"}],
             project_id="alpha",
         )
         self.assertIsNotNone(godot_call)
-        self.assertEqual(godot_call.arguments["path"], str(generic_root / "scripts" / "player.gd"))
+        self.assertEqual(godot_call.tool_name, "save_scene")
+        self.assertEqual(godot_call.arguments["projectPath"], str(godot_root))
+        self.assertEqual(godot_call.arguments["scenePath"], "scenes/main.tscn")
 
         unreal = get_engine_adapter("unreal")
         save_call = unreal.map_call(
@@ -1077,16 +1087,137 @@ class ProjectLifecycleTests(unittest.TestCase):
 
         with self.assertRaisesRegex(McpClientError, "Project id is required"):
             godot.map_call(
-                "engine_create_script",
+                "engine_save_scene",
                 {
                     "engine": "godot",
-                    "workspace_id": "engine-main",
-                    "path": "scripts/player.gd",
-                    "content": "extends Node",
+                    "workspace_id": "godot-main",
+                    "scene_path": "scenes/main.tscn",
                 },
-                [{"name": "create_script"}],
+                [{"name": "save_scene"}],
                 project_id=None,
             )
+
+    def test_godot_adapter_maps_ludens_capabilities_to_coding_solo_tools(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+        godot_root = self.workspace_root / "godot_project"
+        (godot_root / "scenes").mkdir(parents=True)
+        (godot_root / "scripts").mkdir(parents=True)
+        (godot_root / "project.godot").write_text('[application]\nconfig/name="Godot Test"\n', encoding="utf-8")
+        add_project_workspace(
+            str(godot_root),
+            project_id="alpha",
+            kind="godot",
+            workspace_id="godot-main",
+            writable=True,
+        )
+        adapter = get_engine_adapter("godot")
+        available = [
+            {"name": "get_project_info"},
+            {"name": "get_debug_output"},
+            {"name": "create_scene"},
+            {"name": "add_node"},
+            {"name": "save_scene"},
+            {"name": "run_project"},
+            {"name": "launch_editor"},
+            {"name": "stop_project"},
+        ]
+
+        info_call = adapter.map_call(
+            "engine_list_scene",
+            {"engine": "godot", "workspace_id": "godot-main"},
+            available,
+            project_id="alpha",
+        )
+        self.assertEqual(info_call.tool_name, "get_project_info")
+        self.assertEqual(info_call.arguments["projectPath"], str(godot_root))
+
+        console_call = adapter.map_call(
+            "engine_read_console",
+            {"engine": "godot"},
+            available,
+            project_id="alpha",
+        )
+        self.assertEqual(console_call.tool_name, "get_debug_output")
+        self.assertEqual(console_call.arguments, {})
+
+        scene_call = adapter.map_call(
+            "engine_create_object",
+            {
+                "engine": "godot",
+                "workspace_id": "godot-main",
+                "name": "Root",
+                "object_type": "Node2D",
+                "scene_path": "scenes/main.tscn",
+                "create_scene": True,
+            },
+            available,
+            project_id="alpha",
+        )
+        self.assertEqual(scene_call.tool_name, "create_scene")
+        self.assertEqual(scene_call.arguments["scenePath"], "scenes/main.tscn")
+        self.assertEqual(scene_call.arguments["rootNodeType"], "Node2D")
+
+        node_call = adapter.map_call(
+            "engine_create_object",
+            {
+                "engine": "godot",
+                "workspace_id": "godot-main",
+                "name": "Player",
+                "object_type": "CharacterBody2D",
+                "scene_path": "res://scenes/main.tscn",
+                "parent": "root",
+            },
+            available,
+            project_id="alpha",
+        )
+        self.assertEqual(node_call.tool_name, "add_node")
+        self.assertEqual(node_call.arguments["nodeName"], "Player")
+        self.assertEqual(node_call.arguments["nodeType"], "CharacterBody2D")
+        self.assertEqual(node_call.arguments["scenePath"], "scenes/main.tscn")
+
+        run_call = adapter.map_call(
+            "engine_run_project",
+            {
+                "engine": "godot",
+                "workspace_id": "godot-main",
+                "mode": "run",
+                "scene_path": "scenes/main.tscn",
+            },
+            available,
+            project_id="alpha",
+        )
+        self.assertEqual(run_call.tool_name, "run_project")
+        self.assertEqual(run_call.arguments["scene"], "scenes/main.tscn")
+
+        editor_call = adapter.map_call(
+            "engine_run_project",
+            {"engine": "godot", "workspace_id": "godot-main", "mode": "editor"},
+            available,
+            project_id="alpha",
+        )
+        self.assertEqual(editor_call.tool_name, "launch_editor")
+
+        stop_call = adapter.map_call(
+            "engine_run_project",
+            {"engine": "godot", "workspace_id": "godot-main", "mode": "stop"},
+            available,
+            project_id="alpha",
+        )
+        self.assertEqual(stop_call.tool_name, "stop_project")
+        self.assertEqual(stop_call.arguments, {})
+
+        script_call = adapter.map_call(
+            "engine_create_script",
+            {
+                "engine": "godot",
+                "workspace_id": "godot-main",
+                "path": "scripts/player.gd",
+                "content": "extends Node",
+            },
+            available,
+            project_id="alpha",
+        )
+        self.assertIsNone(script_call)
 
     def test_safe_engine_adapters_validate_run_mode_and_scene_extension(self):
         api.post_project(api.ProjectRequest(project_id="alpha"))
