@@ -24,6 +24,7 @@ import {
   UserProfileSection,
   WorkspacesSection,
 } from "./sections/SettingsSections";
+import "./styles/settings.css";
 
 const SETTINGS_SECTIONS = [
   { id: "general", label: "通用设置", hint: "写入与模型" },

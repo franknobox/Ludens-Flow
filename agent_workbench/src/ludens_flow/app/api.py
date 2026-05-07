@@ -32,6 +32,12 @@ from ludens_flow.capabilities.context.user_profile import (
 from ludens_flow.capabilities.github import fetch_github_snapshot, parse_github_repo_ref
 from ludens_flow.app.env import load_env_if_available
 from ludens_flow.capabilities.mcp.health import check_mcp_connections
+from ludens_flow.capabilities.paths import (
+    get_project_github_repo,
+    get_project_mcp_connections,
+    set_project_github_repo,
+    set_project_mcp_connections,
+)
 from ludens_flow.capabilities.skills.registry import (
     delete_skill,
     get_project_skills,
@@ -49,8 +55,6 @@ from ludens_flow.core.paths import (
     create_project,
     delete_project,
     get_dev_notes_assets_dir,
-    get_project_github_repo,
-    get_project_mcp_connections,
     get_project_settings,
     get_project_unity_root,
     list_project_workspaces,
@@ -63,8 +67,6 @@ from ludens_flow.core.paths import (
     restore_project,
     set_project_agent_file_write_enabled,
     set_project_agent_file_write_confirm_required,
-    set_project_github_repo,
-    set_project_mcp_connections,
     set_project_model_routing,
     set_active_project_id,
     set_project_unity_root,

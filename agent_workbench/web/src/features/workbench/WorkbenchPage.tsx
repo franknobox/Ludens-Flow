@@ -5,6 +5,7 @@ import { ProjectToolbar } from "./components/ProjectToolbar";
 import { RightSidebar } from "./components/RightSidebar";
 import { useWorkbenchController } from "./hooks/useWorkbenchController";
 import { projectUpdated } from "./utils";
+import "./styles/workbench.css";
 
 type WorkbenchPageProps = {
   isActive?: boolean;

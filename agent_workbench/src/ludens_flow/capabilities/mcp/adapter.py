@@ -16,7 +16,8 @@ from ludens_flow.capabilities.mcp.health import (
     call_mcp_tool,
     check_mcp_connection,
 )
-from ludens_flow.core.paths import get_project_mcp_connections, get_project_settings
+from ludens_flow.capabilities.paths import get_project_mcp_connections
+from ludens_flow.core.paths import get_project_settings
 
 
 ToolEventHandler = Optional[Callable[[dict[str, Any]], Any]]

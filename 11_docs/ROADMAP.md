@@ -23,16 +23,7 @@
    - 目标：拆成 `app/routers/{projects, chat, workspaces, settings, copywriting, events}.py`，`api.py` 仅做 `include_router` + 全局 middleware。
    - 风险：大拆易引入 endpoint 路径 regression，建议 V3 后第一周做，配合完整 endpoint smoke 测试。
 
-2. **backend `paths.py` (1,546 行 / ~60 函数)**
-   - 现状：项目元数据 + workspace + MCP + model routing + GitHub + 路径工具混杂。
-   - 目标：拆成 `core/project_meta.py`、`core/workspaces.py`、`core/mcp_config.py`、`core/model_routing.py`、`core/path_utils.py`。
-   - 兼容：过渡期保留 `paths.py` thin re-export，下游逐步迁移，避免一次性改全库 import。
-
 ### P1 — 高价值中等成本
-
-3. **frontend `SettingsSections.tsx` (1,243 行)**
-   - 现状：6 个 section 组件 + constants + validation 全在一个文件。
-   - 目标：`features/settings/sections/{General,UserProfile,Tools,EngineConnections,Workspaces,History}.tsx` + `constants.ts` + `utils.ts`。
 
 4. **tests `test_project_lifecycle.py` (1,600+ 行)**
    - 现状：覆盖 API / state / paths / MCP / skills / workspace / import-export / archive 等 7 个域。

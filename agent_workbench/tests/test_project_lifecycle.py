@@ -1002,7 +1002,9 @@ class ProjectLifecycleTests(unittest.TestCase):
         )
 
         self.assertIsNotNone(script_call)
-        self.assertEqual(script_call.arguments["path"], str(unity_root / "Assets" / "Scripts" / "Foo.cs"))
+        self.assertEqual(script_call.tool_name, "create_script")
+        self.assertEqual(script_call.arguments["path"], "Assets/Scripts/Foo.cs")
+        self.assertEqual(script_call.arguments["contents"], "public class Foo {}")
         self.assertNotIn("workspace_id", script_call.arguments)
 
         with self.assertRaisesRegex(McpClientError, "PATH_ESCAPE"):
@@ -1018,7 +1020,7 @@ class ProjectLifecycleTests(unittest.TestCase):
                 project_id="alpha",
             )
 
-        with self.assertRaisesRegex(McpClientError, "extensions"):
+        with self.assertRaisesRegex(McpClientError, r"\.cs"):
             adapter.map_call(
                 "engine_create_script",
                 {
@@ -1108,12 +1110,12 @@ class ProjectLifecycleTests(unittest.TestCase):
                 "mode": "play",
                 "scene_path": "Assets/Scenes/Main.unity",
             },
-            [{"name": "start_play_mode"}],
+            [{"name": "manage_editor"}],
             project_id="alpha",
         )
         self.assertIsNotNone(run_call)
-        self.assertEqual(run_call.arguments["mode"], "play")
-        self.assertEqual(run_call.arguments["scene_path"], str(unity_root / "Assets" / "Scenes" / "Main.unity"))
+        self.assertEqual(run_call.tool_name, "manage_editor")
+        self.assertEqual(run_call.arguments["action"], "play")
 
         with self.assertRaisesRegex(McpClientError, "Unsupported Unity run mode"):
             adapter.map_call(
@@ -1123,11 +1125,11 @@ class ProjectLifecycleTests(unittest.TestCase):
                     "workspace_id": "unity-main",
                     "mode": "shell",
                 },
-                [{"name": "start_play_mode"}],
+                [{"name": "manage_editor"}],
                 project_id="alpha",
             )
 
-        with self.assertRaisesRegex(McpClientError, "extensions"):
+        with self.assertRaisesRegex(McpClientError, r"\.unity"):
             adapter.map_call(
                 "engine_save_scene",
                 {
@@ -1135,9 +1137,108 @@ class ProjectLifecycleTests(unittest.TestCase):
                     "workspace_id": "unity-main",
                     "scene_path": "Assets/Scenes/Main.txt",
                 },
-                [{"name": "save_scene"}],
+                [{"name": "manage_scene"}],
                 project_id="alpha",
             )
+
+    def test_unity_adapter_maps_ludens_capabilities_to_coplay_tools(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+        unity_root = self.workspace_root / "unity_project"
+        (unity_root / "Assets" / "Scripts").mkdir(parents=True)
+        (unity_root / "Assets" / "Scenes").mkdir(parents=True)
+        (unity_root / "ProjectSettings").mkdir(parents=True)
+        add_project_workspace(
+            str(unity_root),
+            project_id="alpha",
+            kind="unity",
+            workspace_id="unity-main",
+            writable=True,
+        )
+        adapter = get_engine_adapter("unity")
+
+        available = [
+            {"name": "manage_scene"},
+            {"name": "read_console"},
+            {"name": "manage_gameobject"},
+            {"name": "manage_editor"},
+            {"name": "create_script"},
+            {"name": "run_tests"},
+        ]
+
+        list_call = adapter.map_call(
+            "engine_list_scene",
+            {"engine": "unity", "max_items": 25},
+            available,
+            project_id="alpha",
+        )
+        self.assertEqual(list_call.tool_name, "manage_scene")
+        self.assertEqual(list_call.arguments["action"], "get_hierarchy")
+        self.assertEqual(list_call.arguments["page_size"], 25)
+
+        console_call = adapter.map_call(
+            "engine_read_console",
+            {"engine": "unity", "max_entries": 10, "filter": "NullReference"},
+            available,
+            project_id="alpha",
+        )
+        self.assertEqual(console_call.tool_name, "read_console")
+        self.assertEqual(console_call.arguments["action"], "get")
+        self.assertEqual(console_call.arguments["count"], 10)
+        self.assertEqual(console_call.arguments["filter_text"], "NullReference")
+
+        create_call = adapter.map_call(
+            "engine_create_object",
+            {
+                "engine": "unity",
+                "name": "Player",
+                "object_type": "cube",
+                "position": {"x": 1, "y": 2, "z": 3},
+            },
+            available,
+            project_id="alpha",
+        )
+        self.assertEqual(create_call.tool_name, "manage_gameobject")
+        self.assertEqual(create_call.arguments["action"], "create")
+        self.assertEqual(create_call.arguments["primitive_type"], "Cube")
+        self.assertEqual(create_call.arguments["position"], [1.0, 2.0, 3.0])
+
+        move_call = adapter.map_call(
+            "engine_move_object",
+            {
+                "engine": "unity",
+                "target": "Player",
+                "rotation": [0, 90, 0],
+            },
+            available,
+            project_id="alpha",
+        )
+        self.assertEqual(move_call.tool_name, "manage_gameobject")
+        self.assertEqual(move_call.arguments["action"], "modify")
+        self.assertEqual(move_call.arguments["rotation"], [0.0, 90.0, 0.0])
+
+        save_call = adapter.map_call(
+            "engine_save_scene",
+            {
+                "engine": "unity",
+                "workspace_id": "unity-main",
+                "scene_path": "Assets/Scenes/Main.unity",
+            },
+            available,
+            project_id="alpha",
+        )
+        self.assertEqual(save_call.tool_name, "manage_scene")
+        self.assertEqual(save_call.arguments["action"], "save")
+        self.assertEqual(save_call.arguments["name"], "Main")
+        self.assertEqual(save_call.arguments["path"], "Assets/Scenes")
+
+        tests_call = adapter.map_call(
+            "engine_run_project",
+            {"engine": "unity", "mode": "playmode_tests"},
+            available,
+            project_id="alpha",
+        )
+        self.assertEqual(tests_call.tool_name, "run_tests")
+        self.assertEqual(tests_call.arguments["mode"], "PlayMode")
 
     def test_blender_adapter_rejects_unsafe_python(self):
         adapter = get_engine_adapter("blender")

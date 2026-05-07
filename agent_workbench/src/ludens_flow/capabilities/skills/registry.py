@@ -13,11 +13,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from ludens_flow.core.paths import get_project_dir, get_workspace_root_dir, resolve_project_id
+from ludens_flow.capabilities.paths import (
+    SKILL_SETTINGS_FILE,
+    get_installed_skills_dir,
+    get_project_skill_settings_file,
+    get_skill_install_dir,
+    get_skills_root_dir,
+)
+from ludens_flow.core.paths import resolve_project_id
 
 
 SUPPORTED_SKILL_AGENTS = {"design", "pm", "engineering", "review"}
-SKILL_SETTINGS_FILE = "skill_settings.json"
 
 
 def _now_iso() -> str:
@@ -31,17 +37,9 @@ def _slugify(value: str) -> str:
     return raw
 
 
-def _skills_root() -> Path:
-    return get_workspace_root_dir() / "skills"
-
-
-def _installed_skills_dir() -> Path:
-    return _skills_root() / "installed"
-
-
 def _skill_dir(skill_id: str) -> Path:
     safe_id = _normalize_skill_id(skill_id)
-    return _installed_skills_dir() / safe_id
+    return get_skill_install_dir(safe_id)
 
 
 def _normalize_skill_id(skill_id: Any, fallback_name: str = "") -> str:
@@ -108,7 +106,7 @@ def _read_manifest(path: Path) -> Optional[dict[str, Any]]:
 
 def list_skills() -> list[dict[str, Any]]:
     skills: list[dict[str, Any]] = []
-    installed_dir = _installed_skills_dir()
+    installed_dir = get_installed_skills_dir()
     if installed_dir.exists():
         for entry in installed_dir.iterdir():
             if not entry.is_dir():
@@ -143,7 +141,8 @@ def delete_skill(skill_id: str) -> str:
         raise FileNotFoundError(f"Skill not found: {safe_id}")
     shutil.rmtree(target_dir)
 
-    for project in (get_workspace_root_dir() / "projects").iterdir() if (get_workspace_root_dir() / "projects").exists() else []:
+    projects_dir = get_skills_root_dir().parent / "projects"
+    for project in projects_dir.iterdir() if projects_dir.exists() else []:
         settings_file = project / SKILL_SETTINGS_FILE
         if not settings_file.exists():
             continue
@@ -154,10 +153,7 @@ def delete_skill(skill_id: str) -> str:
 
 
 def _project_skill_settings_file(project_id: str | None = None) -> Path:
-    resolved = resolve_project_id(project_id)
-    if not resolved:
-        raise ValueError("Project id is required.")
-    return get_project_dir(resolved) / SKILL_SETTINGS_FILE
+    return get_project_skill_settings_file(project_id)
 
 
 def _read_project_skill_settings(project_id: str | None = None) -> dict[str, Any]:
