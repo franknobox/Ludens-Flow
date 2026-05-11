@@ -45,6 +45,7 @@ export function SkillsSettingsSection() {
   const [skills, setSkills] = useState<SkillManifest[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const [messageKind, setMessageKind] = useState<"success" | "error">("success");
   const [selectedSkillId, setSelectedSkillId] = useState("");
   const [githubUrl, setGithubUrl] = useState("");
   const skillJsonInputRef = useRef<HTMLInputElement>(null);
@@ -87,6 +88,7 @@ export function SkillsSettingsSection() {
     const parsed = JSON.parse(text) as unknown;
     const response = await importSkillManifest(parsed, prompt);
     setSkills(response.skills);
+    setMessageKind("success");
     setMessage(`已导入 ${file.name}`);
   };
 
@@ -97,6 +99,7 @@ export function SkillsSettingsSection() {
     try {
       await importFromSkillJson(file);
     } catch (error) {
+      setMessageKind("error");
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
       if (skillJsonInputRef.current) skillJsonInputRef.current.value = "";
@@ -108,13 +111,14 @@ export function SkillsSettingsSection() {
     setMessage("");
     try {
       const fileList = Array.from(files);
-      const skillJson = fileList.find((file) =>
+      const manifestFile = fileList.find((file) =>
         file.webkitRelativePath
-          ? file.webkitRelativePath.endsWith("/skill.json")
-          : file.name === "skill.json",
+          ? file.webkitRelativePath.endsWith("/skill.json") ||
+            file.webkitRelativePath.endsWith("/SKILL.md")
+          : file.name === "skill.json" || file.name === "SKILL.md",
       );
-      if (!skillJson) {
-        throw new Error("所选文件夹中没有找到 skill.json。");
+      if (!manifestFile) {
+        throw new Error("所选文件夹中没有找到 skill.json 或 SKILL.md。");
       }
       const packageFiles: SkillPackageFile[] = [];
       for (const file of fileList) {
@@ -126,8 +130,10 @@ export function SkillsSettingsSection() {
       }
       const response = await importSkillPackageFiles(packageFiles);
       setSkills(response.skills);
-      setMessage(`已导入 ${skillJson.webkitRelativePath || skillJson.name}`);
+      setMessageKind("success");
+      setMessage(`已导入 ${manifestFile.webkitRelativePath || manifestFile.name}`);
     } catch (error) {
+      setMessageKind("error");
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
       if (folderInputRef.current) folderInputRef.current.value = "";
@@ -141,8 +147,10 @@ export function SkillsSettingsSection() {
     try {
       const response = await importSkillZip(await readFileDataUrl(file));
       setSkills(response.skills);
+      setMessageKind("success");
       setMessage(`已导入 ${file.name}`);
     } catch (error) {
+      setMessageKind("error");
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
       if (zipInputRef.current) zipInputRef.current.value = "";
@@ -157,8 +165,10 @@ export function SkillsSettingsSection() {
       const response = await importSkillGithub(url);
       setSkills(response.skills);
       setGithubUrl("");
+      setMessageKind("success");
       setMessage("已从 GitHub 导入 Skill。");
     } catch (error) {
+      setMessageKind("error");
       setMessage(error instanceof Error ? error.message : String(error));
     }
   };
@@ -167,19 +177,25 @@ export function SkillsSettingsSection() {
     if (!window.confirm(`确认删除 Skill「${skill.name}」吗？`)) return;
     const response = await deleteSkill(skill.id);
     setSkills(response.skills);
+    setMessageKind("success");
     setMessage(`已删除 ${skill.name}`);
   };
 
   return (
     <div className="settings-detail-stack settings-detail-stack--fill">
       <section className="settings-pane-card settings-skills-whole">
+        <div className="settings-card-head settings-skills-topline">
+          <div>
+            <h2 className="settings-card-title">Skills 管理</h2>
+            <p className="settings-card-subtitle">
+              导入外部 Skill，并在工作台中按项目启用。
+            </p>
+          </div>
+          <span className="settings-chip">{skills.length} 项</span>
+        </div>
+
         <div className="settings-skills-layout">
           <div className="settings-skills-list-area">
-            <div className="settings-card-head">
-              <h2 className="settings-card-title">Skills 管理</h2>
-              <span className="settings-chip">{skills.length} 项</span>
-            </div>
-
             {loading ? (
               <div className="settings-empty">正在加载 Skills...</div>
             ) : !skills.length ? (
@@ -194,7 +210,12 @@ export function SkillsSettingsSection() {
                     </div>
                     <div className="settings-skill-list">
                       {items.map((skill) => (
-                        <article key={skill.id} className="settings-skill-card">
+                        <article
+                          key={skill.id}
+                          className={`settings-skill-card ${
+                            selectedSkill?.id === skill.id ? "is-active" : ""
+                          }`}
+                        >
                           <div
                             role="button"
                             tabIndex={0}
@@ -275,7 +296,7 @@ export function SkillsSettingsSection() {
               <div className="settings-skill-import-actions">
                 <button
                   type="button"
-                  className="settings-primary-button"
+                  className="settings-pill-button"
                   onClick={() => skillJsonInputRef.current?.click()}
                 >
                   选择 skill.json
@@ -313,35 +334,9 @@ export function SkillsSettingsSection() {
                 </button>
               </div>
 
-              <div className="settings-skill-format">
-                <strong>推荐结构</strong>
-                <code>
-                  skills/example-skill/skill.json
-                  {"\n"}skills/example-skill/prompt.md
-                  {"\n"}skills/example-skill/assets/
-                  {"\n"}skills/example-skill/examples/
-                </code>
-              </div>
-
-              {message ? <div className="settings-skill-message">{message}</div> : null}
-
-              <div className="settings-skill-format">
-                <strong>skill.json 必填字段</strong>
-                <code>
-                  {JSON.stringify(
-                    {
-                      id: "engine-helper",
-                      name: "Engine Helper",
-                      description: "Skill description",
-                      version: "0.1.0",
-                      agents: AGENT_OPTIONS.map((item) => item.value),
-                      tags: ["Engine"],
-                    },
-                    null,
-                    2,
-                  )}
-                </code>
-              </div>
+              {message ? (
+                <div className={`settings-skill-message ${messageKind}`}>{message}</div>
+              ) : null}
 
               {selectedSkill ? (
                 <div className="settings-skill-format">
@@ -357,6 +352,34 @@ export function SkillsSettingsSection() {
                   </code>
                 </div>
               ) : null}
+
+              <details className="settings-skill-details">
+                <summary>导入格式说明</summary>
+                <div className="settings-skill-details-body">
+                  <strong>推荐结构</strong>
+                  <code>
+                    skills/example-skill/skill.json
+                    {"\n"}skills/example-skill/prompt.md
+                    {"\n"}skills/example-skill/assets/
+                    {"\n"}skills/example-skill/examples/
+                  </code>
+                  <strong>skill.json 必填字段</strong>
+                  <code>
+                    {JSON.stringify(
+                      {
+                        id: "engine-helper",
+                        name: "Engine Helper",
+                        description: "Skill description",
+                        version: "0.1.0",
+                        agents: AGENT_OPTIONS.map((item) => item.value),
+                        tags: ["Engine"],
+                      },
+                      null,
+                      2,
+                    )}
+                  </code>
+                </div>
+              </details>
             </div>
           </div>
         </div>

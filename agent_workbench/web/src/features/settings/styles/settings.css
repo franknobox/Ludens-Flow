@@ -172,26 +172,39 @@
 .settings-skills-whole {
   min-height: 0;
   height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 14px;
   overflow: hidden;
+}
+
+.settings-skills-topline {
+  margin-bottom: 0;
 }
 
 .settings-skills-layout {
   height: 100%;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
-  gap: 14px;
+  grid-template-columns: minmax(0, 1.55fr) minmax(360px, 1fr);
+  gap: 18px;
 }
 
 .settings-skills-list-area,
 .settings-skills-import-area {
   min-height: 0;
-  overflow: hidden;
 }
 
 .settings-skills-list-area {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.settings-skills-import-area {
+  overflow: auto;
+  padding-left: 18px;
+  border-left: 1px solid rgba(29, 39, 52, 0.08);
 }
 
 .settings-skill-groups {
@@ -217,10 +230,19 @@
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 14px;
   align-items: center;
-  padding: 14px;
-  border-radius: 16px;
+  padding: 12px 0;
+  border-radius: 0;
   border: 1px solid rgba(29, 39, 52, 0.08);
-  background: rgba(247, 250, 253, 0.9);
+  border-width: 0 0 1px;
+  background: transparent;
+}
+
+.settings-skill-card.is-active {
+  padding-left: 12px;
+  padding-right: 12px;
+  border: 1px solid rgba(22, 99, 255, 0.18);
+  border-radius: 14px;
+  background: rgba(235, 241, 255, 0.72);
 }
 
 .settings-skill-card h3 {
@@ -229,11 +251,25 @@
   font-size: 15px;
 }
 
+.skill-card-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .settings-skill-card p {
   margin: 7px 0 0;
   color: #6b7b8f;
   font-size: 13px;
   line-height: 1.55;
+}
+
+.skill-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
 }
 
 .settings-skill-agent-grid {
@@ -244,7 +280,7 @@
 
 .settings-skill-import-actions {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -257,9 +293,9 @@
 
 .settings-skill-format,
 .settings-skill-message {
-  border-radius: 16px;
+  border-radius: 12px;
   border: 1px solid rgba(29, 39, 52, 0.08);
-  background: rgba(247, 250, 253, 0.78);
+  background: rgba(247, 250, 253, 0.58);
 }
 
 .settings-skill-format {
@@ -281,9 +317,52 @@
 }
 
 .settings-skill-message {
-  padding: 10px 12px;
+  padding: 9px 11px;
   color: #52637a;
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.settings-skill-message.success {
+  border-color: rgba(23, 99, 71, 0.18);
+  background: rgba(231, 248, 242, 0.78);
+  color: #176347;
+}
+
+.settings-skill-message.error {
+  border-color: rgba(197, 58, 47, 0.2);
+  background: rgba(255, 244, 243, 0.78);
+  color: #8c302a;
+}
+
+.settings-skill-details {
+  border-top: 1px solid rgba(29, 39, 52, 0.08);
+  padding-top: 10px;
+}
+
+.settings-skill-details summary {
+  cursor: pointer;
+  color: #5f6e82;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.settings-skill-details-body {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.settings-skill-details-body strong {
+  color: #1f2b3c;
+  font-size: 12px;
+}
+
+.settings-skill-details-body code {
+  white-space: pre-wrap;
+  color: #52637a;
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 @media (max-width: 1180px) {
@@ -295,6 +374,11 @@
   .settings-skills-list-area,
   .settings-skills-import-area {
     overflow: visible;
+  }
+
+  .settings-skills-import-area {
+    padding-left: 0;
+    border-left: none;
   }
 }
 
@@ -1546,4 +1630,37 @@
 [data-theme="dark"] .settings-field select option:hover {
   background: #334155;
   color: #fff;
+}
+
+[data-theme="dark"] .settings-skill-card .settings-chip.subtle {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: var(--muted);
+}
+
+[data-theme="dark"] .settings-skill-card.is-active {
+  background: rgba(255, 255, 255, 0.035);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+[data-theme="dark"] .settings-skills-import-area {
+  border-left-color: var(--line);
+}
+
+[data-theme="dark"] .settings-skill-format,
+[data-theme="dark"] .settings-skill-details {
+  border-color: var(--line);
+}
+
+[data-theme="dark"] .settings-skill-format {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+[data-theme="dark"] .settings-skill-details summary,
+[data-theme="dark"] .settings-skill-details-body code {
+  color: var(--muted);
+}
+
+[data-theme="dark"] .settings-skill-details-body strong {
+  color: var(--text);
 }

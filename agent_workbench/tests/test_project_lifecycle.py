@@ -585,6 +585,47 @@ class ProjectLifecycleTests(unittest.TestCase):
             "",
         )
 
+    def test_api_imports_skill_md_package_without_skill_json(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+        package_files = [
+            {
+                "path": "repo/skills/frontend-design/SKILL.md",
+                "text": (
+                    "---\n"
+                    "name: frontend-design\n"
+                    "description: Create distinctive frontend interfaces.\n"
+                    "---\n\n"
+                    "# Frontend Design\n\n"
+                    "Avoid generic UI and choose a clear visual direction."
+                ),
+            },
+            {
+                "path": "repo/skills/frontend-design/references/style.md",
+                "text": "Reference notes.",
+            },
+            {
+                "path": "repo/skills/frontend-design/LICENSE.txt",
+                "text": "Should not be installed.",
+            },
+        ]
+
+        imported = api.post_import_skill(api.SkillImportRequest(files=package_files))
+        self.assertIn("frontend-design", {item["id"] for item in imported["skills"]})
+        skill_dir = self.workspace_root / "skills" / "installed" / "frontend-design"
+        self.assertTrue((skill_dir / "skill.json").exists())
+        self.assertTrue((skill_dir / "prompt.md").exists())
+        self.assertTrue((skill_dir / "references" / "style.md").exists())
+        self.assertFalse((skill_dir / "LICENSE.txt").exists())
+
+        manifest = json.loads((skill_dir / "skill.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["name"], "frontend-design")
+        self.assertEqual(manifest["description"], "Create distinctive frontend interfaces.")
+        self.assertEqual(manifest["agents"], ["engineering"])
+        self.assertIn(
+            "Avoid generic UI",
+            (skill_dir / "prompt.md").read_text(encoding="utf-8"),
+        )
+
     def test_skill_create_draft_tool_writes_draft_not_installed_skill(self):
         api.post_project(api.ProjectRequest(project_id="alpha"))
 

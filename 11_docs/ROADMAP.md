@@ -71,19 +71,18 @@
 ### 4. 更多引擎兼容与生态扩展 (Broader Engine Compatibility)
 - **核心目标**：把 Ludens-Flow 从“默认偏 Unity 的游戏开发工作台”收敛为真正的多引擎游戏开发工作台，让 Unity、Godot、Blender、UE 等能力共享同一套项目、工作区、权限、工具和提示词模型。
 - **具体方向**：
-  - 做第一轮“去 Unity 默认化”：将 Agent prompt、工件生成指令和前端默认文案中“Unity 是默认目标”的表达，改为“按项目目标引擎 / 工作区 / MCP 配置决定；未配置时使用通用小团队游戏开发视角”。
+  - 做第一轮“去 Unity 默认化”：将 Agent prompt、工件生成指令和前端默认文案中“Unity 是默认目标”的表达，改为“按项目工件目标引擎 / 工作区 配置决定；未配置时使用通用小型游戏demo开发视角”。
   - 增加项目级 `target_engine` / `engine_profile` 概念，让项目可以明确标记当前主引擎，避免 Design、PM、Engineering、Review 在没有依据时默认输出 Unity 方案。
   - 拆分引擎专用 prompt 片段，例如 Unity / Godot / Blender / Unreal / Generic，根据项目配置、工作区类型或 MCP 连接状态注入，而不是把 Unity 经验写死进核心角色提示词。
   - 保留 Unity 作为一个成熟能力分支，继续推进 `.cs` 文件协作和 Unity Editor MCP；同时让 Godot、Blender、UE 复用统一能力层，避免每个引擎长出一套彼此割裂的产品逻辑。
 - **进度状态**：下一步重点是清理 Unity 默认心智，并建立项目级目标引擎与引擎 prompt 注入机制。
 
 ### 5. Agent 能力 Skills 化 (Skill-based Agent Architecture)
-- **核心目标**：让 Agent 能把重复的任务操作沉淀为可复用的 Skills，实现自我总结与持续进化，而不是每次都依赖固定 Prompt 从零开始。
+- **核心目标**：让 Agent 能把重复的任务操作沉淀为可复用的 Skills，实现自我总结与持续进化。
 - **具体方向**：
-  - 下一步把已启用 Skill 接入 Agent Prompt / Tool 上下文，使 Skill 不只是前端清单，而是真正影响对应 Agent 的行为。
   - 推进内部沉淀：Agent 在真实项目协作中识别重复任务模式（文件操作、代码生成、文案润色等），抽象为 Skill 模板。
   - 逐步形成“外部导入 -> 项目启用 -> 运行时加载 -> 效果反馈 -> 内部沉淀”的演进闭环。
-- **进度状态**：第一阶段外部导入与项目级启用管理已落地；运行时加载与内部自沉淀尚未开始。
+- **进度状态**：内部自沉淀尚未开始。
 
 ---
 

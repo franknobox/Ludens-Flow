@@ -33,7 +33,7 @@ from ludens_flow.core.paths import resolve_project_id
 SUPPORTED_SKILL_AGENTS = {"design", "pm", "engineering", "review"}
 MAX_SKILL_FILE_BYTES = 2 * 1024 * 1024
 MAX_SKILL_PACKAGE_BYTES = 12 * 1024 * 1024
-ALLOWED_PACKAGE_ROOTS = {"assets", "examples"}
+ALLOWED_PACKAGE_ROOTS = {"assets", "examples", "references", "scripts", "agents"}
 
 
 def _now_iso() -> str:
@@ -111,6 +111,58 @@ def normalize_skill_manifest(raw: Any, *, source: str = "external") -> dict[str,
     return manifest
 
 
+def _parse_simple_frontmatter(text: str) -> tuple[dict[str, Any], str]:
+    """Parse the common SKILL.md YAML header without adding a YAML dependency."""
+    if not text.startswith("---"):
+        return {}, text
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return {}, text
+
+    end_index: int | None = None
+    for index, line in enumerate(lines[1:], start=1):
+        if line.strip() == "---":
+            end_index = index
+            break
+    if end_index is None:
+        return {}, text
+
+    metadata: dict[str, Any] = {}
+    for raw_line in lines[1:end_index]:
+        line = raw_line.strip()
+        if not line or line.startswith("#") or ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        key = key.strip()
+        value = value.strip().strip("'\"")
+        if key:
+            metadata[key] = value
+
+    body = "\n".join(lines[end_index + 1:]).lstrip()
+    return metadata, body or text
+
+
+def _manifest_from_skill_md(skill_md_path: str, data: bytes) -> tuple[dict[str, Any], str]:
+    try:
+        text = data.decode("utf-8")
+    except Exception as exc:
+        raise ValueError("SKILL.md must be valid UTF-8 Markdown.") from exc
+
+    frontmatter, _body = _parse_simple_frontmatter(text)
+    folder_name = Path(skill_md_path.replace("\\", "/")).parent.name
+    name = str(frontmatter.get("name") or folder_name or "Imported Skill").strip()
+    description = str(frontmatter.get("description") or "").strip()
+    manifest = {
+        "id": frontmatter.get("id") or folder_name or name,
+        "name": name,
+        "description": description or "外部导入的 SKILL.md 能力包。",
+        "version": str(frontmatter.get("version") or "0.1.0"),
+        "agents": frontmatter.get("agents") or ["engineering"],
+        "tags": _normalize_tags([frontmatter.get("name") or folder_name]),
+    }
+    return manifest, text
+
+
 def _decode_data_url(value: str) -> bytes:
     text = str(value or "")
     if "," in text and text.lower().startswith("data:"):
@@ -160,9 +212,9 @@ def _relative_to_skill_root(path: str, root_prefix: str) -> str:
 def _safe_copy_package_file(target_dir: Path, rel_path: str, data: bytes) -> None:
     rel = _normalize_package_path(rel_path)
     first = rel.split("/", 1)[0]
-    if rel not in {"skill.json", "prompt.md", "draft_meta.json"} and first not in ALLOWED_PACKAGE_ROOTS:
+    if rel not in {"skill.json", "prompt.md", "SKILL.md", "draft_meta.json"} and first not in ALLOWED_PACKAGE_ROOTS:
         return
-    if rel == "skill.json":
+    if rel in {"skill.json", "SKILL.md"}:
         return
     target = (target_dir / rel).resolve()
     root = target_dir.resolve()
@@ -254,26 +306,49 @@ def import_external_skill_bundle(files: Any) -> dict[str, Any]:
         package.append((rel_path, data))
 
     skill_json_candidates = [
-        (path, data) for path, data in package if path.endswith("/skill.json") or path == "skill.json"
+        (path, data)
+        for path, data in package
+        if path.lower().endswith("/skill.json") or path.lower() == "skill.json"
     ]
-    if not skill_json_candidates:
-        raise ValueError("Skill package must contain skill.json.")
+    skill_md_candidates = [
+        (path, data)
+        for path, data in package
+        if path.endswith("/SKILL.md") or path == "SKILL.md"
+    ]
 
-    skill_json_path, skill_json_data = sorted(
-        skill_json_candidates,
-        key=lambda item: (item[0].count("/"), len(item[0])),
-    )[0]
-    root_prefix = skill_json_path.rsplit("/", 1)[0] if "/" in skill_json_path else ""
-    try:
-        manifest = json.loads(skill_json_data.decode("utf-8"))
-    except Exception as exc:
-        raise ValueError("skill.json must be valid UTF-8 JSON.") from exc
+    if skill_json_candidates:
+        manifest_path, manifest_data = sorted(
+            skill_json_candidates,
+            key=lambda item: (item[0].count("/"), len(item[0])),
+        )[0]
+        root_prefix = manifest_path.rsplit("/", 1)[0] if "/" in manifest_path else ""
+        try:
+            manifest = json.loads(manifest_data.decode("utf-8"))
+        except Exception as exc:
+            raise ValueError("skill.json must be valid UTF-8 JSON.") from exc
+        prompt_override: str | None = None
+    elif skill_md_candidates:
+        manifest_path, manifest_data = sorted(
+            skill_md_candidates,
+            key=lambda item: (item[0].count("/"), len(item[0])),
+        )[0]
+        root_prefix = manifest_path.rsplit("/", 1)[0] if "/" in manifest_path else ""
+        manifest, prompt_override = _manifest_from_skill_md(manifest_path, manifest_data)
+    else:
+        raise ValueError("Skill package must contain skill.json or SKILL.md.")
 
     rel_files: list[tuple[str, bytes]] = []
     for path, data in package:
         rel = _relative_to_skill_root(path, root_prefix)
+        if rel == "SKILL.md":
+            rel = "prompt.md"
         rel_files.append((rel, data))
-    return _install_skill_package(manifest, files=rel_files, source="external")
+    return _install_skill_package(
+        manifest,
+        prompt=prompt_override,
+        files=rel_files,
+        source="external",
+    )
 
 
 def import_external_skill_zip(data_url: str) -> dict[str, Any]:
