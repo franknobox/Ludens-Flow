@@ -992,6 +992,12 @@
 }
 
 .settings-guide-overlay {
+  --guide-accent: #e87d0d;
+  --guide-accent-strong: #b85d00;
+  --guide-accent-soft: rgba(232, 125, 13, 0.14);
+  --guide-accent-border: rgba(232, 125, 13, 0.22);
+  --guide-accent-button-bg: rgba(232, 125, 13, 0.1);
+  --guide-accent-button-hover: rgba(232, 125, 13, 0.16);
   position: fixed;
   inset: 0;
   z-index: 160;
@@ -1000,6 +1006,24 @@
   justify-content: center;
   padding: 28px;
   background: rgba(17, 25, 38, 0.42);
+}
+
+.settings-guide-overlay--unity {
+  --guide-accent: #5f6e82;
+  --guide-accent-strong: #344255;
+  --guide-accent-soft: rgba(255, 255, 255, 0.95);
+  --guide-accent-border: rgba(95, 110, 130, 0.2);
+  --guide-accent-button-bg: rgba(245, 248, 252, 0.96);
+  --guide-accent-button-hover: rgba(232, 237, 245, 0.98);
+}
+
+.settings-guide-overlay--godot {
+  --guide-accent: #1f78ff;
+  --guide-accent-strong: #1556c0;
+  --guide-accent-soft: rgba(31, 120, 255, 0.12);
+  --guide-accent-border: rgba(31, 120, 255, 0.24);
+  --guide-accent-button-bg: rgba(31, 120, 255, 0.1);
+  --guide-accent-button-hover: rgba(31, 120, 255, 0.16);
 }
 
 .settings-guide-panel {
@@ -1039,7 +1063,7 @@
 .settings-guide-kicker {
   display: block;
   margin-bottom: 7px;
-  color: #e87d0d;
+  color: var(--guide-accent);
   font-size: 12px;
   font-weight: 900;
   letter-spacing: 0.12em;
@@ -1087,8 +1111,8 @@
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: rgba(232, 125, 13, 0.14);
-  color: #b85d00;
+  background: var(--guide-accent-soft);
+  color: var(--guide-accent-strong);
   font-weight: 900;
 }
 
@@ -1135,7 +1159,7 @@
   display: inline-flex;
   align-items: center;
   margin-top: 10px;
-  color: #1663ff;
+  color: var(--guide-accent-strong);
   font-weight: 800;
   font-size: 13px;
   text-decoration: none;
@@ -1150,16 +1174,16 @@
   margin-top: 10px;
   padding: 0 13px;
   border-radius: 999px;
-  border: 1px solid rgba(232, 125, 13, 0.22);
-  background: rgba(232, 125, 13, 0.1);
-  color: #ad5d08;
+  border: 1px solid var(--guide-accent-border);
+  background: var(--guide-accent-button-bg);
+  color: var(--guide-accent-strong);
   font-size: 12px;
   font-weight: 800;
   cursor: pointer;
 }
 
 .settings-guide-inline-button:hover {
-  background: rgba(232, 125, 13, 0.16);
+  background: var(--guide-accent-button-hover);
 }
 
 .settings-guide-config-grid {
@@ -1174,6 +1198,34 @@
   color: #7a8798;
   font-size: 12px;
   font-weight: 800;
+}
+
+[data-theme="dark"] .settings-guide-overlay--unity {
+  --guide-accent: #d7dde6;
+  --guide-accent-strong: #f4f7fb;
+  --guide-accent-soft: rgba(255, 255, 255, 0.08);
+  --guide-accent-border: rgba(255, 255, 255, 0.16);
+  --guide-accent-button-bg: rgba(255, 255, 255, 0.07);
+  --guide-accent-button-hover: rgba(255, 255, 255, 0.12);
+}
+
+[data-theme="dark"] .settings-guide-overlay--godot {
+  --guide-accent: #5aa2ff;
+  --guide-accent-strong: #7cb6ff;
+  --guide-accent-soft: rgba(90, 162, 255, 0.14);
+  --guide-accent-border: rgba(90, 162, 255, 0.26);
+  --guide-accent-button-bg: rgba(90, 162, 255, 0.1);
+  --guide-accent-button-hover: rgba(90, 162, 255, 0.16);
+}
+
+[data-theme="dark"] .settings-guide-inline-button {
+  border-color: var(--guide-accent-border);
+  background: var(--guide-accent-button-bg);
+  color: var(--guide-accent-strong);
+}
+
+[data-theme="dark"] .settings-guide-inline-button:hover {
+  background: var(--guide-accent-button-hover);
 }
 
 @media (max-width: 1180px) {
@@ -1421,4 +1473,70 @@
 
 [data-theme="dark"] .theme-option-desc {
   color: var(--muted) !important;
+}
+
+/* Dark mode interaction polish for settings navigation and native selects. */
+[data-theme="dark"] .settings-nav-item {
+  background: #262626;
+  border-color: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+[data-theme="dark"] .settings-nav-item:hover {
+  background: #2f343b;
+  border-color: rgba(88, 166, 255, 0.32);
+  box-shadow: none;
+}
+
+[data-theme="dark"] .settings-nav-item.is-active {
+  background: rgba(31, 78, 121, 0.38);
+  border-color: rgba(88, 166, 255, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(88, 166, 255, 0.1);
+}
+
+[data-theme="dark"] .settings-nav-item.is-active:hover {
+  background: rgba(37, 88, 136, 0.46);
+}
+
+[data-theme="dark"] .settings-nav-label {
+  color: var(--text);
+}
+
+[data-theme="dark"] .settings-nav-text {
+  color: var(--muted);
+}
+
+[data-theme="dark"] .settings-field input,
+[data-theme="dark"] .settings-field select,
+[data-theme="dark"] .settings-field textarea {
+  color-scheme: dark;
+  background: #232323;
+  border-color: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+}
+
+[data-theme="dark"] .settings-field input:hover,
+[data-theme="dark"] .settings-field select:hover,
+[data-theme="dark"] .settings-field textarea:hover {
+  background: #292929;
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+[data-theme="dark"] .settings-field input:focus,
+[data-theme="dark"] .settings-field select:focus,
+[data-theme="dark"] .settings-field textarea:focus {
+  background: #202833;
+  border-color: rgba(88, 166, 255, 0.7);
+  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.18);
+}
+
+[data-theme="dark"] .settings-field select option {
+  background: #242424;
+  color: var(--text);
+}
+
+[data-theme="dark"] .settings-field select option:checked,
+[data-theme="dark"] .settings-field select option:hover {
+  background: #334155;
+  color: #fff;
 }

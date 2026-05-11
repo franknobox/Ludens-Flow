@@ -745,12 +745,30 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
               onCommandChange={setMcpCommandInput}
               onArgsChange={setMcpArgsInput}
               onEnvChange={setMcpEnvInput}
-              onFillBlenderPreset={() => {
-                setMcpEngineInput("blender");
-                setMcpLabelInput("Blender MCP");
-                setMcpCommandInput("cmd");
-                setMcpArgsInput("/c\nuvx\nblender-mcp");
-                setMcpEnvInput("DISABLE_TELEMETRY=true");
+              onFillEnginePreset={(engine) => {
+                setMcpEngineInput(engine);
+                if (engine === "unity") {
+                  setMcpLabelInput("Unity MCP");
+                  setMcpCommandInput("cmd");
+                  setMcpArgsInput(
+                    "/c\nuvx\n--from\nmcpforunityserver\nmcp-for-unity\n--transport\nstdio",
+                  );
+                  setMcpEnvInput("DISABLE_TELEMETRY=true");
+                  return;
+                }
+                if (engine === "godot") {
+                  setMcpLabelInput("Godot MCP");
+                  setMcpCommandInput("cmd");
+                  setMcpArgsInput("/c\nnpx\n-y\n@coding-solo/godot-mcp");
+                  setMcpEnvInput("GODOT_PATH=");
+                  return;
+                }
+                if (engine === "blender") {
+                  setMcpLabelInput("Blender MCP");
+                  setMcpCommandInput("cmd");
+                  setMcpArgsInput("/c\nuvx\nblender-mcp");
+                  setMcpEnvInput("DISABLE_TELEMETRY=true");
+                }
               }}
               onAddConnection={() => {
                 void handleAddMcpConnection();
