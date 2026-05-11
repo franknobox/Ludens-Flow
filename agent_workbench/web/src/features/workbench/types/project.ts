@@ -10,6 +10,9 @@ export interface ProjectMeta {
   last_phase?: string;
   last_message_preview?: string;
   unity_root?: string;
+  target_engine?: string;
+  engine_profile?: string;
+  game_tags?: string[];
 }
 
 export interface ProjectWorkspace {
@@ -51,6 +54,8 @@ export interface ProjectSettingsResponse {
   agent_file_write_confirm_required?: boolean;
   model_routing?: Record<string, unknown>;
   mcp_connections?: McpConnectionConfig[];
+  target_engine?: string;
+  engine_profile?: string;
 }
 
 export interface UserProfileResponse {

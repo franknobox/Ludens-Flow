@@ -57,8 +57,7 @@ interface MainPanelProps {
   currentProjectId: string;
   currentAgent: AgentKey;
   projectName: string;
-  phaseLabel: string;
-  modeBadge: string;
+  gameTags: string[];
   readOnly: boolean;
   subtitle: string;
   title: string;
@@ -118,8 +117,7 @@ export function MainPanel(props: MainPanelProps) {
     currentProjectId,
     currentAgent,
     projectName,
-    phaseLabel,
-    modeBadge,
+    gameTags,
     readOnly,
     subtitle,
     title,
@@ -160,9 +158,11 @@ export function MainPanel(props: MainPanelProps) {
           </div>
           <div className="meta-stack">
             <div className="meta">
-              <span className="badge project">{projectName}</span>
-              <span className="badge phase">{phaseLabel}</span>
-              <span className="badge mode">{modeBadge}</span>
+              {gameTags.slice(0, 4).map((tag) => (
+                <span className="badge game-tag" key={tag}>
+                  {tag}
+                </span>
+              ))}
               {readOnly && currentView.type === "agent" ? (
                 <span className="badge readonly">只读 · {agentName(currentAgent)}</span>
               ) : null}

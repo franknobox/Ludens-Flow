@@ -10,8 +10,7 @@ interface RightSidebarProps {
   iterationCount: number;
   filesCount: number;
   modeLabel: string;
-  statusUpdated: string;
-  statusLastPhase: string;
+  engineLabel: string;
   statusNote: string;
   onSelectAgent: (agent: AgentKey) => void;
   activeProject?: ProjectMeta;
@@ -26,8 +25,7 @@ export function RightSidebar(props: RightSidebarProps) {
     iterationCount,
     filesCount,
     modeLabel,
-    statusUpdated,
-    statusLastPhase,
+    engineLabel,
     statusNote,
     onSelectAgent,
   } = props;
@@ -65,12 +63,8 @@ export function RightSidebar(props: RightSidebarProps) {
               <div className="status-value">{modeLabel}</div>
             </div>
             <div>
-              <div className="status-label">更新时间</div>
-              <div className="status-value">{statusUpdated}</div>
-            </div>
-            <div>
-              <div className="status-label">上个阶段</div>
-              <div className="status-value">{statusLastPhase}</div>
+              <div className="status-label">项目引擎</div>
+              <div className="status-value">{engineLabel}</div>
             </div>
           </div>
         </div>

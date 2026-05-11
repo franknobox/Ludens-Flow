@@ -40,6 +40,8 @@ export function updateCurrentProjectSettings(body: {
   agent_file_write_confirm_required?: boolean;
   model_routing?: Record<string, unknown>;
   mcp_connections?: McpConnectionConfig[];
+  target_engine?: string;
+  engine_profile?: string;
 }) {
   return fetchJson<ProjectSettingsResponse>("/api/projects/current/settings", {
     method: "POST",

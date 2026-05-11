@@ -133,7 +133,7 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
   const [activeSection, setActiveSection] =
     useState<SettingsSectionId>("general");
   const [labelInput, setLabelInput] = useState("");
-  const [kindInput, setKindInput] = useState("unity");
+  const [kindInput, setKindInput] = useState("generic");
   const [pathInput, setPathInput] = useState("");
   const [writableInput, setWritableInput] = useState(false);
   const [mcpEngineInput, setMcpEngineInput] =

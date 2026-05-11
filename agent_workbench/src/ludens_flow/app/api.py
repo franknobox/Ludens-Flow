@@ -71,6 +71,7 @@ from ludens_flow.core.paths import (
     restore_project,
     set_project_agent_file_write_enabled,
     set_project_agent_file_write_confirm_required,
+    set_project_engine_settings,
     set_project_model_routing,
     set_active_project_id,
     set_project_unity_root,
@@ -140,6 +141,8 @@ class ProjectSettingsRequest(BaseModel):
     agent_file_write_confirm_required: bool | None = None
     model_routing: dict | None = None
     mcp_connections: list[dict] | None = None
+    target_engine: str | None = None
+    engine_profile: str | None = None
     allow_clear_mcp_connections: bool = False
 
 
@@ -1036,6 +1039,8 @@ def post_current_project_settings(req: ProjectSettingsRequest):
         and req.agent_file_write_confirm_required is None
         and req.model_routing is None
         and req.mcp_connections is None
+        and req.target_engine is None
+        and req.engine_profile is None
     ):
         raise HTTPException(status_code=400, detail="No settings field provided.")
 
@@ -1056,6 +1061,17 @@ def post_current_project_settings(req: ProjectSettingsRequest):
             req.model_routing,
             project_id=project_id,
         )
+
+    if req.target_engine is not None or req.engine_profile is not None:
+        engine_settings = {"project_id": project_id}
+        if req.target_engine is not None:
+            engine_settings["target_engine"] = req.target_engine
+        if req.engine_profile is not None:
+            engine_settings["engine_profile"] = req.engine_profile
+        try:
+            set_project_engine_settings(**engine_settings)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     if req.mcp_connections is not None:
         existing_mcp_connections = get_project_mcp_connections(project_id=project_id)

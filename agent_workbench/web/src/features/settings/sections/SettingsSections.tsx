@@ -1183,7 +1183,7 @@ export function EngineConnectionsSection(props: EngineConnectionsSectionProps) {
                   value={labelInput}
                   disabled={busy}
                   onChange={(event) => onLabelChange(event.target.value)}
-                  placeholder="例如：主 Unity 编辑器"
+                  placeholder="例如：主引擎 MCP"
                 />
               </label>
               <label className="settings-field">
@@ -1271,7 +1271,7 @@ export function WorkspacesSection(props: WorkspacesSectionProps) {
     if (!workspaces.length) {
       return (
         <div className="settings-empty">
-          当前项目还没有工作区。你可以在右侧添加 Unity、Generic 或 Blender 工作区。
+          当前项目还没有工作区。你可以在右侧添加 Generic、Unity、Godot 或 Blender 工作区。
         </div>
       );
     }
@@ -1334,7 +1334,7 @@ export function WorkspacesSection(props: WorkspacesSectionProps) {
                   type="text"
                   value={labelInput}
                   onChange={(event) => onLabelChange(event.target.value)}
-                  placeholder="例如：主 Unity 工程"
+                  placeholder="例如：主游戏工程"
                 />
               </label>
 

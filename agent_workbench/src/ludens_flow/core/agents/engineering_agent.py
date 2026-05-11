@@ -11,6 +11,7 @@ from typing import Callable, Optional
 from ludens_flow.capabilities.artifacts.artifacts import read_artifact
 from ludens_flow.capabilities.mcp.adapter import ENGINE_TOOL_SCHEMAS
 from ludens_flow.core.agents.base import AgentResult, BaseAgent, CommitSpec
+from ludens_flow.core.engine_context import format_project_engine_for_prompt
 from ludens_flow.core.schemas import DISCUSS_RESPONSE_SCHEMA_TEXT, parse_discuss_payload
 from ludens_flow.core.state import LudensState
 from llm.provider import LLMConfig
@@ -134,6 +135,7 @@ class EngineeringAgent(BaseAgent):
         gdd = read_artifact("GDD", project_id=state.project_id)
         pm = read_artifact("PROJECT_PLAN", project_id=state.project_id)
         impl_plan = read_artifact("IMPLEMENTATION_PLAN", project_id=state.project_id)
+        engine_context = format_project_engine_for_prompt(state.project_id)
 
         detected_style = self._extract_style_preset(user_input)
         style = detected_style or state.style_preset or "None"
@@ -144,13 +146,14 @@ class EngineeringAgent(BaseAgent):
         base_prompt_text = (
             f"现有 GDD：\n{gdd}\n\n"
             f"项目计划：\n{pm}\n"
+            f"{engine_context}\n\n"
             f"{dev_mode_context}"
             f"目前已确认的工程方案预设：{style}\n\n"
             "请完成以下任务，默认使用简体中文回复，除非用户明确要求英文：\n"
             "1. 解释 A / B / C 三种工程方案选项，并推荐最适合当前项目的一种。\n"
             "2. 如果用户已经选择了方案，就在该方案内部继续讨论，不要从零开始。\n"
             "3. 讨论重点放在工程结构、实现路径、文件夹结构、模块边界、风险和调试成本上。\n"
-            "4. 在工程讨论阶段，不要给出逐类实现指令、文件骨架、精确脚本拆分或 Unity 编辑器逐步操作。\n"
+            "4. 在工程讨论阶段，不要给出逐类实现指令、文件骨架、精确脚本拆分或特定编辑器逐步操作。\n"
             "5. 除非用户明确要求进入后续执行阶段，否则不要主动建议具体文件名、代码脚手架或直接构建指令。\n"
             "6. 语气保持务实、清晰。\n"
             "7. MCP 工具模式："
@@ -223,16 +226,18 @@ class EngineeringAgent(BaseAgent):
         pm = read_artifact("PROJECT_PLAN", project_id=state.project_id)
         resolved_style = self._resolve_style_preset(state, user_input)
         style = resolved_style or getattr(state, "style_preset", None) or "Use the current discussion context"
+        engine_context = format_project_engine_for_prompt(state.project_id)
 
         prompt_text = (
             f"使用已确认的工程方案预设：{style}\n\n"
             f"GDD:\n{gdd}\n\n"
             f"项目计划：\n{pm}\n\n"
-            "请为 Unity 独立游戏开发者生成一份 IMPLEMENTATION_PLAN.md。\n"
+            f"{engine_context}\n\n"
+            "请为当前目标引擎下的小型独立游戏开发生成一份 IMPLEMENTATION_PLAN.md。\n"
             "默认使用简体中文撰写，除非用户明确要求英文。\n"
             "必须包含：\n"
-            "1. Unity 项目结构：给出完整、实用的 Assets 目录建议。\n"
-            "2. 系统级任务拆解：覆盖脚本、挂载对象、关键组件和实现顺序。\n"
+            "1. 项目结构：给出匹配当前目标引擎 / 工作区的完整、实用目录建议；未配置目标引擎时保持通用结构。\n"
+            "2. 系统级任务拆解：覆盖脚本或资源、关键对象 / 组件 / 节点、数据流和实现顺序。\n"
             "3. 关键风险与兜底方案：列出 2-3 个现实的实现风险和 Plan B。\n"
             "只输出纯 Markdown，不要添加额外包装话术。"
         )
@@ -328,11 +333,13 @@ class EngineeringAgent(BaseAgent):
         impl_plan = read_artifact("IMPLEMENTATION_PLAN", project_id=state.project_id)
         resolved_style = self._resolve_style_preset(state, user_input)
         style = resolved_style or state.style_preset or "\u5e38\u89c4"
+        engine_context = format_project_engine_for_prompt(state.project_id)
 
         prompt_text = (
             "你现在处于 DEV_COACHING 模式。只指导实现工作，不修改正式方案。\n"
             "默认使用简体中文回复，除非用户明确要求英文。\n"
             f"工程风格：{style}\n"
+            f"{engine_context}\n"
             f"实现计划：\n{impl_plan}\n\n"
             "MCP 工具模式："
             + ("开启" if mcp_mode else "关闭")
@@ -347,9 +354,9 @@ class EngineeringAgent(BaseAgent):
             "请使用以下结构回复：\n"
             "1. 用 2-3 句话确认你对用户问题的理解。\n"
             "2. 给出最推荐的实现路径。\n"
-            "3. 提供轻量级 Unity 执行指引。\n"
+            "3. 提供轻量级执行指引，并严格匹配当前目标引擎；未配置目标引擎时保持通用，不要默认 Unity。\n"
             "4. 提醒 1-2 个最可能踩坑的点。\n"
-            "5. 结尾询问用户是否需要更详细的 Unity 实操步骤，或一份可发给 coding agent 的完整指令。\n"
+            "5. 结尾询问用户是否需要更详细的目标引擎实操步骤，或一份可发给 coding agent 的完整指令。\n"
             "\n"
             "DEVLOG（可选）：\n"
             "如果这轮交流包含有价值的技术决策、架构取舍、关键问题，或值得写入项目记录的内容，"

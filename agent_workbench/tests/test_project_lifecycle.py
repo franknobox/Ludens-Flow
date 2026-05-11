@@ -34,6 +34,7 @@ from ludens_flow.capabilities.mcp.health import McpClientError
 from ludens_flow.capabilities.tools.registry import dispatch_tool_call, list_common_tools
 from ludens_flow.capabilities.skills.registry import build_enabled_skill_context
 from ludens_flow.core.agents.base import AgentResult, BaseAgent
+from ludens_flow.core.game_tags import extract_game_tags_from_gdd
 from ludens_flow.core.paths import (
     PROJECT_META_SCHEMA_VERSION,
     add_project_workspace,
@@ -45,6 +46,7 @@ from ludens_flow.core.paths import (
     get_logs_dir,
     get_project_dir,
     get_project_meta_file,
+    get_project_settings,
     list_active_projects,
     list_archived_projects,
     list_projects,
@@ -52,6 +54,10 @@ from ludens_flow.core.paths import (
     rename_project,
     restore_project,
     touch_project,
+)
+from ludens_flow.core.engine_context import (
+    format_project_engine_for_prompt,
+    resolve_project_engine_context,
 )
 from ludens_flow.core.state import (
     STATE_SCHEMA_VERSION,
@@ -1735,6 +1741,8 @@ class ProjectLifecycleTests(unittest.TestCase):
         self.assertEqual(current["project_id"], "alpha")
         self.assertTrue(current["agent_file_write_enabled"])
         self.assertEqual(current.get("model_routing"), {})
+        self.assertEqual(current.get("target_engine"), "")
+        self.assertEqual(current.get("engine_profile"), "")
 
         updated = api.post_current_project_settings(
             api.ProjectSettingsRequest(agent_file_write_enabled=False)
@@ -1744,6 +1752,98 @@ class ProjectLifecycleTests(unittest.TestCase):
 
         reloaded = api.get_current_project_settings()
         self.assertFalse(reloaded["agent_file_write_enabled"])
+
+    def test_project_engine_settings_are_project_scoped_and_prompt_ready(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+
+        updated = api.post_current_project_settings(
+            api.ProjectSettingsRequest(
+                target_engine="godot",
+                engine_profile="2D prototype, prefer GDScript.",
+            )
+        )
+
+        self.assertEqual(updated["target_engine"], "godot")
+        self.assertIn("GDScript", updated["engine_profile"])
+
+        reloaded = get_project_settings(project_id="alpha")
+        self.assertEqual(reloaded["target_engine"], "godot")
+
+        context = resolve_project_engine_context("alpha")
+        self.assertEqual(context["target_engine"], "godot")
+        self.assertEqual(context["source"], "explicit")
+
+        prompt_context = format_project_engine_for_prompt("alpha")
+        self.assertIn("Godot 项目思路", prompt_context)
+        self.assertIn("res://", prompt_context)
+        self.assertNotIn("Unity 小团队项目思路", prompt_context)
+
+    def test_project_engine_context_infers_single_engine_workspace(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+        godot_root = (self.workspace_root / "godot_project").resolve()
+        godot_root.mkdir(parents=True)
+
+        add_project_workspace(
+            str(godot_root),
+            project_id="alpha",
+            kind="godot",
+            workspace_id="godot-main",
+        )
+
+        context = resolve_project_engine_context("alpha")
+        self.assertEqual(context["target_engine"], "godot")
+        self.assertEqual(context["source"], "inferred")
+
+    def test_blender_workspace_does_not_set_project_engine(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+        blender_root = (self.workspace_root / "blender_assets").resolve()
+        blender_root.mkdir(parents=True)
+
+        add_project_workspace(
+            str(blender_root),
+            project_id="alpha",
+            kind="blender",
+            workspace_id="blender-main",
+        )
+
+        context = resolve_project_engine_context("alpha")
+        self.assertEqual(context["target_engine"], "generic")
+        self.assertEqual(context["source"], "fallback")
+
+        prompt_context = format_project_engine_for_prompt("alpha")
+        self.assertIn("通用小型游戏 demo", prompt_context)
+        self.assertIn("不要默认输出 Unity", prompt_context)
+
+    def test_gdd_game_tags_are_extracted_and_persisted_on_project_meta(self):
+        tags = extract_game_tags_from_gdd(
+            """
+            # GDD
+            类型：类 PVZ 塔防 / 校园题材
+            核心体验：围绕深圳大学选课系统和社团 Buff 做关卡变化。
+            美术方向：轻量像素风。
+            """
+        )
+        self.assertEqual(tags[:4], ["类 PVZ", "塔防", "校园题材", "选课系统"])
+
+        create_project("alpha")
+        touch_project("alpha", game_tags=tags)
+        project = next(item for item in list_projects() if item["id"] == "alpha")
+        self.assertEqual(project["game_tags"], tags)
+
+    def test_existing_gdd_backfills_game_tags_when_project_is_listed(self):
+        create_project("alpha")
+        (get_project_dir("alpha") / "GDD.md").write_text(
+            "类型：校园塔防\n核心体验：围绕选课系统和社团 Buff 推进关卡。",
+            encoding="utf-8",
+        )
+
+        project = next(item for item in list_projects() if item["id"] == "alpha")
+        self.assertEqual(project["game_tags"], ["塔防", "校园题材", "选课系统", "社团 Buff"])
+
+        saved_meta = json.loads(
+            get_project_meta_file("alpha").read_text(encoding="utf-8")
+        )
+        self.assertEqual(saved_meta["game_tags"], project["game_tags"])
 
     def test_api_can_update_project_model_routing(self):
         api.post_project(api.ProjectRequest(project_id="alpha"))

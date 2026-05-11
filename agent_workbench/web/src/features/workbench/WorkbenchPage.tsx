@@ -53,23 +53,7 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
   } = controller;
 
   const phaseLabel = PHASE_LABEL[model.phase] || model.phase || "-";
-
-  const modeBadge =
-    currentView.type === "github"
-      ? "GitHub 可视化"
-      : currentView.type === "aigc"
-      ? "AIGC 集成"
-      : currentView.type === "copywriting"
-      ? "文案加工台"
-      : currentView.type === "game-model"
-      ? "游戏内模型接入"
-      : currentView.type === "skills"
-      ? "Skills 能力"
-      : currentView.type === "mcp"
-      ? "MCP 集成"
-      : currentView.type === "agent"
-      ? "Agent 对话"
-      : "文件查看";
+  const engineLabel = engineStatusLabel(activeProject?.target_engine);
 
   return (
     <div className="app">
@@ -112,8 +96,7 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
           currentProjectId={model.project_id}
           currentAgent={model.current_agent}
           projectName={projectName}
-          phaseLabel={phaseLabel}
-          modeBadge={modeBadge}
+          gameTags={activeProject?.game_tags || []}
           readOnly={readOnly}
           subtitle={subtitle}
           title={title}
@@ -153,12 +136,26 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
         iterationCount={model.iteration_count || 0}
         filesCount={model.files.length}
         modeLabel={readOnly ? "只读" : "可写"}
-        statusUpdated={projectUpdated(activeProject)}
-        statusLastPhase={activeProject?.last_phase || "-"}
+        engineLabel={engineLabel}
         statusNote={statusNote}
         activeProject={activeProject}
         onSelectAgent={selectAgent}
       />
     </div>
   );
+}
+
+function engineStatusLabel(targetEngine?: string): string {
+  switch ((targetEngine || "").toLowerCase()) {
+    case "unity":
+      return "Unity";
+    case "godot":
+      return "Godot";
+    case "unreal":
+      return "Unreal Engine";
+    case "generic":
+      return "通用";
+    default:
+      return "通用";
+  }
 }

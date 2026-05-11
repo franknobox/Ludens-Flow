@@ -461,6 +461,11 @@
   color: var(--green);
 }
 
+.badge.game-tag {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
 .badge.phase {
   background: var(--primary-soft);
   color: #0b4cc2;
