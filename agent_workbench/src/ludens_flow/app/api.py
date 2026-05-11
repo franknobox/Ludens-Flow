@@ -39,9 +39,13 @@ from ludens_flow.capabilities.paths import (
     set_project_mcp_connections,
 )
 from ludens_flow.capabilities.skills.registry import (
+    create_skill_draft,
     delete_skill,
     get_project_skills,
+    import_external_skill_bundle,
+    import_external_skill_github,
     import_external_skill,
+    import_external_skill_zip,
     list_skills,
     set_project_skill_enabled,
 )
@@ -153,8 +157,18 @@ class PermissionDecisionRequest(BaseModel):
 
 
 class SkillImportRequest(BaseModel):
-    manifest: dict
+    manifest: dict | None = None
     prompt: str | None = None
+    files: list[dict] | None = None
+    zip_data_url: str | None = None
+    github_url: str | None = None
+
+
+class SkillDraftRequest(BaseModel):
+    manifest: dict
+    prompt: str
+    source_agent: str | None = None
+    reason: str | None = None
 
 
 class ProjectSkillToggleRequest(BaseModel):
@@ -442,6 +456,10 @@ def _summarize_tool_call(tool_name: str, args: dict) -> str:
     if tool_name == "workspace_delete_file":
         target_path = str(args.get("path", "") or "").strip() or "(未提供路径)"
         return f"删除文件：{target_path}"
+    if tool_name == "skill_create_draft":
+        manifest = args.get("manifest", {}) if isinstance(args, dict) else {}
+        name = str(manifest.get("name", "") or "").strip() if isinstance(manifest, dict) else ""
+        return f"创建 Skill 草稿：{name or '(未命名)'}"
     if tool_name == "unity_list_dir":
         relative_path = str(args.get("relative_path", "") or "").strip() or "/"
         return f"列出目录：{relative_path}"
@@ -470,6 +488,7 @@ def _summarize_tool_result(tool_name: str, result: str) -> str:
         "unity_list_dir",
         "unity_find_files",
         "workspace_read_files_batch",
+        "skill_create_draft",
         "engine_list_scene",
         "engine_read_console",
     }:
@@ -1136,10 +1155,35 @@ def get_skill_catalog():
 @app.post("/api/skills/import")
 def post_import_skill(req: SkillImportRequest):
     try:
-        skill = import_external_skill(req.manifest, prompt=req.prompt)
+        if req.github_url:
+            skill = import_external_skill_github(req.github_url)
+        elif req.zip_data_url:
+            skill = import_external_skill_zip(req.zip_data_url)
+        elif req.files:
+            skill = import_external_skill_bundle(req.files)
+        elif req.manifest is not None:
+            skill = import_external_skill(req.manifest, prompt=req.prompt)
+        else:
+            raise ValueError("Skill import requires manifest, files, zip_data_url, or github_url.")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"skill": skill, "skills": list_skills()}
+
+
+@app.post("/api/skills/drafts")
+def post_skill_draft(req: SkillDraftRequest):
+    project_id = resolve_project_id()
+    try:
+        skill = create_skill_draft(
+            req.manifest,
+            prompt=req.prompt,
+            project_id=project_id,
+            source_agent=req.source_agent,
+            reason=req.reason,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"draft_skill": skill}
 
 
 @app.delete("/api/skills/{skill_id}")

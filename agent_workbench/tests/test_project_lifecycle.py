@@ -32,6 +32,7 @@ from ludens_flow.capabilities.mcp.adapter import ENGINE_TOOL_SCHEMAS
 from ludens_flow.capabilities.mcp.adapters import get_engine_adapter
 from ludens_flow.capabilities.mcp.health import McpClientError
 from ludens_flow.capabilities.tools.registry import dispatch_tool_call, list_common_tools
+from ludens_flow.capabilities.skills.registry import build_enabled_skill_context
 from ludens_flow.core.agents.base import AgentResult, BaseAgent
 from ludens_flow.core.paths import (
     PROJECT_META_SCHEMA_VERSION,
@@ -535,6 +536,81 @@ class ProjectLifecycleTests(unittest.TestCase):
             "external-unity-helper",
             api.get_current_project_skills()["enabled_skill_ids"],
         )
+
+    def test_api_imports_skill_package_with_assets_and_runtime_context(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+        package_files = [
+            {
+                "path": "bundle/my-skill/skill.json",
+                "text": json.dumps(
+                    {
+                        "id": "dialogue-style",
+                        "name": "Dialogue Style",
+                        "description": "Dialogue writing conventions.",
+                        "agents": ["design"],
+                        "tags": ["copywriting"],
+                    }
+                ),
+            },
+            {
+                "path": "bundle/my-skill/prompt.md",
+                "text": "Use concise character voice rules.",
+            },
+            {
+                "path": "bundle/my-skill/examples/sample.md",
+                "text": "Example line.",
+            },
+            {
+                "path": "bundle/my-skill/ignored.txt",
+                "text": "Should not be installed.",
+            },
+        ]
+
+        imported = api.post_import_skill(api.SkillImportRequest(files=package_files))
+        self.assertIn("dialogue-style", {item["id"] for item in imported["skills"]})
+        skill_dir = self.workspace_root / "skills" / "installed" / "dialogue-style"
+        self.assertTrue((skill_dir / "prompt.md").exists())
+        self.assertTrue((skill_dir / "examples" / "sample.md").exists())
+        self.assertFalse((skill_dir / "ignored.txt").exists())
+
+        api.post_current_project_skill_toggle(
+            "dialogue-style",
+            api.ProjectSkillToggleRequest(enabled=True),
+        )
+        context = build_enabled_skill_context(project_id="alpha", agent_key="design")
+        self.assertIn("Dialogue Style", context)
+        self.assertIn("Use concise character voice rules.", context)
+        self.assertEqual(
+            build_enabled_skill_context(project_id="alpha", agent_key="engineering"),
+            "",
+        )
+
+    def test_skill_create_draft_tool_writes_draft_not_installed_skill(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+
+        result = dispatch_tool_call(
+            "skill_create_draft",
+            {
+                "manifest": {
+                    "id": "repeat-debug-flow",
+                    "name": "Repeat Debug Flow",
+                    "agents": ["engineering"],
+                    "tags": ["debug"],
+                },
+                "prompt": "When debugging, inspect logs before proposing edits.",
+                "source_agent": "engineering",
+                "reason": "Repeated successful workflow.",
+            },
+            project_id="alpha",
+        )
+
+        self.assertIn("repeat-debug-flow", result)
+        draft_dir = self.workspace_root / "skills" / "drafts" / "repeat-debug-flow"
+        installed_dir = self.workspace_root / "skills" / "installed" / "repeat-debug-flow"
+        self.assertTrue((draft_dir / "skill.json").exists())
+        self.assertTrue((draft_dir / "prompt.md").exists())
+        self.assertTrue((draft_dir / "draft_meta.json").exists())
+        self.assertFalse(installed_dir.exists())
 
     def test_api_returns_404_when_deleting_missing_skill(self):
         api.post_project(api.ProjectRequest(project_id="alpha"))

@@ -3,8 +3,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   deleteSkill,
   getSkillsCatalog,
+  importSkillGithub,
   importSkillManifest,
+  importSkillPackageFiles,
+  importSkillZip,
 } from "../api";
+import type { SkillPackageFile } from "../api";
 import type { SkillAgentScope, SkillManifest } from "../types";
 
 const AGENT_OPTIONS: Array<{ value: SkillAgentScope; label: string }> = [
@@ -14,7 +18,8 @@ const AGENT_OPTIONS: Array<{ value: SkillAgentScope; label: string }> = [
   { value: "review", label: "Review" },
 ];
 
-function sourceLabel(): string {
+function sourceLabel(source: string): string {
+  if (source === "draft") return "草稿";
   return "外部";
 }
 
@@ -27,12 +32,24 @@ function readFileText(file: File): Promise<string> {
   });
 }
 
+function readFileDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error(`读取文件失败：${file.name}`));
+    reader.readAsDataURL(file);
+  });
+}
+
 export function SkillsSettingsSection() {
   const [skills, setSkills] = useState<SkillManifest[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const [selectedSkillId, setSelectedSkillId] = useState("");
+  const [githubUrl, setGithubUrl] = useState("");
   const skillJsonInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
+  const zipInputRef = useRef<HTMLInputElement>(null);
 
   const grouped = useMemo(
     () =>
@@ -43,6 +60,10 @@ export function SkillsSettingsSection() {
         return acc;
       }, {}),
     [skills],
+  );
+  const selectedSkill = useMemo(
+    () => skills.find((skill) => skill.id === selectedSkillId) || skills[0],
+    [selectedSkillId, skills],
   );
 
   const refresh = async () => {
@@ -86,7 +107,8 @@ export function SkillsSettingsSection() {
     if (!files?.length) return;
     setMessage("");
     try {
-      const skillJson = Array.from(files).find((file) =>
+      const fileList = Array.from(files);
+      const skillJson = fileList.find((file) =>
         file.webkitRelativePath
           ? file.webkitRelativePath.endsWith("/skill.json")
           : file.name === "skill.json",
@@ -94,18 +116,50 @@ export function SkillsSettingsSection() {
       if (!skillJson) {
         throw new Error("所选文件夹中没有找到 skill.json。");
       }
-      const skillDir = skillJson.webkitRelativePath.replace(/skill\.json$/, "");
-      const promptFile = Array.from(files).find((file) =>
-        file.webkitRelativePath
-          ? file.webkitRelativePath === `${skillDir}prompt.md`
-          : file.name === "prompt.md",
-      );
-      const prompt = promptFile ? await readFileText(promptFile) : undefined;
-      await importFromSkillJson(skillJson, prompt);
+      const packageFiles: SkillPackageFile[] = [];
+      for (const file of fileList) {
+        const path = file.webkitRelativePath || file.name;
+        packageFiles.push({
+          path,
+          data_url: await readFileDataUrl(file),
+        });
+      }
+      const response = await importSkillPackageFiles(packageFiles);
+      setSkills(response.skills);
+      setMessage(`已导入 ${skillJson.webkitRelativePath || skillJson.name}`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
       if (folderInputRef.current) folderInputRef.current.value = "";
+    }
+  };
+
+  const handleZipInput = async (files: FileList | null) => {
+    const file = files?.[0];
+    if (!file) return;
+    setMessage("");
+    try {
+      const response = await importSkillZip(await readFileDataUrl(file));
+      setSkills(response.skills);
+      setMessage(`已导入 ${file.name}`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      if (zipInputRef.current) zipInputRef.current.value = "";
+    }
+  };
+
+  const handleGithubImport = async () => {
+    const url = githubUrl.trim();
+    if (!url) return;
+    setMessage("");
+    try {
+      const response = await importSkillGithub(url);
+      setSkills(response.skills);
+      setGithubUrl("");
+      setMessage("已从 GitHub 导入 Skill。");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
     }
   };
 
@@ -135,13 +189,20 @@ export function SkillsSettingsSection() {
                 {Object.entries(grouped).map(([source, items]) => (
                   <section key={source} className="settings-skill-group">
                     <div className="tool-group-head">
-                      <h3>{sourceLabel()}</h3>
+                      <h3>{sourceLabel(source)}</h3>
                       <span className="settings-chip">{items.length} 项</span>
                     </div>
                     <div className="settings-skill-list">
                       {items.map((skill) => (
                         <article key={skill.id} className="settings-skill-card">
-                          <div>
+                          <div
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => setSelectedSkillId(skill.id)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") setSelectedSkillId(skill.id);
+                            }}
+                          >
                             <div className="skill-card-title-row">
                               <h3>{skill.name}</h3>
                               <span className="settings-chip subtle">v{skill.version}</span>
@@ -201,6 +262,15 @@ export function SkillsSettingsSection() {
                   void handleFolderInput(event.target.files);
                 }}
               />
+              <input
+                ref={zipInputRef}
+                type="file"
+                accept=".zip,application/zip"
+                hidden
+                onChange={(event) => {
+                  void handleZipInput(event.target.files);
+                }}
+              />
 
               <div className="settings-skill-import-actions">
                 <button
@@ -217,6 +287,30 @@ export function SkillsSettingsSection() {
                 >
                   选择 Skill 文件夹
                 </button>
+                <button
+                  type="button"
+                  className="settings-pill-button"
+                  onClick={() => zipInputRef.current?.click()}
+                >
+                  选择 zip
+                </button>
+              </div>
+
+              <div className="settings-inline-row">
+                <input
+                  value={githubUrl}
+                  onChange={(event) => setGithubUrl(event.target.value)}
+                  placeholder="GitHub 仓库 URL"
+                />
+                <button
+                  type="button"
+                  className="settings-pill-button"
+                  onClick={() => {
+                    void handleGithubImport();
+                  }}
+                >
+                  导入
+                </button>
               </div>
 
               <div className="settings-skill-format">
@@ -224,6 +318,7 @@ export function SkillsSettingsSection() {
                 <code>
                   skills/example-skill/skill.json
                   {"\n"}skills/example-skill/prompt.md
+                  {"\n"}skills/example-skill/assets/
                   {"\n"}skills/example-skill/examples/
                 </code>
               </div>
@@ -235,18 +330,33 @@ export function SkillsSettingsSection() {
                 <code>
                   {JSON.stringify(
                     {
-                      id: "unity-helper",
-                      name: "Unity Helper",
+                      id: "engine-helper",
+                      name: "Engine Helper",
                       description: "Skill description",
                       version: "0.1.0",
                       agents: AGENT_OPTIONS.map((item) => item.value),
-                      tags: ["Unity"],
+                      tags: ["Engine"],
                     },
                     null,
                     2,
                   )}
                 </code>
               </div>
+
+              {selectedSkill ? (
+                <div className="settings-skill-format">
+                  <strong>当前详情</strong>
+                  <code>
+                    {[
+                      `id: ${selectedSkill.id}`,
+                      `name: ${selectedSkill.name}`,
+                      `source: ${sourceLabel(selectedSkill.source)}`,
+                      `agents: ${selectedSkill.agents.join(", ")}`,
+                      `tags: ${selectedSkill.tags.join(", ") || "-"}`,
+                    ].join("\n")}
+                  </code>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>

@@ -248,6 +248,13 @@
   gap: 8px;
 }
 
+.settings-inline-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
 .settings-skill-format,
 .settings-skill-message {
   border-radius: 16px;

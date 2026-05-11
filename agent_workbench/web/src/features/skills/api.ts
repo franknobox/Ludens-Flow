@@ -89,6 +89,38 @@ export function importSkillManifest(
   });
 }
 
+export interface SkillPackageFile {
+  path: string;
+  data_url?: string;
+  text?: string;
+}
+
+export function importSkillPackageFiles(
+  files: SkillPackageFile[],
+): Promise<SkillCatalogResponse> {
+  return fetchJson<SkillCatalogResponse>("/api/skills/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ files }),
+  });
+}
+
+export function importSkillZip(zipDataUrl: string): Promise<SkillCatalogResponse> {
+  return fetchJson<SkillCatalogResponse>("/api/skills/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ zip_data_url: zipDataUrl }),
+  });
+}
+
+export function importSkillGithub(githubUrl: string): Promise<SkillCatalogResponse> {
+  return fetchJson<SkillCatalogResponse>("/api/skills/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ github_url: githubUrl }),
+  });
+}
+
 export function deleteSkill(skillId: string): Promise<SkillCatalogResponse> {
   return fetchJson<SkillCatalogResponse>(`/api/skills/${encodeURIComponent(skillId)}`, {
     method: "DELETE",

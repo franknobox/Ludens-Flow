@@ -210,8 +210,16 @@ def get_installed_skills_dir():
     return get_skills_root_dir() / "installed"
 
 
+def get_draft_skills_dir():
+    return get_skills_root_dir() / "drafts"
+
+
 def get_skill_install_dir(skill_id: str):
     return get_installed_skills_dir() / str(skill_id)
+
+
+def get_skill_draft_dir(skill_id: str):
+    return get_draft_skills_dir() / str(skill_id)
 
 
 def get_project_skill_settings_file(project_id: str | None = None):
@@ -226,10 +234,12 @@ def get_project_skill_settings_file(project_id: str | None = None):
 __all__ = [
     "SKILL_SETTINGS_FILE",
     "SUPPORTED_MCP_ENGINES",
+    "get_draft_skills_dir",
     "get_installed_skills_dir",
     "get_project_skill_settings_file",
     "get_project_github_repo",
     "get_project_mcp_connections",
+    "get_skill_draft_dir",
     "get_skill_install_dir",
     "get_skills_root_dir",
     "set_project_github_repo",

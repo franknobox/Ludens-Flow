@@ -13,6 +13,7 @@ from ludens_flow.capabilities.artifacts.artifacts import (
     write_artifact,
 )
 from ludens_flow.capabilities.context.prompt_templates import load_prompt_template
+from ludens_flow.capabilities.skills.registry import build_enabled_skill_context
 from llm.modelrouter import resolve_model_config
 from ludens_flow.core.state import LudensState, save_state, write_trace_log
 from ludens_flow.core.router import ludens_router_logic_with_action, Phase, phase_to_agent_name
@@ -272,6 +273,21 @@ def run_agent_step(
             user_persona_block = profile_instruction + "\n\n" + profile_text
         else:
             user_persona_block = profile_instruction
+
+        try:
+            skill_context = build_enabled_skill_context(
+                project_id=state.project_id,
+                agent_key=getattr(agent, "agent_key", "base"),
+            )
+            if skill_context:
+                user_persona_block = (
+                    user_persona_block
+                    + "\n\n---\n\n[PROJECT_SKILLS]\n"
+                    + skill_context
+                    + "\n[/PROJECT_SKILLS]"
+                )
+        except Exception as e:
+            logger.warning("Failed to load project Skills context: %s", e)
 
         # 按 mode 分发到对应能力入口。
         result = None

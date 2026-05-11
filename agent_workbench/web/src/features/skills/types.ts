@@ -1,6 +1,6 @@
 export type SkillAgentScope = "design" | "pm" | "engineering" | "review";
 
-export type SkillSource = "external";
+export type SkillSource = "external" | "draft";
 
 export interface SkillManifest {
   id: string;
