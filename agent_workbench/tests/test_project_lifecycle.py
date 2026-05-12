@@ -632,7 +632,7 @@ class ProjectLifecycleTests(unittest.TestCase):
             (skill_dir / "prompt.md").read_text(encoding="utf-8"),
         )
 
-    def test_skill_create_draft_tool_writes_draft_not_installed_skill(self):
+    def test_skill_create_draft_tool_writes_self_learned_installed_skill(self):
         api.post_project(api.ProjectRequest(project_id="alpha"))
 
         result = dispatch_tool_call(
@@ -654,10 +654,19 @@ class ProjectLifecycleTests(unittest.TestCase):
         self.assertIn("repeat-debug-flow", result)
         draft_dir = self.workspace_root / "skills" / "drafts" / "repeat-debug-flow"
         installed_dir = self.workspace_root / "skills" / "installed" / "repeat-debug-flow"
-        self.assertTrue((draft_dir / "skill.json").exists())
-        self.assertTrue((draft_dir / "prompt.md").exists())
-        self.assertTrue((draft_dir / "draft_meta.json").exists())
-        self.assertFalse(installed_dir.exists())
+        self.assertFalse(draft_dir.exists())
+        self.assertTrue((installed_dir / "skill.json").exists())
+        self.assertTrue((installed_dir / "prompt.md").exists())
+        self.assertTrue((installed_dir / "self_meta.json").exists())
+
+        manifest = json.loads((installed_dir / "skill.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["source"], "self")
+
+        catalog = api.get_skill_catalog()["skills"]
+        self.assertIn(
+            "repeat-debug-flow",
+            {item["id"] for item in catalog if item.get("source") == "self"},
+        )
 
     def test_api_returns_404_when_deleting_missing_skill(self):
         api.post_project(api.ProjectRequest(project_id="alpha"))

@@ -19,8 +19,20 @@ const AGENT_OPTIONS: Array<{ value: SkillAgentScope; label: string }> = [
 ];
 
 function sourceLabel(source: string): string {
-  if (source === "draft") return "草稿";
+  if (source === "self" || source === "draft") return "自我沉淀";
   return "外部";
+}
+
+function sourceClass(source: string): string {
+  return source === "self" || source === "draft" ? " self" : "";
+}
+
+function displayTags(skill: SkillManifest): string[] {
+  const tags = [...skill.tags];
+  if ((skill.source === "self" || skill.source === "draft") && !tags.includes("自我沉淀")) {
+    tags.unshift("自我沉淀");
+  }
+  return tags;
 }
 
 function readFileText(file: File): Promise<string> {
@@ -48,6 +60,7 @@ export function SkillsSettingsSection() {
   const [messageKind, setMessageKind] = useState<"success" | "error">("success");
   const [selectedSkillId, setSelectedSkillId] = useState("");
   const [githubUrl, setGithubUrl] = useState("");
+  const [selfCaptureEnabled, setSelfCaptureEnabled] = useState(false);
   const skillJsonInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const zipInputRef = useRef<HTMLInputElement>(null);
@@ -188,7 +201,7 @@ export function SkillsSettingsSection() {
           <div>
             <h2 className="settings-card-title">Skills 管理</h2>
             <p className="settings-card-subtitle">
-              导入外部 Skill，并在工作台中按项目启用。
+              管理外部导入和自我沉淀的 Skill，并在工作台中按项目启用。
             </p>
           </div>
           <span className="settings-chip">{skills.length} 项</span>
@@ -196,6 +209,23 @@ export function SkillsSettingsSection() {
 
         <div className="settings-skills-layout">
           <div className="settings-skills-list-area">
+            <div className={`settings-skill-self-toggle${selfCaptureEnabled ? " is-on" : ""}`}>
+              <div>
+                <strong>自我沉淀</strong>
+                <span>
+                  开启后进入沉淀状态。
+                </span>
+              </div>
+              <label className="settings-toggle">
+                <input
+                  type="checkbox"
+                  checked={selfCaptureEnabled}
+                  onChange={(event) => setSelfCaptureEnabled(event.target.checked)}
+                />
+                <span>{selfCaptureEnabled ? "已开启" : "未开启"}</span>
+              </label>
+            </div>
+
             {loading ? (
               <div className="settings-empty">正在加载 Skills...</div>
             ) : !skills.length ? (
@@ -227,6 +257,9 @@ export function SkillsSettingsSection() {
                             <div className="skill-card-title-row">
                               <h3>{skill.name}</h3>
                               <span className="settings-chip subtle">v{skill.version}</span>
+                              <span className={`settings-chip source${sourceClass(skill.source)}`}>
+                                {sourceLabel(skill.source)}
+                              </span>
                             </div>
                             <p>{skill.description}</p>
                             <div className="skill-card-meta">
@@ -235,7 +268,7 @@ export function SkillsSettingsSection() {
                                   {agent}
                                 </span>
                               ))}
-                              {skill.tags.map((tag) => (
+                              {displayTags(skill).map((tag) => (
                                 <span key={tag} className="settings-chip subtle">
                                   {tag}
                                 </span>
@@ -347,7 +380,7 @@ export function SkillsSettingsSection() {
                       `name: ${selectedSkill.name}`,
                       `source: ${sourceLabel(selectedSkill.source)}`,
                       `agents: ${selectedSkill.agents.join(", ")}`,
-                      `tags: ${selectedSkill.tags.join(", ") || "-"}`,
+                      `tags: ${displayTags(selectedSkill).join(", ") || "-"}`,
                     ].join("\n")}
                   </code>
                 </div>

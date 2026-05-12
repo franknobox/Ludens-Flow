@@ -1199,7 +1199,7 @@ def post_skill_draft(req: SkillDraftRequest):
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"draft_skill": skill}
+    return {"self_skill": skill}
 
 
 @app.delete("/api/skills/{skill_id}")

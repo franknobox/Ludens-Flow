@@ -182,6 +182,54 @@
   margin-bottom: 0;
 }
 
+.settings-skill-self-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 42px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(29, 39, 52, 0.08);
+  background: rgba(247, 250, 253, 0.72);
+}
+
+.settings-skill-self-toggle.is-on {
+  border-color: rgba(22, 99, 255, 0.22);
+  background: rgba(235, 241, 255, 0.72);
+}
+
+.settings-skill-self-toggle > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.settings-skill-self-toggle strong {
+  display: inline;
+  flex: 0 0 auto;
+  color: #1f2b3c;
+  font-size: 13px;
+}
+
+.settings-skill-self-toggle > div > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #6b7b8f;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.settings-skill-self-toggle .settings-toggle {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 6px 10px;
+  border-radius: 10px;
+}
+
 .settings-skills-layout {
   height: 100%;
   min-height: 0;
@@ -197,7 +245,8 @@
 
 .settings-skills-list-area {
   display: grid;
-  grid-template-rows: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 10px;
   overflow: hidden;
 }
 
@@ -243,6 +292,18 @@
   border: 1px solid rgba(22, 99, 255, 0.18);
   border-radius: 14px;
   background: rgba(235, 241, 255, 0.72);
+}
+
+.settings-chip.source {
+  border-color: rgba(29, 39, 52, 0.12);
+  background: rgba(247, 250, 253, 0.85);
+  color: #64748b;
+}
+
+.settings-chip.source.self {
+  border-color: rgba(22, 99, 255, 0.2);
+  background: rgba(226, 236, 255, 0.8);
+  color: #1663ff;
 }
 
 .settings-skill-card h3 {
@@ -1641,6 +1702,36 @@
 [data-theme="dark"] .settings-skill-card.is-active {
   background: rgba(255, 255, 255, 0.035);
   border-color: rgba(255, 255, 255, 0.28);
+}
+
+[data-theme="dark"] .settings-skill-self-toggle {
+  border-color: var(--line);
+  background: #262626;
+}
+
+[data-theme="dark"] .settings-skill-self-toggle.is-on {
+  border-color: rgba(88, 166, 255, 0.42);
+  background: rgba(31, 41, 55, 0.72);
+}
+
+[data-theme="dark"] .settings-skill-self-toggle strong {
+  color: var(--text);
+}
+
+[data-theme="dark"] .settings-skill-self-toggle > div > span {
+  color: var(--muted);
+}
+
+[data-theme="dark"] .settings-chip.source {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: var(--muted);
+}
+
+[data-theme="dark"] .settings-chip.source.self {
+  background: rgba(88, 166, 255, 0.16);
+  border-color: rgba(88, 166, 255, 0.34);
+  color: #8ec5ff;
 }
 
 [data-theme="dark"] .settings-skills-import-area {

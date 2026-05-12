@@ -23,7 +23,7 @@ def skill_create_draft(
         source_agent=source_agent,
         reason=reason,
     )
-    return json.dumps({"draft_skill": skill}, ensure_ascii=False, indent=2)
+    return json.dumps({"self_skill": skill}, ensure_ascii=False, indent=2)
 
 
 SKILL_CREATE_DRAFT_TOOL_SCHEMA = {
@@ -31,8 +31,8 @@ SKILL_CREATE_DRAFT_TOOL_SCHEMA = {
     "function": {
         "name": "skill_create_draft",
         "description": (
-            "Create a draft Skill from a repeated useful workflow. "
-            "Drafts are not enabled until the user reviews and installs them."
+            "Create a self-learned Skill from a repeated useful workflow. "
+            "The Skill is installed globally, but each project still decides whether to enable it."
         ),
         "parameters": {
             "type": "object",

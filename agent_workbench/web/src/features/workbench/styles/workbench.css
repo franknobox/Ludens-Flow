@@ -1721,6 +1721,18 @@ input[type="file"] {
   color: #6b7b8f;
 }
 
+.skills-pill.source.self {
+  border-color: rgba(22, 99, 255, 0.2);
+  background: rgba(226, 236, 255, 0.78);
+  color: #1663ff;
+}
+
+[data-theme="dark"] .skills-pill.source.self {
+  background: rgba(88, 166, 255, 0.16);
+  border-color: rgba(88, 166, 255, 0.34);
+  color: #8ec5ff;
+}
+
 .skill-switch {
   display: inline-flex;
   align-items: center;

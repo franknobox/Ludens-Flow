@@ -57,6 +57,13 @@ def _draft_skill_dir(skill_id: str) -> Path:
     return get_skill_draft_dir(safe_id)
 
 
+def _skill_prompt_path(skill_id: str) -> Path:
+    installed = _skill_dir(skill_id) / "prompt.md"
+    if installed.exists():
+        return installed
+    return _draft_skill_dir(skill_id) / "prompt.md"
+
+
 def _normalize_skill_id(skill_id: Any, fallback_name: str = "") -> str:
     normalized = _slugify(str(skill_id or "").strip())
     if not normalized:
@@ -88,6 +95,13 @@ def _normalize_tags(raw: Any) -> list[str]:
     return tags[:12]
 
 
+def _normalize_skill_source(source: Any) -> str:
+    raw = str(source or "external").strip().lower()
+    if raw in {"self", "draft", "internal", "learned", "沉淀"}:
+        return "self"
+    return "external"
+
+
 def normalize_skill_manifest(raw: Any, *, source: str = "external") -> dict[str, Any]:
     if not isinstance(raw, dict):
         raise ValueError("Skill manifest must be a JSON object.")
@@ -103,7 +117,7 @@ def normalize_skill_manifest(raw: Any, *, source: str = "external") -> dict[str,
         "description": str(raw.get("description") or "").strip()
         or "外部导入的 Skill 能力包。",
         "version": str(raw.get("version") or "0.1.0").strip() or "0.1.0",
-        "source": source,
+        "source": _normalize_skill_source(source),
         "agents": _normalize_agents(raw.get("agents") or raw.get("scope")),
         "tags": _normalize_tags(raw.get("tags")),
         "updated_at": _now_iso(),
@@ -212,7 +226,7 @@ def _relative_to_skill_root(path: str, root_prefix: str) -> str:
 def _safe_copy_package_file(target_dir: Path, rel_path: str, data: bytes) -> None:
     rel = _normalize_package_path(rel_path)
     first = rel.split("/", 1)[0]
-    if rel not in {"skill.json", "prompt.md", "SKILL.md", "draft_meta.json"} and first not in ALLOWED_PACKAGE_ROOTS:
+    if rel not in {"skill.json", "prompt.md", "SKILL.md", "draft_meta.json", "self_meta.json"} and first not in ALLOWED_PACKAGE_ROOTS:
         return
     if rel in {"skill.json", "SKILL.md"}:
         return
@@ -279,6 +293,18 @@ def list_skills() -> list[dict[str, Any]]:
             if not manifest:
                 continue
             skills = [item for item in skills if item.get("id") != manifest["id"]]
+            skills.append(manifest)
+
+    draft_dir = get_draft_skills_dir()
+    if draft_dir.exists():
+        existing_ids = {item.get("id") for item in skills}
+        for entry in draft_dir.iterdir():
+            if not entry.is_dir():
+                continue
+            manifest = _read_manifest(entry / "skill.json")
+            if not manifest or manifest.get("id") in existing_ids:
+                continue
+            manifest["source"] = "self"
             skills.append(manifest)
 
     skills.sort(key=lambda item: (str(item.get("source") or ""), str(item.get("name") or "")))
@@ -422,8 +448,8 @@ def create_skill_draft(
     source_agent: str | None = None,
     reason: str | None = None,
 ) -> dict[str, Any]:
-    normalized = normalize_skill_manifest(manifest, source="draft")
-    target_dir = _draft_skill_dir(normalized["id"])
+    normalized = normalize_skill_manifest(manifest, source="self")
+    target_dir = _skill_dir(normalized["id"])
     metadata = {
         "project_id": resolve_project_id(project_id) if project_id else "",
         "source_agent": str(source_agent or "").strip(),
@@ -432,7 +458,7 @@ def create_skill_draft(
     }
     files = [
         ("prompt.md", str(prompt or "").encode("utf-8")),
-        ("draft_meta.json", json.dumps(metadata, ensure_ascii=False, indent=2).encode("utf-8")),
+        ("self_meta.json", json.dumps(metadata, ensure_ascii=False, indent=2).encode("utf-8")),
     ]
     _replace_skill_dir(target_dir, normalized, files)
     return normalized
@@ -460,7 +486,7 @@ def build_enabled_skill_context(
             continue
         if agent not in manifest.get("agents", []):
             continue
-        prompt_path = _skill_dir(str(manifest["id"])) / "prompt.md"
+        prompt_path = _skill_prompt_path(str(manifest["id"]))
         try:
             prompt_text = prompt_path.read_text(encoding="utf-8").strip()
         except Exception:
@@ -491,9 +517,13 @@ def build_enabled_skill_context(
 def delete_skill(skill_id: str) -> str:
     safe_id = _normalize_skill_id(skill_id)
     target_dir = _skill_dir(safe_id)
-    if not target_dir.exists():
+    draft_dir = _draft_skill_dir(safe_id)
+    if not target_dir.exists() and not draft_dir.exists():
         raise FileNotFoundError(f"Skill not found: {safe_id}")
-    shutil.rmtree(target_dir)
+    if target_dir.exists():
+        shutil.rmtree(target_dir)
+    if draft_dir.exists():
+        shutil.rmtree(draft_dir)
 
     projects_dir = get_skills_root_dir().parent / "projects"
     for project in projects_dir.iterdir() if projects_dir.exists() else []:
