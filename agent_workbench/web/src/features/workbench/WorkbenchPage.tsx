@@ -21,6 +21,7 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
     currentView,
     errorText,
     fileCache,
+    fastDevProgress,
     historyByAgent,
     mcpMode,
     model,
@@ -45,6 +46,8 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
     openMcp,
     openSkills,
     openProject,
+    importGddFastDev,
+    closeFastDevProgress,
     saveWorkspaceFile,
     selectAgent,
     sendAction,
@@ -107,6 +110,7 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
           mcpMode={mcpMode}
           fileItems={model.files}
           fileCache={fileCache}
+          fastDevProgress={fastDevProgress}
           fileEditable={!activeProject?.archived}
           errorText={errorText}
           warningText={warningText}
@@ -125,6 +129,8 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
             await saveWorkspaceFile(fileId, content);
           }}
           onUploadFileAsset={uploadWorkspaceFileAsset}
+          onImportGddFastDev={importGddFastDev}
+          onCloseFastDevProgress={closeFastDevProgress}
         />
       </div>
 

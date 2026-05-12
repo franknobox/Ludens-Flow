@@ -6,7 +6,9 @@
 
 import base64
 import io
+import zipfile
 from dataclasses import dataclass
+from xml.etree import ElementTree
 
 
 MAX_ATTACHMENTS = 6
@@ -38,6 +40,8 @@ TEXT_EXTENSIONS = {
     ".asmdef",
     ".meta",
 }
+
+DOCUMENT_EXTENSIONS = TEXT_EXTENSIONS | {".pdf", ".docx"}
 
 
 @dataclass
@@ -85,6 +89,57 @@ def _extract_pdf_text(raw: bytes) -> str:
         if page_text.strip():
             chunks.append(page_text.strip())
     return "\n\n".join(chunks).strip()
+
+
+def _extract_docx_text(raw: bytes) -> str:
+    try:
+        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+            document_xml = archive.read("word/document.xml")
+    except Exception as exc:
+        raise ValueError("invalid DOCX document") from exc
+
+    try:
+        root = ElementTree.fromstring(document_xml)
+    except ElementTree.ParseError as exc:
+        raise ValueError("invalid DOCX XML") from exc
+
+    namespace = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+    paragraphs: list[str] = []
+    for paragraph in root.findall(".//w:p", namespace):
+        runs = [
+            node.text or ""
+            for node in paragraph.findall(".//w:t", namespace)
+            if node.text
+        ]
+        line = "".join(runs).strip()
+        if line:
+            paragraphs.append(line)
+    return "\n\n".join(paragraphs).strip()
+
+
+def extract_attachment_text(attachment: dict) -> tuple[str, str, str]:
+    """Return attachment name, mime type and readable text for supported documents."""
+    name = str(attachment.get("name") or "attachment")
+    data_url = str(attachment.get("data_url") or "")
+    lower_name = name.lower()
+    if not data_url.startswith("data:"):
+        raise ValueError("invalid attachment payload")
+    if not any(lower_name.endswith(ext) for ext in DOCUMENT_EXTENSIONS):
+        raise ValueError("unsupported file type")
+
+    mime_type, raw = _split_data_url(data_url)
+    if lower_name.endswith(".pdf") or mime_type == "application/pdf":
+        text = _extract_pdf_text(raw)
+    elif lower_name.endswith(".docx") or mime_type in {
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    }:
+        text = _extract_docx_text(raw)
+    else:
+        text = _decode_text_bytes(raw)
+
+    if not text.strip():
+        raise ValueError("no readable text content found")
+    return name, mime_type, text
 
 
 def _truncate_text(text: str, *, max_chars: int) -> tuple[str, bool]:
@@ -175,25 +230,10 @@ def build_attachment_user_input(
             has_images = True
             continue
 
-        if not (
-            lower_name.endswith(".pdf")
-            or any(lower_name.endswith(ext) for ext in TEXT_EXTENSIONS)
-        ):
-            warnings.append(f"{name}: unsupported file type")
-            continue
-
         try:
-            mime_type, raw = _split_data_url(data_url)
-            if lower_name.endswith(".pdf") or mime_type == "application/pdf":
-                text = _extract_pdf_text(raw)
-            else:
-                text = _decode_text_bytes(raw)
+            name, mime_type, text = extract_attachment_text(attachment)
         except Exception as exc:
             warnings.append(f"{name}: {exc}")
-            continue
-
-        if not text.strip():
-            warnings.append(f"{name}: no readable text content found")
             continue
 
         per_file_text, _ = _truncate_text(

@@ -1,5 +1,6 @@
 import type {
   ProjectWorkspacesResponse,
+  GddFastDevImportResponse,
   WorkspaceFileAssetUploadResponse,
   WorkspaceFileContent,
   WorkspaceFilesResponse,
@@ -34,6 +35,26 @@ export function uploadWorkspaceFileAsset(fileId: string, body: {
 }) {
   return fetchJson<WorkspaceFileAssetUploadResponse>(
     `/api/workspace/files/${encodeURIComponent(fileId)}/assets`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+export function importGddFastDev(body: {
+  attachments: Array<{
+    kind: "file";
+    name: string;
+    mime_type: string;
+    data_url: string;
+    size: number;
+  }>;
+  project_info?: Record<string, string>;
+}) {
+  return fetchJson<GddFastDevImportResponse>(
+    "/api/workspace/files/gdd/import-fastdev",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },

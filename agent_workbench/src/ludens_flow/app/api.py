@@ -22,13 +22,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from llm.model_profiles import list_model_profile_summaries
-from ludens_flow.capabilities.ingest.attachment_ingest import build_attachment_user_input
+from ludens_flow.capabilities.ingest.attachment_ingest import (
+    build_attachment_user_input,
+    extract_attachment_text,
+)
 from ludens_flow.capabilities.artifacts.artifacts import read_artifact, write_artifact
 from ludens_flow.capabilities.copywriting.design_copywriting import generate_design_copywriting
 from ludens_flow.capabilities.context.user_profile import (
+    format_profile_for_prompt,
     read_profile_file,
     write_profile_file,
 )
+from ludens_flow.capabilities.context.prompt_templates import load_prompt_template
 from ludens_flow.capabilities.github import fetch_github_snapshot, parse_github_repo_ref
 from ludens_flow.app.env import load_env_if_available
 from ludens_flow.capabilities.mcp.health import check_mcp_connections
@@ -51,7 +56,10 @@ from ludens_flow.capabilities.skills.registry import (
 )
 from ludens_flow.capabilities.tools.registry import list_common_tools
 from ludens_flow.core.graph import graph_step
-from ludens_flow.core.router import phase_to_agent_key
+from ludens_flow.core.router import Phase, phase_to_agent_key
+from ludens_flow.core.agents.engineering_agent import EngineeringAgent
+from ludens_flow.core.agents.pm_agent import PMAgent
+from ludens_flow.core.agents.review_agent import ReviewAgent
 from ludens_flow.core.paths import (
     add_project_workspace,
     archive_project,
@@ -115,6 +123,11 @@ class ChatRequest(BaseModel):
     message: str
     attachments: list[dict] | None = None
     mcp_mode: bool = False
+
+
+class GddFastDevImportRequest(BaseModel):
+    attachments: list[dict]
+    project_info: dict[str, str] | None = None
 
 
 class ProjectRequest(BaseModel):
@@ -1563,6 +1576,244 @@ def put_workspace_file_content(file_id: str, req: WorkspaceFileUpdateRequest):
         }
 
     raise HTTPException(status_code=404, detail="Not found")
+
+
+def _imported_gdd_markdown(name: str, text: str, project_info: dict[str, str] | None) -> str:
+    clean = str(text or "").strip()
+    if not clean:
+        raise ValueError("Imported GDD content is empty.")
+
+    info_lines = []
+    for key, value in (project_info or {}).items():
+        value_text = str(value or "").strip()
+        if value_text:
+            info_lines.append(f"- {key}: {value_text}")
+
+    if name.lower().endswith(".md"):
+        body = clean
+    else:
+        body = f"# GDD\n\n> Source: {name}\n\n{clean}"
+
+    if info_lines:
+        return body.rstrip() + "\n\n## Project Info\n\n" + "\n".join(info_lines) + "\n"
+    return body.rstrip() + "\n"
+
+
+def _publish_fastdev_event(
+    project_id: str,
+    state,
+    event_type: str,
+    message: str,
+    *,
+    status: str,
+    step: str | None = None,
+) -> None:
+    payload = _event_payload(
+        event_type,
+        project_id=project_id,
+        state=state,
+        message=message,
+    ) | {"status": status}
+    if step:
+        payload["step"] = step
+    _publish_project_event(project_id, payload)
+
+
+def _commit_agent_artifact(project_id: str, state, result, actor: str) -> None:
+    if result.state_updates:
+        _merge_fastdev_state_updates(state, result.state_updates)
+    if result.commit and result.commit.artifact_name and result.commit.content:
+        write_artifact(
+            result.commit.artifact_name,
+            result.commit.content,
+            reason=result.commit.reason or "Fast development auto generation",
+            actor=actor,
+            state=state,
+            project_id=project_id,
+            ignore_frozen=True,
+        )
+    for event in result.events or []:
+        state.last_event = event
+
+
+def _merge_fastdev_state_updates(state, updates: dict) -> None:
+    """Merge artifact-generation state updates without importing graph internals."""
+    if "drafts" in updates:
+        for phase_key, items in updates["drafts"].items():
+            if phase_key not in state.drafts:
+                state.drafts[phase_key] = {}
+            state.drafts[phase_key].update(items)
+
+    if "change_requests" in updates:
+        state.change_requests.extend(updates["change_requests"])
+
+    if "decisions" in updates:
+        state.decisions.extend(updates["decisions"])
+
+    if "style_preset" in updates and updates["style_preset"]:
+        state.style_preset = updates["style_preset"]
+
+    if "review_gate" in updates:
+        state.review_gate = updates["review_gate"]
+
+
+def _apply_agent_prompt_template(agent, filename: str) -> None:
+    template = load_prompt_template(filename)
+    if not template:
+        return
+    system_prompt = template.build_system_prompt()
+    if system_prompt:
+        agent.system_prompt = system_prompt
+
+
+@app.post("/api/workspace/files/gdd/import-fastdev")
+def import_gdd_fastdev(req: GddFastDevImportRequest):
+    project_id = resolve_project_id()
+    lock = _get_project_lock(project_id)
+
+    if not req.attachments:
+        raise HTTPException(status_code=400, detail="请选择一个可读取的 GDD 文件")
+
+    try:
+        with lock:
+            state = st.load_state(project_id=project_id)
+            _publish_fastdev_event(
+                project_id,
+                state,
+                "fastdev_started",
+                "正在解析 GDD 文件...",
+                status="running",
+                step="gdd",
+            )
+            name, _mime_type, text = extract_attachment_text(req.attachments[0])
+            gdd_markdown = _imported_gdd_markdown(name, text, req.project_info)
+
+            state.artifact_frozen = False
+            state.phase = Phase.PM_COMMIT.value
+            state.last_error = None
+            write_artifact(
+                "GDD",
+                gdd_markdown,
+                reason="Imported GDD for fast development",
+                actor="DesignAgent",
+                state=state,
+                project_id=project_id,
+                ignore_frozen=True,
+            )
+            state.last_event = "GDD_COMMITTED"
+            st.save_state(state, project_id=project_id)
+
+        pm_agent = PMAgent()
+        eng_agent = EngineeringAgent()
+        review_agent = ReviewAgent()
+        _apply_agent_prompt_template(pm_agent, "pm_agent.md")
+        _apply_agent_prompt_template(eng_agent, "engineering_agent.md")
+        _apply_agent_prompt_template(review_agent, "review_agent.md")
+        user_persona = format_profile_for_prompt(read_profile_file(project_id))
+
+        _publish_fastdev_event(
+            project_id,
+            state,
+            "fastdev_progress",
+            "正在生成 PROJECT_PLAN.md...",
+            status="running",
+            step="pm",
+        )
+        pm_result = pm_agent.commit(
+            state,
+            "快速开发模式：请直接基于导入的 GDD 生成项目计划。",
+            user_persona=user_persona,
+        )
+        with lock:
+            _commit_agent_artifact(project_id, state, pm_result, "PMAgent")
+            state.phase = Phase.ENG_COMMIT.value
+            st.save_state(state, project_id=project_id)
+
+        _publish_fastdev_event(
+            project_id,
+            state,
+            "fastdev_progress",
+            "正在生成 IMPLEMENTATION_PLAN.md...",
+            status="running",
+            step="eng",
+        )
+        eng_result = eng_agent.plan_commit(
+            state,
+            "快速开发模式：请基于导入 GDD 和项目计划直接生成工程实施方案。",
+            user_persona=user_persona,
+        )
+        with lock:
+            _commit_agent_artifact(project_id, state, eng_result, "EngineeringAgent")
+            state.phase = Phase.REVIEW.value
+            st.save_state(state, project_id=project_id)
+
+        _publish_fastdev_event(
+            project_id,
+            state,
+            "fastdev_progress",
+            "正在生成 REVIEW_REPORT.md...",
+            status="running",
+            step="review",
+        )
+        review_result = review_agent.commit(
+            state,
+            "快速开发模式：请完成自动评审，给出是否可以进入持续开发的判断。",
+            user_persona=user_persona,
+        )
+        with lock:
+            _commit_agent_artifact(project_id, state, review_result, "ReviewAgent")
+            state.phase = Phase.DEV_COACHING.value
+            state.artifact_frozen = True
+            state.last_assistant_message = "快速开发工件已生成，已进入持续开发模式。"
+            st.save_state(state, project_id=project_id)
+
+        _publish_fastdev_event(
+            project_id,
+            state,
+            "fastdev_completed",
+            "快速开发工件已生成，点击确定进入持续开发。",
+            status="completed",
+            step="done",
+        )
+        _publish_project_event(
+            project_id,
+            _event_payload(
+                "state_updated",
+                project_id=project_id,
+                state=state,
+                include_projects=True,
+            ),
+        )
+        return {
+            "state": _state_to_json(state),
+            "gdd_content": read_artifact("GDD", project_id=project_id),
+            "message": "快速开发工件已生成，已进入持续开发模式。",
+        }
+    except Exception as exc:
+        logger.exception("fast development import failed")
+        with lock:
+            state = st.load_state(project_id=project_id)
+            state.last_error = str(exc)
+            st.save_state(state, project_id=project_id)
+        _publish_fastdev_event(
+            project_id,
+            state,
+            "fastdev_failed",
+            "快速开发生成失败。",
+            status="failed",
+            step="failed",
+        )
+        _publish_project_event(
+            project_id,
+            _event_payload(
+                "run_failed",
+                project_id=project_id,
+                state=state,
+                error=str(exc),
+                include_projects=True,
+            ),
+        )
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 _NOTE_ASSET_MIME_EXTENSIONS = {
