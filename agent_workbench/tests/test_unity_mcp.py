@@ -1,68 +1,51 @@
-import http.client
+"""Unity MCP stdio health check test (requires Unity Editor running)."""
 import json
+import unittest
 
-def parse_sse(data: bytes) -> list[dict]:
-    messages = []
-    current_data = []
-    for line in data.decode("utf-8").splitlines():
-        if line.startswith("data: "):
-            current_data.append(line[6:])
-        elif line.strip() == "" and current_data:
-            messages.append(json.loads("".join(current_data)))
-            current_data = []
-    if current_data:
-        messages.append(json.loads("".join(current_data)))
-    return messages
+from ludens_flow.capabilities.mcp import health as mcp_health
 
-def send(conn: http.client.HTTPConnection, method: str, params: dict | None, msg_id: int | None, session_id: str = "") -> tuple[bytes, str]:
-    payload: dict = {"jsonrpc": "2.0", "method": method}
-    if msg_id is not None:
-        payload["id"] = msg_id
-    if params is not None:
-        payload["params"] = params
-    body = json.dumps(payload).encode()
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json, text/event-stream, */*",
-        "Connection": "keep-alive",
-    }
-    if session_id:
-        headers["mcp-session-id"] = session_id
-    conn.request("POST", "/mcp", body=body, headers=headers)
-    resp = conn.getresponse()
-    data = resp.read()
-    new_session = resp.getheader("mcp-session-id", session_id)
-    return data, new_session
 
-def test():
-    conn = http.client.HTTPConnection("127.0.0.1", 8080)
-    
-    # 1. initialize
-    data, session_id = send(conn, "initialize", {
-        "protocolVersion": "2024-11-05",
-        "capabilities": {},
-        "clientInfo": {"name": "Ludens-Flow", "version": "3.0.0"}
-    }, 1)
-    print(f"Session ID: {session_id}")
-    for m in parse_sse(data):
-        print(f"initialize -> {list(m.keys())}")
-    
-    # 2. notifications/initialized
-    data, session_id = send(conn, "notifications/initialized", None, None, session_id)
-    print(f"initialized -> status ok, session: {session_id}")
-    
-    # 3. tools/list
-    data, session_id = send(conn, "tools/list", {}, 2, session_id)
-    print(f"tools/list raw: {data.decode('utf-8', errors='replace')[:500]}")
-    for m in parse_sse(data):
-        print(f"tools/list -> {list(m.keys())}")
-        if "result" in m:
-            tools = m["result"].get("tools", [])
-            print(f">>> Found {len(tools)} tools:")
-            for t in tools:
-                print(f"  - {t.get('name')}")
-    
-    conn.close()
+class UnityMcpStdioTests(unittest.TestCase):
+    def setUp(self):
+        mcp_health.clear_mcp_connection_cache()
+
+    def tearDown(self):
+        mcp_health.clear_mcp_connection_cache()
+
+    def test_unity_stdio_health_check(self):
+        """Verify Unity MCP responds over stdio with initialize + tools/list."""
+        config = {
+            "id": "unity-stdio-test",
+            "engine": "unity",
+            "command": "uvx",
+            "args": ["--from", "mcpforunityserver", "mcp-for-unity"],
+            "enabled": True,
+        }
+
+        result = mcp_health.check_mcp_connection(
+            config, use_cache=False, timeout_seconds=90
+        )
+
+        status = result.get("status", "")
+        transport = result.get("transport", "")
+        tools = result.get("tools", [])
+        tool_count = result.get("tool_count", 0)
+        message = result.get("message", "")
+
+        print(f"\nStatus: {status}")
+        print(f"Transport: {transport}")
+        print(f"Tools: {tool_count}")
+        print(f"Message: {message}")
+        if tools:
+            for t in tools[:5]:
+                print(f"  - {t['name']}")
+
+        self.assertIn(status, ("tools_loaded", "reachable"),
+                      f"Expected tools_loaded or reachable, got {status}: {message}")
+        if status == "tools_loaded":
+            self.assertGreater(tool_count, 0, "Should have tools when tools_loaded")
+            self.assertEqual(transport, "line")
+
 
 if __name__ == "__main__":
-    test()
+    unittest.main()

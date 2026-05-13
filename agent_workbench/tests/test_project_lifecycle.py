@@ -860,19 +860,15 @@ class ProjectLifecycleTests(unittest.TestCase):
         }
         calls = []
 
-        def fake_run(command, *, input, **kwargs):
-            calls.append(input)
-            return subprocess.CompletedProcess(
-                command,
+        def fake_interactive(command, args, *, input_data, timeout_seconds, env=None):
+            calls.append(input_data)
+            return (
+                b'{"jsonrpc":"2.0","id":1,"result":{}}\n'
+                b'{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"get_scene_info"}]}}\n',
                 0,
-                stdout=(
-                    b'{"jsonrpc":"2.0","id":1,"result":{}}\n'
-                    b'{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"get_scene_info"}]}}\n'
-                ),
-                stderr=b"",
             )
 
-        with patch("ludens_flow.capabilities.mcp.health.subprocess.run", side_effect=fake_run):
+        with patch("ludens_flow.capabilities.mcp.health._run_stdio_interactive", side_effect=fake_interactive):
             first = mcp_health.check_mcp_connection(config)
             second = mcp_health.check_mcp_connection(config)
 

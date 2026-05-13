@@ -591,7 +591,7 @@ class RegressionTests(unittest.TestCase):
     def test_mcp_tool_call_uses_verified_transport(self):
         mcp_health._TRANSPORT_CACHE.clear()
         config = {
-            "id": "framed-only-test",
+            "id": "line-only-test",
             "engine": "blender",
             "command": "fake-mcp",
             "args": [],
@@ -599,54 +599,36 @@ class RegressionTests(unittest.TestCase):
         }
         transports = []
 
-        def fake_run(command, *, input, **kwargs):
-            is_framed = input.startswith(b"Content-Length:")
-            transports.append("framed" if is_framed else "line")
-            if b"tools/list" in input:
-                if not is_framed:
-                    return subprocess.CompletedProcess(command, 0, stdout=b"", stderr=b"")
+        def fake_interactive(command, args, *, input_data, timeout_seconds, env=None):
+            transports.append("line")
+            if b"tools/list" in input_data:
                 stdout = (
-                    mcp_health._frame_message({"jsonrpc": "2.0", "id": 1, "result": {}})
-                    + mcp_health._frame_message(
-                        {
-                            "jsonrpc": "2.0",
-                            "id": 2,
-                            "result": {
-                                "tools": [
-                                    {
-                                        "name": "读取场景🔧",
-                                        "description": "中文 schema",
-                                    }
-                                ]
-                            },
-                        }
-                    )
+                    b'{"jsonrpc":"2.0","id":1,"result":{}}\n'
+                    b'{"jsonrpc":"2.0","id":2,"result":{"tools":['
+                    b'{"name":"read-scene","description":"cn schema"}'
+                    b']}}\n'
                 )
-                return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr=b"")
-            if b"tools/call" in input:
-                stdout = mcp_health._frame_message(
-                    {
-                        "jsonrpc": "2.0",
-                        "id": 2,
-                        "result": {"content": [{"type": "text", "text": "ok"}]},
-                    }
+                return (stdout, 0)
+            if b"tools/call" in input_data:
+                stdout = (
+                    b'{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"ok"}]}}\n'
                 )
-                return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr=b"")
-            return subprocess.CompletedProcess(command, 0, stdout=b"", stderr=b"")
+                return (stdout, 0)
+            return (b"", 0)
 
-        with patch("ludens_flow.capabilities.mcp.health.subprocess.run", side_effect=fake_run):
+        with patch("ludens_flow.capabilities.mcp.health._run_stdio_interactive", side_effect=fake_interactive):
             status = mcp_health.check_mcp_connection(config)
             result = mcp_health.call_mcp_tool(
                 config,
-                "读取场景🔧",
+                "read-scene",
                 {},
                 transport=status["transport"],
             )
 
         self.assertEqual(status["status"], "tools_loaded")
-        self.assertEqual(status["transport"], "framed")
+        self.assertEqual(status["transport"], "line")
         self.assertEqual(result["content"][0]["text"], "ok")
-        self.assertEqual(transports, ["line", "framed", "framed"])
+        self.assertEqual(transports, ["line", "line"])
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ from typing import Callable, Optional
 
 from ludens_flow.capabilities.artifacts.artifacts import read_artifact
 from ludens_flow.capabilities.mcp.adapter import ENGINE_TOOL_SCHEMAS
+from ludens_flow.capabilities.workspaces.access import build_workspace_context_for_prompt
 from ludens_flow.core.agents.base import AgentResult, BaseAgent, CommitSpec
 from ludens_flow.core.engine_context import format_project_engine_for_prompt
 from ludens_flow.core.schemas import DISCUSS_RESPONSE_SCHEMA_TEXT, parse_discuss_payload
@@ -143,11 +144,18 @@ class EngineeringAgent(BaseAgent):
         if getattr(state, "artifact_frozen", False) and impl_plan.strip():
             dev_mode_context = f"\n当前生效的实现计划：\n{impl_plan}\n"
 
+        workspace_context = ""
+        try:
+            workspace_context = build_workspace_context_for_prompt(state.project_id)
+        except Exception:
+            pass
+
         base_prompt_text = (
             f"现有 GDD：\n{gdd}\n\n"
             f"项目计划：\n{pm}\n"
             f"{engine_context}\n\n"
             f"{dev_mode_context}"
+            f"{workspace_context + chr(10) + chr(10) if workspace_context else ''}"
             f"目前已确认的工程方案预设：{style}\n\n"
             "请完成以下任务，默认使用简体中文回复，除非用户明确要求英文：\n"
             "1. 解释 A / B / C 三种工程方案选项，并推荐最适合当前项目的一种。\n"
@@ -335,12 +343,19 @@ class EngineeringAgent(BaseAgent):
         style = resolved_style or state.style_preset or "\u5e38\u89c4"
         engine_context = format_project_engine_for_prompt(state.project_id)
 
+        workspace_context = ""
+        try:
+            workspace_context = build_workspace_context_for_prompt(state.project_id)
+        except Exception:
+            pass
+
         prompt_text = (
             "你现在处于 DEV_COACHING 模式。只指导实现工作，不修改正式方案。\n"
             "默认使用简体中文回复，除非用户明确要求英文。\n"
             f"工程风格：{style}\n"
             f"{engine_context}\n"
             f"实现计划：\n{impl_plan}\n\n"
+            f"{workspace_context + chr(10) + chr(10) if workspace_context else ''}"
             "MCP 工具模式："
             + ("开启" if mcp_mode else "关闭")
             + "。\n"

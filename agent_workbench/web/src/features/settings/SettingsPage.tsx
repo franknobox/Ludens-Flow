@@ -749,8 +749,8 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
                 setMcpEngineInput(engine);
                 if (engine === "unity") {
                   setMcpLabelInput("Unity MCP");
-                  setMcpCommandInput("http://127.0.0.1:8080");
-                  setMcpArgsInput("");
+                  setMcpCommandInput("cmd");
+                  setMcpArgsInput("/c\nuvx\n--from\nmcpforunityserver\nmcp-for-unity");
                   setMcpEnvInput("");
                   return;
                 }

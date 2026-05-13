@@ -760,7 +760,7 @@ function EngineInstallGuideModal({
                   <ol>
                     <li>在 Unity 中打开 <code>窗口 / 面板 / MCP For Unity / Toggle MCP Window</code>（快捷键 <code>Ctrl+Shift+M</code>）。</li>
                     <li>在弹出的 MCP 面板中点击 <code>Start Server</code>，确认状态指示灯变绿（Session 建立）。</li>
-                    <li>记下 HTTP 地址（默认 <code>http://127.0.0.1:8080</code>）。</li>
+                    <li>保持默认的 stdio 传输模式即可，无需额外地址配置。</li>
                   </ol>
                 </div>
               </section>
@@ -769,7 +769,7 @@ function EngineInstallGuideModal({
                 <div className="settings-guide-step-index">4</div>
                 <div>
                   <h3>在 Ludens-Flow 中保存 MCP 配置</h3>
-                  <p>推荐 HTTP 直连模式：启动命令填 HTTP 地址，启动参数和环境变量留空。</p>
+                  <p>推荐 stdio 模式：启动命令填 <code>cmd</code>，启动参数每行一个填入下方内容。和 Blender MCP 完全一致的连接方式。</p>
                   <button
                     type="button"
                     className="settings-guide-inline-button"
@@ -780,11 +780,11 @@ function EngineInstallGuideModal({
                   <div className="settings-guide-config-grid">
                     <div>
                       <span>启动命令</span>
-                      <pre><code>http://127.0.0.1:8080</code></pre>
+                      <pre><code>cmd</code></pre>
                     </div>
                     <div>
                       <span>启动参数，每行一个</span>
-                      <pre><code>（留空）</code></pre>
+                      <pre><code>{"/c\nuvx\n--from\nmcpforunityserver\nmcp-for-unity"}</code></pre>
                     </div>
                     <div>
                       <span>环境变量</span>

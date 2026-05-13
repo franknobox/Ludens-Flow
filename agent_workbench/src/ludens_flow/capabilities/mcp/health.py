@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -18,7 +19,7 @@ from typing import Any, Iterable, List
 
 
 MCP_PROTOCOL_VERSION = "2024-11-05"
-DEFAULT_TIMEOUT_SECONDS = 20
+DEFAULT_TIMEOUT_SECONDS = 60
 DEFAULT_HEALTH_CACHE_TTL_SECONDS = 30
 _TRANSPORT_CACHE: dict[str, str] = {}
 _HEALTH_CACHE: dict[str, tuple[float, dict]] = {}
@@ -194,6 +195,97 @@ def _parse_mcp_messages(output: bytes | str) -> List[dict]:
     if messages:
         return messages
     return _parse_line_messages(output)
+
+
+def _run_stdio_interactive(
+    command: str,
+    args: List[str],
+    input_data: bytes,
+    *,
+    timeout_seconds: int,
+    env: dict[str, str] | None = None,
+) -> tuple[bytes, int]:
+    """Run a stdio MCP command with stdin kept open until expected responses arrive.
+
+    Unlike subprocess.run(input=...) which closes stdin immediately, this
+    keeps stdin open until the expected id=2 response (tools/list or
+    tools/call) arrives on stdout.  FastMCP 3.x exits prematurely when
+    stdin is closed before all messages are processed.
+    """
+    proc = subprocess.Popen(
+        [command, *args],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=env,
+        shell=False,
+    )
+
+    stdout_chunks: list[bytes] = []
+    stderr_chunks: list[bytes] = []
+    stop_event = threading.Event()
+
+    def _read(stream, chunks):
+        for line in iter(stream.readline, b""):
+            if stop_event.is_set():
+                break
+            chunks.append(line)
+
+    t_out = threading.Thread(target=_read, args=(proc.stdout, stdout_chunks))
+    t_err = threading.Thread(target=_read, args=(proc.stderr, stderr_chunks))
+    t_out.start()
+    t_err.start()
+
+    try:
+        proc.stdin.write(input_data)
+        proc.stdin.flush()
+
+        deadline = time.monotonic() + timeout_seconds
+        responded = False
+        while time.monotonic() < deadline and not responded:
+            time.sleep(0.1)
+            if proc.poll() is not None:
+                break
+            raw = b"".join(stdout_chunks)
+            try:
+                for line in raw.splitlines():
+                    text = line.strip()
+                    if not text.startswith(b"{"):
+                        continue
+                    try:
+                        msg = json.loads(text)
+                    except json.JSONDecodeError:
+                        continue
+                    if msg.get("id") == 2:
+                        responded = True
+                        break
+            except Exception:
+                pass
+
+        proc.stdin.close()
+        try:
+            proc.wait(timeout=max(1, int(deadline - time.monotonic())))
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+    except Exception:
+        try:
+            proc.stdin.close()
+            proc.kill()
+            proc.wait()
+        except Exception:
+            pass
+        raise
+    finally:
+        stop_event.set()
+        t_out.join(timeout=3)
+        t_err.join(timeout=3)
+
+    stdout = b"".join(stdout_chunks)
+    stderr = b"".join(stderr_chunks)
+    proc.stdout.close()
+    proc.stderr.close()
+    return _combined_output(stdout, stderr), proc.returncode
 
 
 def _safe_tool_summary(raw_tools: Any) -> List[dict]:
@@ -379,6 +471,25 @@ def check_mcp_connection(
                 session_id=session_id,
             )
             init_result = next((m for m in init_messages if m.get("id") == 1), {})
+
+            # Defensive retry: stale session ID causes "Session not found" after
+            # the remote MCP server restarts. Clear the cache and retry once.
+            if "error" in init_result:
+                err_msg = str(init_result.get("error", {}).get("message", "")).lower()
+                if "session" in err_msg and _HTTP_SESSIONS.get(cache_key):
+                    _HTTP_SESSIONS.pop(cache_key, None)
+                    init_messages, session_id = _http_post_jsonrpc(
+                        command,
+                        _jsonrpc_request(1, "initialize", {
+                            "protocolVersion": MCP_PROTOCOL_VERSION,
+                            "capabilities": {},
+                            "clientInfo": {"name": "Ludens-Flow", "version": "3.0.0"},
+                        }),
+                        timeout=timeout_seconds,
+                        session_id="",
+                    )
+                    init_result = next((m for m in init_messages if m.get("id") == 1), {})
+
             if "error" in init_result:
                 return _result_for_config(
                     config,
@@ -412,19 +523,13 @@ def check_mcp_connection(
             tools = _safe_tool_summary(tools_result.get("result", {}).get("tools"))
             if tools:
                 _remember_transport(config, "http")
-                return _remember_health_result(
-                    config,
-                    _result_for_config(config, status="tools_loaded", tools=tools, transport="http"),
-                )
+                return _result_for_config(config, status="tools_loaded", tools=tools, transport="http")
             _remember_transport(config, "http")
-            return _remember_health_result(
+            return _result_for_config(
                 config,
-                _result_for_config(
-                    config,
-                    status="reachable",
-                    message="Initialized, but no tools were returned.",
-                    transport="http",
-                ),
+                status="reachable",
+                message="Initialized, but no tools were returned.",
+                transport="http",
             )
         except Exception as exc:
             return _result_for_config(config, status="failed", message=f"HTTP MCP error: {exc}")
@@ -436,71 +541,43 @@ def check_mcp_connection(
         env.update({str(key): str(value) for key, value in raw_env.items()})
 
     last_error = ""
-    initialized_without_tools = False
-    for transport in _transport_candidates(config):
-        if transport == "http":
-            continue
-        try:
-            completed = subprocess.run(
-                [command, *args],
-                input=_build_stdio_input(transport=transport),
-                capture_output=True,
-                timeout=timeout_seconds,
-                env=env,
-                shell=False,
-            )
-        except FileNotFoundError:
-            return _result_for_config(config, status="failed", message=f"Command not found: {command}")
-        except subprocess.TimeoutExpired as exc:
-            output = _combined_output(exc.stdout, exc.stderr)
-            messages = _parse_mcp_messages(output)
-            tools = _tools_from_messages(messages)
-            if tools:
-                _remember_transport(config, transport)
-                return _remember_health_result(
-                    config,
-                    _result_for_config(config, status="tools_loaded", tools=tools, transport=transport),
-                )
-            last_error = "Health check timed out."
-            continue
-        except Exception as exc:
-            last_error = str(exc)
-            continue
+    try:
+        output, _rc = _run_stdio_interactive(
+            command,
+            args,
+            input_data=_build_stdio_input(transport="line"),
+            timeout_seconds=timeout_seconds,
+            env=env,
+        )
+    except FileNotFoundError:
+        return _result_for_config(config, status="failed", message=f"Command not found: {command}")
+    except Exception as exc:
+        last_error = str(exc)
+        return _result_for_config(config, status="failed", message=last_error)
 
-        output = _combined_output(completed.stdout, completed.stderr)
-        messages = _parse_mcp_messages(output)
-        tools = _tools_from_messages(messages)
-        if tools:
-            _remember_transport(config, transport)
-            return _remember_health_result(
-                config,
-                _result_for_config(config, status="tools_loaded", tools=tools, transport=transport),
-            )
+    messages = _parse_mcp_messages(output)
+    tools = _tools_from_messages(messages)
+    if tools:
+        _remember_transport(config, "line")
+        return _remember_health_result(
+            config,
+            _result_for_config(config, status="tools_loaded", tools=tools, transport="line"),
+        )
 
-        if any(message.get("id") == 1 and "result" in message for message in messages):
-            initialized_without_tools = True
-            _remember_transport(config, transport)
-            continue
-
-        error_message = _first_error_message(messages)
-        if not error_message:
-            error_message = (_decode_output(completed.stderr) or _decode_output(completed.stdout) or "No MCP response.").strip()
-        if completed.returncode == 0 and not error_message:
-            error_message = "Process exited without listing tools."
-        last_error = error_message[:500]
-
-    if initialized_without_tools:
-        transport = _TRANSPORT_CACHE.get(_connection_cache_key(config), "")
+    if any(message.get("id") == 1 and "result" in message for message in messages):
+        _remember_transport(config, "line")
         return _remember_health_result(
             config,
             _result_for_config(
                 config,
                 status="reachable",
                 message="Initialized, but no tools were returned.",
-                transport=transport,
+                transport="line",
             ),
         )
-    return _result_for_config(config, status="failed", message=last_error)
+
+    error_message = _first_error_message(messages) or "No MCP response."
+    return _result_for_config(config, status="failed", message=error_message[:500])
 
 
 def _tools_from_messages(messages: Iterable[dict]) -> List[dict]:
@@ -545,18 +622,50 @@ def call_mcp_tool(
         try:
             cache_key = _connection_cache_key(config)
             session_id = _HTTP_SESSIONS.get(cache_key, "")
-            messages, session_id = _http_post_jsonrpc(
-                command,
-                _jsonrpc_request(2, "tools/call", {"name": tool_name, "arguments": arguments or {}}),
-                timeout=timeout_seconds,
-                session_id=session_id,
-            )
+
+            def _http_tool_call(attempt_session_id: str) -> tuple[str, dict]:
+                messages, new_sid = _http_post_jsonrpc(
+                    command,
+                    _jsonrpc_request(2, "tools/call", {"name": tool_name, "arguments": arguments or {}}),
+                    timeout=timeout_seconds,
+                    session_id=attempt_session_id,
+                )
+                return new_sid, next((m for m in messages if m.get("id") == 2), {})
+
+            session_id, call_result = _http_tool_call(session_id)
+
+            if "error" in call_result:
+                error = call_result["error"]
+                err_msg = str(error.get("message") or "").lower()
+                if "session" in err_msg and _HTTP_SESSIONS.get(cache_key):
+                    _HTTP_SESSIONS.pop(cache_key, None)
+                    init_messages, session_id = _http_post_jsonrpc(
+                        command,
+                        _jsonrpc_request(1, "initialize", {
+                            "protocolVersion": MCP_PROTOCOL_VERSION,
+                            "capabilities": {},
+                            "clientInfo": {"name": "Ludens-Flow", "version": "3.0.0"},
+                        }),
+                        timeout=timeout_seconds,
+                        session_id="",
+                    )
+                    init_result = next((m for m in init_messages if m.get("id") == 1), {})
+                    if "error" in init_result:
+                        raise McpClientError(str(init_result.get("error", {}).get("message", "HTTP MCP initialize failed.")))
+                    _http_post_jsonrpc(
+                        command,
+                        _jsonrpc_notification("notifications/initialized"),
+                        timeout=timeout_seconds,
+                        session_id=session_id,
+                    )
+                    session_id, call_result = _http_tool_call(session_id)
+                    if "error" in call_result:
+                        raise McpClientError(str(call_result.get("error", {}).get("message") or call_result["error"]))
+
             _HTTP_SESSIONS[cache_key] = session_id
-            result = next((m for m in messages if m.get("id") == 2), {})
-            if "error" in result:
-                error = result["error"]
-                raise McpClientError(str(error.get("message") or error))
-            return result.get("result", {})
+            if "error" in call_result:
+                raise McpClientError(str(call_result.get("error", {}).get("message") or call_result["error"]))
+            return call_result.get("result", {})
         except McpClientError:
             raise
         except Exception as exc:
@@ -568,48 +677,29 @@ def call_mcp_tool(
     if isinstance(raw_env, dict):
         env.update({str(key): str(value) for key, value in raw_env.items()})
 
-    last_error = ""
-    for candidate_transport in _transport_candidates(config, preferred=transport):
-        if candidate_transport == "http":
-            continue
-        try:
-            completed = subprocess.run(
-                [command, *args],
-                input=_build_tool_call_input(tool_name, arguments, transport=candidate_transport),
-                capture_output=True,
-                timeout=timeout_seconds,
-                env=env,
-                shell=False,
-            )
-            output = _combined_output(completed.stdout, completed.stderr)
-        except FileNotFoundError as exc:
-            raise McpClientError(f"Command not found: {command}") from exc
-        except subprocess.TimeoutExpired as exc:
-            output = _combined_output(exc.stdout, exc.stderr)
-            messages = _parse_mcp_messages(output)
-            result, rpc_error = _result_from_messages(messages)
-            if result is not None:
-                _remember_transport(config, candidate_transport)
-                return result
-            if rpc_error:
-                raise McpClientError(rpc_error)
-            last_error = "MCP tool call timed out."
-            continue
+    try:
+        output, _rc = _run_stdio_interactive(
+            command,
+            args,
+            input_data=_build_tool_call_input(tool_name, arguments, transport="line"),
+            timeout_seconds=timeout_seconds,
+            env=env,
+        )
+    except FileNotFoundError as exc:
+        raise McpClientError(f"Command not found: {command}") from exc
+    except Exception as exc:
+        raise McpClientError(str(exc)) from exc
 
-        messages = _parse_mcp_messages(output)
-        result, rpc_error = _result_from_messages(messages)
-        if result is not None:
-            _remember_transport(config, candidate_transport)
-            return result
-        if rpc_error:
-            raise McpClientError(rpc_error)
+    messages = _parse_mcp_messages(output)
+    result, rpc_error = _result_from_messages(messages)
+    if result is not None:
+        _remember_transport(config, "line")
+        return result
+    if rpc_error:
+        raise McpClientError(rpc_error)
 
-        error_message = _first_error_message(messages)
-        if not error_message:
-            error_message = (_decode_output(completed.stderr) or _decode_output(completed.stdout) or "No MCP response.").strip()
-        last_error = error_message[:500]
-
-    raise McpClientError(last_error)
+    error_message = _first_error_message(messages) or "No MCP response."
+    raise McpClientError(error_message[:500])
 
 
 def _result_from_messages(messages: Iterable[dict]) -> tuple[dict | None, str]:
