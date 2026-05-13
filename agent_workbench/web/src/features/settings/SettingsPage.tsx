@@ -749,11 +749,9 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
                 setMcpEngineInput(engine);
                 if (engine === "unity") {
                   setMcpLabelInput("Unity MCP");
-                  setMcpCommandInput("cmd");
-                  setMcpArgsInput(
-                    "/c\nuvx\n--from\nmcpforunityserver\nmcp-for-unity\n--transport\nstdio",
-                  );
-                  setMcpEnvInput("DISABLE_TELEMETRY=true");
+                  setMcpCommandInput("http://127.0.0.1:8080");
+                  setMcpArgsInput("");
+                  setMcpEnvInput("");
                   return;
                 }
                 if (engine === "godot") {

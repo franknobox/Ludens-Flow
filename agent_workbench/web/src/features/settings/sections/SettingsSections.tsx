@@ -758,10 +758,9 @@ function EngineInstallGuideModal({
                 <div>
                   <h3>启动 Unity 编辑器侧服务</h3>
                   <ol>
-                    <li>在 Unity 中打开 <code>Window / MCP for Unity</code>。</li>
-                    <li>点击 <code>Start Server</code>，确认编辑器面板里显示已连接或服务已启动。</li>
-                    <li>如果你使用 HTTP 模式，默认地址通常是 <code>http://localhost:8080/mcp</code>。</li>
-                    <li>Ludens-Flow 当前优先使用 stdio 配置做健康检查和工具列表读取。</li>
+                    <li>在 Unity 中打开 <code>窗口 / 面板 / MCP For Unity / Toggle MCP Window</code>（快捷键 <code>Ctrl+Shift+M</code>）。</li>
+                    <li>在弹出的 MCP 面板中点击 <code>Start Server</code>，确认状态指示灯变绿（Session 建立）。</li>
+                    <li>记下 HTTP 地址（默认 <code>http://127.0.0.1:8080</code>）。</li>
                   </ol>
                 </div>
               </section>
@@ -770,7 +769,7 @@ function EngineInstallGuideModal({
                 <div className="settings-guide-step-index">4</div>
                 <div>
                   <h3>在 Ludens-Flow 中保存 MCP 配置</h3>
-                  <p>Windows 推荐先用下面这组 stdio 配置；如果你的 uvx 不在 PATH，可改成 uvx.exe 的绝对路径。</p>
+                  <p>推荐 HTTP 直连模式：启动命令填 HTTP 地址，启动参数和环境变量留空。</p>
                   <button
                     type="button"
                     className="settings-guide-inline-button"
@@ -781,15 +780,15 @@ function EngineInstallGuideModal({
                   <div className="settings-guide-config-grid">
                     <div>
                       <span>启动命令</span>
-                      <pre><code>cmd</code></pre>
+                      <pre><code>http://127.0.0.1:8080</code></pre>
                     </div>
                     <div>
                       <span>启动参数，每行一个</span>
-                      <pre><code>{"/c\nuvx\n--from\nmcpforunityserver\nmcp-for-unity\n--transport\nstdio"}</code></pre>
+                      <pre><code>（留空）</code></pre>
                     </div>
                     <div>
                       <span>环境变量</span>
-                      <pre><code>DISABLE_TELEMETRY=true</code></pre>
+                      <pre><code>（留空）</code></pre>
                     </div>
                   </div>
                 </div>

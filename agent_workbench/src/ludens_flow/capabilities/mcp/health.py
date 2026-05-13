@@ -11,6 +11,8 @@ import json
 import os
 import subprocess
 import time
+import urllib.error
+import urllib.request
 from copy import deepcopy
 from typing import Any, Iterable, List
 
@@ -20,6 +22,12 @@ DEFAULT_TIMEOUT_SECONDS = 20
 DEFAULT_HEALTH_CACHE_TTL_SECONDS = 30
 _TRANSPORT_CACHE: dict[str, str] = {}
 _HEALTH_CACHE: dict[str, tuple[float, dict]] = {}
+_HTTP_SESSIONS: dict[str, str] = {}
+
+
+def _is_http_command(command: str) -> bool:
+    cmd = str(command or "").strip().lower()
+    return cmd.startswith(("http://", "https://"))
 
 
 class McpClientError(RuntimeError):
@@ -209,6 +217,59 @@ def _safe_tool_summary(raw_tools: Any) -> List[dict]:
     return tools
 
 
+def _parse_sse(response_bytes: bytes) -> list[dict]:
+    messages = []
+    current_data = []
+    for line in response_bytes.decode("utf-8").splitlines():
+        if line.startswith("data: "):
+            current_data.append(line[6:])
+        elif line.strip() == "" and current_data:
+            payload = json.loads("".join(current_data))
+            messages.append(payload)
+            current_data = []
+    if current_data:
+        payload = json.loads("".join(current_data))
+        messages.append(payload)
+    return messages
+
+
+def _http_post_jsonrpc(
+    base_url: str,
+    payload: dict,
+    *,
+    timeout: int = 20,
+    session_id: str = "",
+) -> tuple[list[dict], str]:
+    url = base_url.rstrip("/") + "/mcp"
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/event-stream, */*",
+    }
+    if session_id:
+        headers["mcp-session-id"] = session_id
+    req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            new_session = resp.headers.get("mcp-session-id", session_id)
+            return _parse_sse(resp.read()), str(new_session or session_id)
+    except urllib.error.HTTPError as exc:
+        try:
+            error_body = json.loads(exc.read().decode("utf-8"))
+        except Exception:
+            error_body = {}
+        return [{
+            "jsonrpc": "2.0",
+            "id": payload.get("id"),
+            "error": {
+                "code": exc.code,
+                "message": str(error_body.get("message") or error_body or exc.reason),
+            },
+        }], session_id
+    except Exception as exc:
+        return [{"jsonrpc": "2.0", "id": payload.get("id"), "error": {"message": str(exc)}}], session_id
+
+
 def _result_for_config(
     config: dict,
     *,
@@ -244,7 +305,7 @@ def _connection_cache_key(config: dict) -> str:
 
 
 def _remember_transport(config: dict, transport: str) -> None:
-    if transport in {"line", "framed"}:
+    if transport in {"line", "framed", "http"}:
         _TRANSPORT_CACHE[_connection_cache_key(config)] = transport
 
 
@@ -252,8 +313,13 @@ def _transport_candidates(config: dict, preferred: str | None = None) -> list[st
     candidates: list[str] = []
     cached = _TRANSPORT_CACHE.get(_connection_cache_key(config))
     configured = str(config.get("transport") or "").strip()
-    for item in (preferred, cached, configured, "line", "framed"):
-        if item in {"line", "framed"} and item not in candidates:
+    for item in (preferred, cached, configured):
+        if item and item not in candidates:
+            candidates.append(item)
+    if _is_http_command(str(config.get("command") or "")) and "http" not in candidates:
+        candidates.append("http")
+    for item in ("line", "framed"):
+        if item not in candidates:
             candidates.append(item)
     return candidates
 
@@ -298,6 +364,71 @@ def check_mcp_connection(
         if cached is not None:
             return cached
 
+    if _is_http_command(command):
+        try:
+            cache_key = _connection_cache_key(config)
+            session_id = _HTTP_SESSIONS.get(cache_key, "")
+            init_messages, session_id = _http_post_jsonrpc(
+                command,
+                _jsonrpc_request(1, "initialize", {
+                    "protocolVersion": MCP_PROTOCOL_VERSION,
+                    "capabilities": {},
+                    "clientInfo": {"name": "Ludens-Flow", "version": "3.0.0"},
+                }),
+                timeout=timeout_seconds,
+                session_id=session_id,
+            )
+            init_result = next((m for m in init_messages if m.get("id") == 1), {})
+            if "error" in init_result:
+                return _result_for_config(
+                    config,
+                    status="failed",
+                    message=str(init_result.get("error", {}).get("message", "HTTP MCP initialize failed.")),
+                )
+
+            _http_post_jsonrpc(
+                command,
+                _jsonrpc_notification("notifications/initialized"),
+                timeout=timeout_seconds,
+                session_id=session_id,
+            )
+
+            tools_messages, session_id = _http_post_jsonrpc(
+                command,
+                _jsonrpc_request(2, "tools/list", {}),
+                timeout=timeout_seconds,
+                session_id=session_id,
+            )
+            tools_result = next((m for m in tools_messages if m.get("id") == 2), {})
+            if "error" in tools_result:
+                return _result_for_config(
+                    config,
+                    status="reachable",
+                    message=str(tools_result.get("error", {}).get("message", "HTTP MCP tools/list failed.")),
+                    transport="http",
+                )
+
+            _HTTP_SESSIONS[cache_key] = session_id
+            tools = _safe_tool_summary(tools_result.get("result", {}).get("tools"))
+            if tools:
+                _remember_transport(config, "http")
+                return _remember_health_result(
+                    config,
+                    _result_for_config(config, status="tools_loaded", tools=tools, transport="http"),
+                )
+            _remember_transport(config, "http")
+            return _remember_health_result(
+                config,
+                _result_for_config(
+                    config,
+                    status="reachable",
+                    message="Initialized, but no tools were returned.",
+                    transport="http",
+                ),
+            )
+        except Exception as exc:
+            return _result_for_config(config, status="failed", message=f"HTTP MCP error: {exc}")
+
     args = [str(item) for item in config.get("args", []) if str(item).strip()]
     env = os.environ.copy()
     raw_env = config.get("env", {})
@@ -307,6 +438,8 @@ def check_mcp_connection(
     last_error = ""
     initialized_without_tools = False
     for transport in _transport_candidates(config):
+        if transport == "http":
+            continue
         try:
             completed = subprocess.run(
                 [command, *args],
@@ -408,6 +541,27 @@ def call_mcp_tool(
     if not command:
         raise McpClientError("MCP command is empty.")
 
+    if _is_http_command(command):
+        try:
+            cache_key = _connection_cache_key(config)
+            session_id = _HTTP_SESSIONS.get(cache_key, "")
+            messages, session_id = _http_post_jsonrpc(
+                command,
+                _jsonrpc_request(2, "tools/call", {"name": tool_name, "arguments": arguments or {}}),
+                timeout=timeout_seconds,
+                session_id=session_id,
+            )
+            _HTTP_SESSIONS[cache_key] = session_id
+            result = next((m for m in messages if m.get("id") == 2), {})
+            if "error" in result:
+                error = result["error"]
+                raise McpClientError(str(error.get("message") or error))
+            return result.get("result", {})
+        except McpClientError:
+            raise
+        except Exception as exc:
+            raise McpClientError(f"HTTP MCP tool call failed: {exc}") from exc
+
     args = [str(item) for item in config.get("args", []) if str(item).strip()]
     env = os.environ.copy()
     raw_env = config.get("env", {})
@@ -416,6 +570,8 @@ def call_mcp_tool(
 
     last_error = ""
     for candidate_transport in _transport_candidates(config, preferred=transport):
+        if candidate_transport == "http":
+            continue
         try:
             completed = subprocess.run(
                 [command, *args],
