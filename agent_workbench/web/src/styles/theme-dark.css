@@ -1115,3 +1115,22 @@
   border-color: rgba(78, 140, 255, 0.34);
   color: var(--primary);
 }
+
+/* Tool Status Badge Colors (Dark Theme) */
+[data-theme="dark"] .settings-chip.subtle.status-writable {
+  background: rgba(140, 75, 5, 0.18);
+  border-color: rgba(255, 168, 64, 0.12);
+  color: #ffa840;
+}
+
+[data-theme="dark"] .settings-chip.subtle.status-workspace {
+  background: rgba(11, 128, 83, 0.15);
+  border-color: rgba(22, 163, 106, 0.15);
+  color: #38cfa0;
+}
+
+[data-theme="dark"] .settings-chip.subtle.status-readonly {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
+}

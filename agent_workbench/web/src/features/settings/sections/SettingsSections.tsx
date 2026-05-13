@@ -226,10 +226,10 @@ function toolCategoryLabel(category: string): string {
   return "通用";
 }
 
-function toolStatusLabel(tool: ToolCatalogItem): string {
-  if (tool.writes_files) return "可写入";
-  if (tool.requires_workspace) return "需工作区";
-  return "只读";
+function toolStatusInfo(tool: ToolCatalogItem): { label: string; className: string } {
+  if (tool.writes_files) return { label: "可写入", className: "status-writable" };
+  if (tool.requires_workspace) return { label: "需工作区", className: "status-workspace" };
+  return { label: "只读", className: "status-readonly" };
 }
 
 interface GeneralSettingsSectionProps {
@@ -591,9 +591,14 @@ export function ToolsSection({ tools, toolsByCategory }: ToolsSectionProps) {
                         <div>
                           <h4>{tool.name}</h4>
                           <div className="tool-card-meta">
-                            <span className="settings-chip subtle">
-                              {toolStatusLabel(tool)}
-                            </span>
+                            {(() => {
+                              const info = toolStatusInfo(tool);
+                              return (
+                                <span className={`settings-chip subtle ${info.className}`}>
+                                  {info.label}
+                                </span>
+                              );
+                            })()}
                             {tool.workspace_kind ? (
                               <span className="settings-chip subtle">
                                 {kindLabel(tool.workspace_kind)}

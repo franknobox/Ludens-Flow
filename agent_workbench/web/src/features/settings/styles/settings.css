@@ -1755,3 +1755,22 @@
 [data-theme="dark"] .settings-skill-details-body strong {
   color: var(--text);
 }
+
+/* Tool Status Badge Colors */
+.settings-chip.subtle.status-writable {
+  background: rgba(255, 246, 235, 0.96);
+  border-color: rgba(232, 125, 13, 0.22);
+  color: #c96500;
+}
+
+.settings-chip.subtle.status-workspace {
+  background: rgba(231, 248, 242, 0.96);
+  border-color: rgba(22, 163, 106, 0.22);
+  color: #118152;
+}
+
+.settings-chip.subtle.status-readonly {
+  background: rgba(242, 245, 249, 0.96);
+  border-color: rgba(29, 39, 52, 0.08);
+  color: #5f6e82;
+}
