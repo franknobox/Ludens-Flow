@@ -1276,3 +1276,12 @@ body {
   height: 100%;
   padding: 10px;
 }
+
+
+/* Git Graph Styling */
+.git-graph-label {
+  fill: #4c566a;
+}
+.git-graph-hash {
+  fill: #90a4ae;
+}

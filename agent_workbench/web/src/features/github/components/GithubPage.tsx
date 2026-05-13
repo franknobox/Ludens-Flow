@@ -426,15 +426,15 @@ export function GithubPage() {
                     <circle cx="500" cy="220" r="8" fill="#eceff4" stroke="#b48ead" strokeWidth="3" />
                     
                     {/* Labels */}
-                    <text x="50" y="180" fontFamily="sans-serif" fontSize="14" fill="#4c566a" fontWeight="bold">v1.0</text>
-                    <text x="750" y="180" fontFamily="sans-serif" fontSize="14" fill="#4c566a" fontWeight="bold">main</text>
-                    <text x="600" y="60" fontFamily="sans-serif" fontSize="14" fill="#4c566a" fontWeight="bold">dev</text>
-                    <text x="420" y="250" fontFamily="sans-serif" fontSize="14" fill="#4c566a" fontWeight="bold">feat/w1-baseline</text>
+                    <text x="50" y="180" fontFamily="sans-serif" fontSize="14" className="git-graph-label" fontWeight="bold">v1.0</text>
+                    <text x="750" y="180" fontFamily="sans-serif" fontSize="14" className="git-graph-label" fontWeight="bold">main</text>
+                    <text x="600" y="60" fontFamily="sans-serif" fontSize="14" className="git-graph-label" fontWeight="bold">dev</text>
+                    <text x="420" y="250" fontFamily="sans-serif" fontSize="14" className="git-graph-label" fontWeight="bold">feat/w1-baseline</text>
                     
                     {/* Commit Hashes */}
-                    <text x="250" y="55" fontFamily="monospace" fontSize="12" fill="#90a4ae">c07aaef</text>
-                    <text x="420" y="200" fontFamily="monospace" fontSize="12" fill="#90a4ae">86f1441</text>
-                    <text x="700" y="125" fontFamily="monospace" fontSize="12" fill="#90a4ae">cb2e3db</text>
+                    <text x="250" y="55" fontFamily="monospace" fontSize="12" className="git-graph-hash">c07aaef</text>
+                    <text x="420" y="200" fontFamily="monospace" fontSize="12" className="git-graph-hash">86f1441</text>
+                    <text x="700" y="125" fontFamily="monospace" fontSize="12" className="git-graph-hash">cb2e3db</text>
                   </svg>
                 </div>
               </div>

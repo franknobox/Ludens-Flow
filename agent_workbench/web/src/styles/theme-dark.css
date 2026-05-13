@@ -1134,3 +1134,27 @@
   border-color: rgba(255, 255, 255, 0.08);
   color: #94a3b8;
 }
+
+
+/* Git Graph Dark Mode Overrides */
+.github-graph-container {
+  background: rgba(30, 35, 45, 0.4) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.git-graph-label {
+  fill: #d8dee9 !important;
+}
+
+.git-graph-hash {
+  fill: #81a1c1 !important;
+}
+
+.github-graph-svg circle {
+  fill: #2e3440 !important;
+}
+
+.github-graph-svg circle[r="14"] {
+  fill: #5e81ac !important;
+  stroke: #eceff4 !important;
+}
