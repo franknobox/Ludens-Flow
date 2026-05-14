@@ -1,5 +1,5 @@
 """Unity MCP stdio health check test (requires Unity Editor running)."""
-import json
+import shutil
 import unittest
 
 from ludens_flow.capabilities.mcp import health as mcp_health
@@ -14,6 +14,9 @@ class UnityMcpStdioTests(unittest.TestCase):
 
     def test_unity_stdio_health_check(self):
         """Verify Unity MCP responds over stdio with initialize + tools/list."""
+        if shutil.which("uvx") is None:
+            self.skipTest("uvx is not installed; skipping live Unity MCP stdio check")
+
         config = {
             "id": "unity-stdio-test",
             "engine": "unity",
