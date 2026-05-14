@@ -5,6 +5,13 @@ import type {
   McpConnectionStatus,
 } from "../../workbench/types";
 
+const MCP_ENGINE_OPTIONS: Array<{ value: McpConnectionConfig["engine"]; label: string }> = [
+  { value: "unity", label: "Unity" },
+  { value: "godot", label: "Godot" },
+  { value: "blender", label: "Blender" },
+  { value: "unreal", label: "Unreal Engine" },
+];
+
 function mcpStatusLabel(status?: McpConnectionStatus): string {
   if (!status) return "已配置";
   if (status.status === "not_configured") return "未配置";
