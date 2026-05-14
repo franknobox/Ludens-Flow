@@ -26,6 +26,7 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
     mcpMode,
     model,
     projectName,
+    permissionPrompt,
     readOnly,
     requestInFlight,
     statusNote,
@@ -35,6 +36,7 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
     transientChat,
     warningText,
     setMcpMode,
+    submitPermissionPrompt,
     createProject,
     handleArchiveProject,
     handleRenameProject,
@@ -147,6 +149,42 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
         activeProject={activeProject}
         onSelectAgent={selectAgent}
       />
+
+      {permissionPrompt ? (
+        <div className="permission-modal-backdrop" role="presentation">
+          <section
+            className="permission-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="permission-modal-title"
+          >
+            <div className="permission-modal-kicker">权限确认</div>
+            <h2 id="permission-modal-title">{permissionPrompt.title}</h2>
+            <p>{permissionPrompt.message}</p>
+            {permissionPrompt.filePath ? (
+              <div className="permission-modal-target">
+                目标：{permissionPrompt.filePath}
+              </div>
+            ) : null}
+            <div className="permission-modal-actions">
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() => submitPermissionPrompt(false)}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                className="primary-btn"
+                onClick={() => submitPermissionPrompt(true)}
+              >
+                允许
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

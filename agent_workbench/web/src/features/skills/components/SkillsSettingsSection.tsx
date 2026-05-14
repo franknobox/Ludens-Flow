@@ -10,6 +10,7 @@ import {
 } from "../api";
 import type { SkillPackageFile } from "../api";
 import type { SkillAgentScope, SkillManifest } from "../types";
+import { workbenchApi } from "../../workbench/api";
 
 const AGENT_OPTIONS: Array<{ value: SkillAgentScope; label: string }> = [
   { value: "design", label: "Design" },
@@ -61,6 +62,7 @@ export function SkillsSettingsSection() {
   const [selectedSkillId, setSelectedSkillId] = useState("");
   const [githubUrl, setGithubUrl] = useState("");
   const [selfCaptureEnabled, setSelfCaptureEnabled] = useState(false);
+  const [selfCaptureSaving, setSelfCaptureSaving] = useState(false);
   const skillJsonInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const zipInputRef = useRef<HTMLInputElement>(null);
@@ -90,11 +92,42 @@ export function SkillsSettingsSection() {
     }
   };
 
+  const refreshSelfCaptureSetting = async () => {
+    try {
+      const settings = await workbenchApi.getCurrentProjectSettings();
+      setSelfCaptureEnabled(Boolean(settings.skill_self_capture_enabled));
+    } catch {
+      setSelfCaptureEnabled(false);
+    }
+  };
+
   useEffect(() => {
     folderInputRef.current?.setAttribute("webkitdirectory", "");
     folderInputRef.current?.setAttribute("directory", "");
     void refresh();
+    void refreshSelfCaptureSetting();
   }, []);
+
+  const handleSelfCaptureToggle = async (enabled: boolean) => {
+    const previous = selfCaptureEnabled;
+    setSelfCaptureEnabled(enabled);
+    setSelfCaptureSaving(true);
+    setMessage("");
+    try {
+      const settings = await workbenchApi.updateCurrentProjectSettings({
+        skill_self_capture_enabled: enabled,
+      });
+      setSelfCaptureEnabled(Boolean(settings.skill_self_capture_enabled));
+      setMessageKind("success");
+      setMessage(enabled ? "已开启自我沉淀。" : "已关闭自我沉淀。");
+    } catch (error) {
+      setSelfCaptureEnabled(previous);
+      setMessageKind("error");
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSelfCaptureSaving(false);
+    }
+  };
 
   const importFromSkillJson = async (file: File, prompt?: string) => {
     const text = await readFileText(file);
@@ -220,7 +253,10 @@ export function SkillsSettingsSection() {
                 <input
                   type="checkbox"
                   checked={selfCaptureEnabled}
-                  onChange={(event) => setSelfCaptureEnabled(event.target.checked)}
+                  disabled={selfCaptureSaving}
+                  onChange={(event) => {
+                    void handleSelfCaptureToggle(event.target.checked);
+                  }}
                 />
                 <span>{selfCaptureEnabled ? "已开启" : "未开启"}</span>
               </label>

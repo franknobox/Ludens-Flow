@@ -11,6 +11,7 @@ import base64
 import json
 import logging
 import queue
+import re
 import uuid
 import threading
 from datetime import datetime, timezone
@@ -79,6 +80,7 @@ from ludens_flow.core.paths import (
     set_project_agent_file_write_confirm_required,
     set_project_engine_settings,
     set_project_model_routing,
+    set_project_skill_self_capture_enabled,
     set_active_project_id,
     set_project_unity_root,
 )
@@ -98,6 +100,7 @@ _EVENT_SUBSCRIBERS: dict[str, list[queue.Queue[dict]]] = {}
 _EVENT_SUBSCRIBERS_GUARD = threading.Lock()
 _PERMISSION_REQUESTS: dict[str, dict] = {}
 _PERMISSION_REQUESTS_GUARD = threading.Lock()
+_PERMISSION_REQUEST_TIMEOUT_SECONDS = 600
 _COPYWRITING_JOBS: dict[str, dict] = {}
 _COPYWRITING_JOBS_GUARD = threading.Lock()
 _MAX_COPYWRITING_JOBS = 50
@@ -144,6 +147,7 @@ class ProjectWorkspaceRequest(BaseModel):
 class ProjectSettingsRequest(BaseModel):
     agent_file_write_enabled: bool | None = None
     agent_file_write_confirm_required: bool | None = None
+    skill_self_capture_enabled: bool | None = None
     model_routing: dict | None = None
     mcp_connections: list[dict] | None = None
     target_engine: str | None = None
@@ -505,9 +509,14 @@ def _summarize_tool_result(tool_name: str, result: str) -> str:
     return (text[:120] + "…") if len(text) > 120 else text
 
 
-def _request_tool_permission(project_id: str, payload: dict) -> bool:
-    if not get_project_settings(project_id=project_id).get(
-        "agent_file_write_confirm_required", False
+def _request_tool_permission(
+    project_id: str, payload: dict, *, force_confirm: bool = False
+) -> bool:
+    if (
+        not force_confirm
+        and not get_project_settings(project_id=project_id).get(
+            "agent_file_write_confirm_required", False
+        )
     ):
         _publish_project_event(project_id, payload)
         return True
@@ -521,7 +530,7 @@ def _request_tool_permission(project_id: str, payload: dict) -> bool:
         _PERMISSION_REQUESTS[request_id] = record
 
     _publish_project_event(project_id, payload)
-    decision_event.wait(timeout=90)
+    decision_event.wait(timeout=_PERMISSION_REQUEST_TIMEOUT_SECONDS)
 
     with _PERMISSION_REQUESTS_GUARD:
         _PERMISSION_REQUESTS.pop(request_id, None)
@@ -577,6 +586,160 @@ def _build_tool_event_handler(project_id: str, state) -> callable:
         return None
 
     return emit
+
+
+_SELF_SKILL_KEYWORDS = {
+    "流程",
+    "步骤",
+    "规范",
+    "工作流",
+    "以后",
+    "每次",
+    "固定",
+    "复用",
+    "先",
+    "然后",
+    "最后",
+    "必须",
+    "不要",
+    "输出",
+    "检查",
+}
+
+
+def _looks_like_self_skill_candidate(message: str) -> bool:
+    text = str(message or "").strip()
+    if not text or text.startswith("/") or text.startswith("[ACTION]"):
+        return False
+    normalized = re.sub(r"\s+", "", text)
+    lines = [line for line in text.splitlines() if line.strip()]
+    numbered_steps = len(re.findall(r"(^|\n)\s*(?:\d+[.、)]|[-*])\s+", text))
+    keyword_hits = sum(1 for keyword in _SELF_SKILL_KEYWORDS if keyword in text)
+    return (
+        len(normalized) >= 180
+        or len(lines) >= 6
+        or numbered_steps >= 3
+        or (len(normalized) >= 110 and keyword_hits >= 4)
+    )
+
+
+def _self_skill_title_from_message(message: str) -> str:
+    for line in str(message or "").splitlines():
+        cleaned = re.sub(r"^[#>*\-\d.、)\s]+", "", line).strip()
+        if cleaned:
+            return cleaned[:28]
+    return "项目工作流程"
+
+
+def _build_self_skill_payload(message: str, state) -> tuple[dict, str, str]:
+    agent_key = phase_to_agent_key(getattr(state, "phase", None))
+    if agent_key not in {"design", "pm", "engineering", "review"}:
+        agent_key = "engineering"
+    title = _self_skill_title_from_message(message)
+    suffix = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    manifest = {
+        "id": f"self-{agent_key}-{suffix}-{uuid.uuid4().hex[:6]}",
+        "name": title,
+        "description": "从项目对话中沉淀的可复用工作流程。",
+        "version": "0.1.0",
+        "agents": [agent_key],
+        "tags": ["自我沉淀", "流程"],
+    }
+    prompt = (
+        f"# {title}\n\n"
+        "## 使用场景\n"
+        "当用户提出相似任务、希望复用稳定流程，或当前任务与下方流程高度相关时使用。\n\n"
+        "## 原始流程\n"
+        f"{message.strip()}\n\n"
+        "## 执行规则\n"
+        "- 优先把上述流程作为工作方法，而不是机械复述给用户。\n"
+        "- 若流程与项目工件、当前用户最新指令冲突，以项目工件和最新指令为准。\n"
+        "- 输出时保持当前 Agent 的职责边界，不越权进入其他阶段。\n"
+        "- 发现流程不适用时，简要说明原因并按普通任务处理。\n"
+    )
+    return manifest, prompt, agent_key
+
+
+def _maybe_create_self_skill_from_message(project_id: str, state, message: str) -> None:
+    settings = get_project_settings(project_id=project_id)
+    if not settings.get("skill_self_capture_enabled", False):
+        return
+    if not _looks_like_self_skill_candidate(message):
+        return
+
+    manifest, prompt, agent_key = _build_self_skill_payload(message, state)
+    tool_name = "skill_create_draft"
+    permission_payload = _event_payload(
+        "permission_required",
+        project_id=project_id,
+        state=state,
+    ) | {
+        "tool_name": tool_name,
+        "tool_summary": f"创建自我沉淀 Skill：{manifest['name']}",
+        "message": "检测到这是一段可复用的任务流程。是否允许将它沉淀为当前项目可用的 Skill？",
+        "workspace_id": "",
+        "file_path": "workspace/skills/installed",
+    }
+    approved = _request_tool_permission(
+        project_id,
+        permission_payload,
+        force_confirm=True,
+    )
+    if not approved:
+        _publish_project_event(
+            project_id,
+            _event_payload(
+                "permission_denied",
+                project_id=project_id,
+                state=state,
+            )
+            | {
+                "tool_name": tool_name,
+                "tool_summary": permission_payload["tool_summary"],
+                "message": "用户取消了自我沉淀 Skill 创建。",
+            },
+        )
+        return
+
+    _publish_project_event(
+        project_id,
+        _event_payload("permission_granted", project_id=project_id, state=state)
+        | {
+            "tool_name": tool_name,
+            "tool_summary": permission_payload["tool_summary"],
+            "message": "已确认创建自我沉淀 Skill。",
+        },
+    )
+    _publish_project_event(
+        project_id,
+        _event_payload("tool_started", project_id=project_id, state=state)
+        | {
+            "tool_name": tool_name,
+            "tool_summary": permission_payload["tool_summary"],
+        },
+    )
+    created = create_skill_draft(
+        manifest,
+        prompt=prompt,
+        project_id=project_id,
+        source_agent=agent_key,
+        reason="auto_detected_long_workflow_prompt",
+    )
+    _publish_project_event(
+        project_id,
+        _event_payload("tool_completed", project_id=project_id, state=state)
+        | {
+            "tool_name": tool_name,
+            "tool_summary": permission_payload["tool_summary"],
+            "tool_result_summary": f"已创建自我沉淀 Skill：{created['name']}",
+            "skill_id": created["id"],
+        },
+    )
+    _publish_project_event(
+        project_id,
+        _event_payload("skills_updated", project_id=project_id, state=state)
+        | {"skill_id": created["id"]},
+    )
 
 
 def startup() -> None:
@@ -736,6 +899,7 @@ def post_chat(req: ChatRequest):
                     include_projects=True,
                 ),
             )
+            _maybe_create_self_skill_from_message(project_id, state, user_message)
             return {
                 "reply": reply,
                 "phase": state.phase,
@@ -1024,6 +1188,7 @@ def post_current_project_settings(req: ProjectSettingsRequest):
     if (
         req.agent_file_write_enabled is None
         and req.agent_file_write_confirm_required is None
+        and req.skill_self_capture_enabled is None
         and req.model_routing is None
         and req.mcp_connections is None
         and req.target_engine is None
@@ -1040,6 +1205,12 @@ def post_current_project_settings(req: ProjectSettingsRequest):
     if req.agent_file_write_confirm_required is not None:
         set_project_agent_file_write_confirm_required(
             req.agent_file_write_confirm_required,
+            project_id=project_id,
+        )
+
+    if req.skill_self_capture_enabled is not None:
+        set_project_skill_self_capture_enabled(
+            req.skill_self_capture_enabled,
             project_id=project_id,
         )
 

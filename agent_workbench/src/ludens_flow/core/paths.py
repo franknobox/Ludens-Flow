@@ -506,6 +506,9 @@ def _migrate_project_meta_payload(
         "agent_file_write_confirm_required": _coerce_bool(
             meta.get("agent_file_write_confirm_required", False)
         ),
+        "skill_self_capture_enabled": _coerce_bool(
+            meta.get("skill_self_capture_enabled", False)
+        ),
         "model_routing": _normalize_model_routing(meta.get("model_routing")),
         "mcp_connections": _normalize_mcp_connections(meta.get("mcp_connections")),
         "github_repo": _normalize_github_repo(meta.get("github_repo")),
@@ -567,6 +570,9 @@ def _build_project_meta_record(
         "agent_file_write_confirm_required": _coerce_bool(
             meta.get("agent_file_write_confirm_required", False)
         ),
+        "skill_self_capture_enabled": _coerce_bool(
+            meta.get("skill_self_capture_enabled", False)
+        ),
         "model_routing": _normalize_model_routing(meta.get("model_routing")),
         "mcp_connections": _normalize_mcp_connections(meta.get("mcp_connections")),
         "github_repo": _normalize_github_repo(meta.get("github_repo")),
@@ -592,6 +598,7 @@ def _upsert_project_meta(
     last_message_preview: Optional[str] = None,
     agent_file_write_enabled: Any = _UNSET,
     agent_file_write_confirm_required: Any = _UNSET,
+    skill_self_capture_enabled: Any = _UNSET,
     model_routing: Any = _UNSET,
     mcp_connections: Any = _UNSET,
     github_repo: Any = _UNSET,
@@ -642,6 +649,9 @@ def _upsert_project_meta(
         "agent_file_write_confirm_required": _coerce_bool(
             existing.get("agent_file_write_confirm_required", False)
         ),
+        "skill_self_capture_enabled": _coerce_bool(
+            existing.get("skill_self_capture_enabled", False)
+        ),
         "model_routing": _normalize_model_routing(existing.get("model_routing")),
         "mcp_connections": _normalize_mcp_connections(existing.get("mcp_connections")),
         "github_repo": _normalize_github_repo(existing.get("github_repo")),
@@ -664,6 +674,8 @@ def _upsert_project_meta(
         meta["agent_file_write_confirm_required"] = _coerce_bool(
             agent_file_write_confirm_required
         )
+    if skill_self_capture_enabled is not _UNSET:
+        meta["skill_self_capture_enabled"] = _coerce_bool(skill_self_capture_enabled)
     if model_routing is not _UNSET:
         meta["model_routing"] = _normalize_model_routing(model_routing)
     if mcp_connections is not _UNSET:
@@ -952,6 +964,7 @@ def touch_project(
     last_message_preview: Optional[str] = None,
     agent_file_write_enabled: Any = _UNSET,
     agent_file_write_confirm_required: Any = _UNSET,
+    skill_self_capture_enabled: Any = _UNSET,
     model_routing: Any = _UNSET,
     mcp_connections: Any = _UNSET,
     github_repo: Any = _UNSET,
@@ -979,6 +992,7 @@ def touch_project(
             last_message_preview=last_message_preview,
             agent_file_write_enabled=agent_file_write_enabled,
             agent_file_write_confirm_required=agent_file_write_confirm_required,
+            skill_self_capture_enabled=skill_self_capture_enabled,
             model_routing=model_routing,
             mcp_connections=mcp_connections,
             github_repo=github_repo,
@@ -1127,6 +1141,9 @@ def get_project_settings(project_id: Optional[str] = None) -> Dict[str, Any]:
         "agent_file_write_confirm_required": _coerce_bool(
             record.get("agent_file_write_confirm_required", False)
         ),
+        "skill_self_capture_enabled": _coerce_bool(
+            record.get("skill_self_capture_enabled", False)
+        ),
         "model_routing": _normalize_model_routing(record.get("model_routing")),
         "mcp_connections": _normalize_mcp_connections(record.get("mcp_connections")),
         "target_engine": _normalize_target_engine(record.get("target_engine")),
@@ -1142,6 +1159,9 @@ def _settings_response_from_meta(project_id: str, meta: Dict[str, Any]) -> Dict[
         ),
         "agent_file_write_confirm_required": _coerce_bool(
             meta.get("agent_file_write_confirm_required", False)
+        ),
+        "skill_self_capture_enabled": _coerce_bool(
+            meta.get("skill_self_capture_enabled", False)
         ),
         "model_routing": _normalize_model_routing(meta.get("model_routing")),
         "mcp_connections": _normalize_mcp_connections(meta.get("mcp_connections")),
@@ -1190,6 +1210,19 @@ def set_project_agent_file_write_confirm_required(
     meta = touch_project(
         resolved,
         agent_file_write_confirm_required=_coerce_bool(required),
+    )
+    return _settings_response_from_meta(resolved, meta)
+
+
+def set_project_skill_self_capture_enabled(
+    enabled: bool, *, project_id: Optional[str] = None
+) -> Dict[str, Any]:
+    resolved = resolve_project_id(project_id)
+    if not resolved:
+        raise ValueError("Project id is required.")
+    meta = touch_project(
+        resolved,
+        skill_self_capture_enabled=_coerce_bool(enabled),
     )
     return _settings_response_from_meta(resolved, meta)
 

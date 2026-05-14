@@ -128,6 +128,14 @@ function loadStoredTransientChat(): {
   }
 }
 
+interface PermissionPromptState {
+  requestId: string;
+  title: string;
+  message: string;
+  filePath?: string;
+  isSkillPermission: boolean;
+}
+
 export function useWorkbenchController() {
   const {
     runtimeState,
@@ -153,6 +161,9 @@ export function useWorkbenchController() {
   const [warningText, setWarningText] = useState("");
   const [archiveSubmitting, setArchiveSubmitting] = useState(false);
   const [topbarSlot, setTopbarSlot] = useState<HTMLElement | null>(null);
+  const [permissionPrompt, setPermissionPrompt] =
+    useState<PermissionPromptState | null>(null);
+  const [permissionQueue, setPermissionQueue] = useState<PermissionPromptState[]>([]);
   const [fastDevProgress, setFastDevProgress] = useState<FastDevProgress>({
     open: false,
     status: "idle",
@@ -340,16 +351,25 @@ export function useWorkbenchController() {
         const requestId = event.permission_request_id;
         if (!permissionDecisionRef.current.has(requestId)) {
           permissionDecisionRef.current.add(requestId);
-          const approved = window.confirm(
-            `${event.tool_summary || "Agent 请求写入文件"}\n\n${
-              event.file_path ? `目标：${event.file_path}\n` : ""
-            }是否允许这次受控文件操作？`,
-          );
-          void workbenchApi
-            .submitPermissionDecision(requestId, approved)
-            .catch((error) => {
-              setErrorText("权限确认提交失败：" + toErrorMessage(error));
-            });
+          const isSkillPermission = event.tool_name === "skill_create_draft";
+          const nextPrompt: PermissionPromptState = {
+            requestId,
+            title: isSkillPermission
+              ? event.tool_summary || "Agent 建议创建自我沉淀 Skill"
+              : event.tool_summary || "Agent 请求执行受控工具",
+            message: isSkillPermission
+              ? event.message || "是否允许创建这个自我沉淀 Skill？"
+              : event.message || "是否允许这次受控工具操作？",
+            filePath: event.file_path,
+            isSkillPermission,
+          };
+          setPermissionPrompt((currentPrompt) => {
+            if (currentPrompt) {
+              setPermissionQueue((queue) => [...queue, nextPrompt]);
+              return currentPrompt;
+            }
+            return nextPrompt;
+          });
         }
       }
 
@@ -951,6 +971,26 @@ export function useWorkbenchController() {
     setCurrentView({ type: "github" });
   };
 
+  const submitPermissionPrompt = (approved: boolean) => {
+    const prompt = permissionPrompt;
+    if (!prompt) {
+      return;
+    }
+    setPermissionPrompt(null);
+    setPermissionQueue((queue) => {
+      const [nextPrompt, ...rest] = queue;
+      window.setTimeout(() => {
+        setPermissionPrompt(nextPrompt || null);
+      }, 0);
+      return rest;
+    });
+    void workbenchApi
+      .submitPermissionDecision(prompt.requestId, approved)
+      .catch((error) => {
+        setErrorText("权限确认提交失败：" + toErrorMessage(error));
+      });
+  };
+
   return {
     activeProject,
     activeProjects,
@@ -963,6 +1003,7 @@ export function useWorkbenchController() {
     historyByAgent,
     model,
     mcpMode,
+    permissionPrompt,
     projectName,
     readOnly,
     requestInFlight,
@@ -973,6 +1014,7 @@ export function useWorkbenchController() {
     transientChat,
     warningText,
     setMcpMode: updateMcpMode,
+    submitPermissionPrompt,
 createProject,
     handleArchiveProject,
     handleRenameProject,
