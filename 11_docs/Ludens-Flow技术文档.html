@@ -1,0 +1,1043 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ludens-Flow 技术文档</title>
+<style>
+  @page {
+    size: A4;
+    margin: 17mm 15mm;
+  }
+  :root {
+    --ink: #111827;
+    --muted: #667085;
+    --soft: #f7f9fc;
+    --paper: #fbfcfe;
+    --paper-strong: #f3f6fa;
+    --line: #d7dfeb;
+    --line-soft: #e6ebf2;
+    --line-strong: #94a3b8;
+    --blue: #1f5fbf;
+    --blue-2: #4b83d8;
+    --cyan: #087f9f;
+    --green: #18864b;
+    --orange: #475569;
+    --purple: #6d4bc4;
+    --red: #b91c1c;
+    --card: #ffffff;
+    --sans: "Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --serif: "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", "STSong", "SimSun", serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0 auto;
+    padding: 28px 24px;
+    max-width: 980px;
+    color: var(--ink);
+    background:
+      linear-gradient(rgba(31, 95, 191, 0.026) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(31, 95, 191, 0.026) 1px, transparent 1px),
+      #ffffff;
+    background-size: 28px 28px;
+    font-family: var(--serif);
+    font-size: 14px;
+    line-height: 1.72;
+  }
+  h1, h2, h3, h4 { margin: 0; line-height: 1.22; }
+  h1, h2, h3, h4,
+  th,
+  .toc-item,
+  .meta-card span,
+  .eyebrow,
+  .diagram-title,
+  .layer-label,
+  .flow-step strong,
+  .flow-step b,
+  .demo-time {
+    font-family: var(--sans);
+  }
+  h1 { font-size: 40px; letter-spacing: -0.035em; }
+  h2 {
+    margin: 44px 0 16px;
+    padding: 0 0 10px;
+    border-bottom: 2px solid var(--ink);
+    font-size: 26px;
+    page-break-after: avoid;
+  }
+  h3 {
+    margin: 26px 0 10px;
+    padding-bottom: 6px;
+    border-bottom: 1.8px dashed #8fa0b8;
+    font-size: 19px;
+    page-break-after: avoid;
+  }
+  h4 { margin: 16px 0 8px; font-size: 16px; color: #26364f; }
+  p { margin: 10px 0; }
+  a { color: var(--blue); text-decoration: none; }
+  .repo-link,
+  .repo-link:visited {
+    color: var(--ink);
+    text-decoration: underline;
+    text-decoration-thickness: 0.6px;
+    text-underline-offset: 3px;
+  }
+  ul, ol { padding-left: 22px; margin: 10px 0; }
+  li { margin: 5px 0; }
+  code {
+    padding: 2px 6px;
+    border: 1px solid var(--line-soft);
+    border-radius: 3px;
+    background: #f8fafc;
+    color: #164a99;
+    font-family: Consolas, "SFMono-Regular", Menlo, monospace;
+    font-size: 0.92em;
+  }
+  pre {
+    margin: 14px 0;
+    padding: 14px 16px;
+    overflow-x: auto;
+    max-width: 100%;
+    border: 1px dashed var(--line-strong);
+    border-radius: 0;
+    background: #f8fafc;
+    color: #111827;
+    font-family: Consolas, "SFMono-Regular", Menlo, monospace;
+    font-size: 12px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    page-break-inside: avoid;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    overflow: hidden;
+    border: 1px solid var(--line-soft);
+    background: var(--card);
+    page-break-inside: avoid;
+  }
+  th, td {
+    padding: 9px 11px;
+    border: 1px solid var(--line-soft);
+    vertical-align: top;
+    text-align: left;
+  }
+  th { background: #f3f6fa; color: #172033; font-weight: 800; }
+  tr:last-child td { border-bottom: 0; }
+  .compact-table td:first-child {
+    width: 132px;
+    white-space: nowrap;
+    font-weight: 800;
+  }
+  .compact-table td,
+  .compact-table th {
+    padding: 8px 10px;
+  }
+  .plain-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 34px;
+    row-gap: 0;
+    margin: 12px 0 20px;
+  }
+  .plain-item {
+    padding: 12px 0 14px;
+    border-bottom: 1px dashed var(--line);
+  }
+  .plain-item h4 {
+    margin: 0 0 6px;
+    color: var(--ink);
+    font-size: 16px;
+  }
+  .plain-item p {
+    margin: 6px 0;
+  }
+  .plain-item .file-ref {
+    display: block;
+    margin-top: 6px;
+  }
+  blockquote {
+    margin: 18px 0;
+    padding: 12px 16px;
+    border-left: 4px solid var(--blue);
+    border-radius: 0;
+    background: #f8fafc;
+    color: #26364f;
+  }
+  .page {
+    border: 0;
+    background:
+      radial-gradient(circle at 16% 4%, rgba(96, 119, 160, 0.06), transparent 28%),
+      linear-gradient(180deg, rgba(255,255,255,0.92), rgba(246,249,253,0.5)),
+      var(--paper);
+    padding: 36px 42px;
+  }
+  .hero {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    gap: 30px;
+    align-items: center;
+    padding: 16px 0 28px;
+    border-bottom: 2px solid var(--ink);
+    background: transparent;
+  }
+  .hero-logo {
+    width: 224px;
+    height: 224px;
+    display: grid;
+    place-items: center;
+    border-radius: 0;
+    background: transparent;
+    border: 0;
+  }
+  .hero-logo img { width: 172px; }
+  .subtitle {
+    max-width: 700px;
+    margin-top: 12px;
+    color: #38465a;
+    font-size: 14px;
+    line-height: 1.68;
+  }
+  .meta-grid {
+    display: grid;
+    grid-template-columns: minmax(150px, 180px) minmax(280px, 1fr);
+    gap: 0;
+    margin-top: 20px;
+    border-top: 0;
+    border-left: 0;
+  }
+  .meta-card, .card {
+    border: 1px solid var(--line-soft);
+    background: var(--card);
+    padding: 14px;
+  }
+  .meta-card {
+    border: 0;
+    padding-left: 0;
+    background: transparent;
+  }
+  .meta-card span, .eyebrow {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+  .toc {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px 28px;
+    margin: 24px 0 26px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line-soft);
+  }
+  .toc-item {
+    display: block;
+    padding: 0 0 12px;
+    border-bottom: 1px dashed var(--line-strong);
+    color: var(--ink);
+  }
+  .toc-item strong {
+    display: block;
+    font-size: 15px;
+    font-weight: 800;
+  }
+  .toc-item span {
+    display: block;
+    margin-top: 5px;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .grid-2 > *, .grid-3 > *, .impl-grid > *, .cap-grid > *, .layer-items > *, .flow > * {
+    min-width: 0;
+  }
+  .score-card {
+    min-height: 142px;
+    border: 0;
+    border-top: 2px solid var(--blue);
+    background: transparent;
+    padding: 14px 0 0;
+  }
+  .score-card h3,
+  .card h3,
+  .demo-item h3 {
+    border-bottom: 0;
+  }
+  .score-card:nth-child(2) { border-top-color: var(--green); }
+  .score-card:nth-child(3) { border-top-color: var(--orange); }
+  .score-card:nth-child(4) { border-top-color: var(--purple); }
+  .pill {
+    display: inline-block;
+    margin: 3px 4px 3px 0;
+    padding: 4px 9px;
+    border: 1px dashed var(--line);
+    border-radius: 999px;
+    background: #fff;
+    color: #164a99;
+    font-size: 12px;
+    font-weight: 800;
+  }
+  .muted { color: var(--muted); }
+  .diagram {
+    margin: 18px 0;
+    padding: 10px 0 0;
+    border-top: 0;
+    border-bottom: 1px dashed var(--line);
+    background: transparent;
+    page-break-inside: avoid;
+  }
+  .diagram-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 10px;
+    margin-bottom: 14px;
+    border-bottom: 1px solid var(--line);
+    font-weight: 900;
+  }
+  .layers {
+    display: grid;
+    gap: 0;
+  }
+  .layer {
+    display: grid;
+    grid-template-columns: 150px 1fr;
+    gap: 24px;
+    align-items: start;
+    padding: 14px 0;
+    border-bottom: 1px dashed var(--line);
+    position: relative;
+  }
+  .layer:last-child { border-bottom: 0; }
+  .layer:not(:last-child)::after {
+    content: "↓";
+    position: absolute;
+    left: 65px;
+    bottom: -13px;
+    color: #94a3b8;
+    font-family: var(--sans);
+    font-weight: 800;
+    background: var(--paper);
+    padding: 0 5px;
+  }
+  .layer-label {
+    display: block;
+    padding-top: 2px;
+    border: 0;
+    color: var(--ink);
+    font-weight: 900;
+    background: transparent;
+  }
+  .layer-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 18px;
+  }
+  .box {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    min-height: 0;
+    flex: 1 1 160px;
+  }
+  .box strong {
+    display: block;
+    margin-bottom: 2px;
+    font-family: var(--sans);
+  }
+  .flow {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px 18px;
+    align-items: center;
+  }
+  .flow-step {
+    min-height: 86px;
+    padding: 12px 14px;
+    border-radius: 0;
+    background: #fbfcfe;
+    border: 1px dashed var(--line);
+    position: relative;
+  }
+  .flow-step:not(:last-child)::after {
+    content: "→";
+    position: absolute;
+    right: -16px;
+    top: 32px;
+    color: #64748b;
+    font-weight: 900;
+    z-index: 2;
+  }
+  .flow-step:nth-child(4)::after {
+    content: "↙";
+    right: auto;
+    left: 50%;
+    top: auto;
+    bottom: -24px;
+  }
+  .flow-step b {
+    display: inline-flex;
+    width: 22px;
+    height: 22px;
+    margin-right: 6px;
+    margin-bottom: 6px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0;
+    border: 1px solid var(--blue);
+    background: #ffffff;
+    color: var(--blue);
+    font-size: 12px;
+  }
+  .flow-step strong { display: inline; }
+  .state-svg {
+    width: 100%;
+    max-width: 980px;
+    display: block;
+    margin: 0 auto;
+  }
+  .impl-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+  .method-list {
+    margin: 14px 0 22px;
+    border-top: 1px dashed var(--line);
+  }
+  .method-item {
+    padding: 12px 0 14px;
+    border-bottom: 1px dashed var(--line);
+  }
+  .method-item h4 {
+    margin: 0 0 6px;
+    font-size: 16px;
+    color: var(--ink);
+  }
+  .method-item p {
+    margin: 7px 0;
+  }
+  .method-item pre {
+    margin: 8px 0 10px;
+    padding: 10px 12px;
+    font-size: 11.5px;
+    line-height: 1.5;
+    background: rgba(248, 250, 252, 0.6);
+  }
+  .file-ref {
+    font-family: Consolas, "SFMono-Regular", Menlo, monospace;
+    font-size: 12px;
+    color: #1e40af;
+    overflow-wrap: anywhere;
+  }
+  .callout {
+    padding: 16px 18px;
+    border-radius: 0;
+    border: 1px dashed var(--line);
+    background: #f8fafc;
+  }
+  .risk {
+    border-color: #cbd5e1;
+    background: #f8fafc;
+  }
+  .cap-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+  }
+  .cap-card {
+    border-left: 2px solid var(--blue);
+  }
+  .cap-card:nth-child(2n) { border-left-color: var(--green); }
+  .cap-card:nth-child(3n) { border-left-color: var(--purple); }
+  .cap-card:nth-child(4n) { border-left-color: var(--orange); }
+  .demo-timeline {
+    display: grid;
+    grid-template-columns: 70px 1fr;
+    gap: 0 18px;
+  }
+  .demo-time {
+    padding-top: 8px;
+    color: var(--blue);
+    font-weight: 900;
+    text-align: right;
+  }
+  .demo-item {
+    position: relative;
+    padding: 6px 0 13px 20px;
+    border-left: 1px dashed var(--line-strong);
+  }
+  .demo-item h3 {
+    margin: 0 0 6px;
+    font-size: 17px;
+  }
+  .demo-item p {
+    margin: 6px 0;
+  }
+  .demo-item::before {
+    content: "";
+    position: absolute;
+    left: -7px;
+    top: 12px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--blue);
+  }
+  section[id] {
+    padding-top: 10px;
+    border-top: 1px dashed var(--line-soft);
+  }
+  #position { border-top: 0; }
+  .print-break { page-break-before: always; }
+  @media screen and (max-width: 900px) {
+    body { padding: 12px; }
+    .page { padding: 20px; }
+    .hero, .grid-2, .grid-3, .impl-grid, .cap-grid { grid-template-columns: 1fr; }
+    .meta-grid, .toc { grid-template-columns: 1fr; }
+    .layer { grid-template-columns: 1fr; }
+    .flow { grid-template-columns: 1fr; }
+    .flow-step:not(:last-child)::after,
+    .flow-step:nth-child(4)::after { display: none; }
+  }
+  @media print {
+    body {
+      padding: 0;
+      max-width: none;
+      background: #fff;
+      background-image: none;
+      font-size: 10.4pt;
+      line-height: 1.62;
+      color: #111827;
+    }
+    .page {
+      border: 0;
+      padding: 0;
+      background:
+        #ffffff;
+    }
+    .hero {
+      min-height: auto;
+      margin-top: 8mm;
+      grid-template-columns: 220px 1fr;
+      gap: 26px;
+      align-content: center;
+      break-after: avoid;
+    }
+    .hero-logo {
+      width: 210px;
+      height: 210px;
+    }
+    .hero-logo img { width: 164px; }
+    .toc {
+      margin-top: 12mm;
+      break-after: auto;
+    }
+    section[id] {
+      break-before: auto;
+      padding-top: 0;
+      border-top: 0;
+    }
+    #position {
+      break-before: auto;
+    }
+    h2 {
+      margin-top: 0;
+      font-size: 21pt;
+      border-bottom: 1.5pt solid #111827;
+    }
+    h3 {
+      font-size: 14pt;
+      border-bottom: 1.2pt dashed #8fa0b8;
+    }
+    h2, h3, h4 { page-break-after: avoid; break-after: avoid; }
+    .hero, .card, .diagram, table, pre, blockquote, .flow-step, .box {
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    table { font-size: 9pt; }
+    th, td { padding: 7px 8px; }
+    pre { font-size: 8.5pt; }
+    .grid-3 {
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+    .grid-2, .cap-grid {
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+    .impl-grid { grid-template-columns: 1fr; gap: 12px; }
+    .meta-grid { grid-template-columns: minmax(150px, 180px) minmax(280px, 1fr); }
+    .toc { grid-template-columns: repeat(3, 1fr); }
+    .flow { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .diagram { padding-top: 10px; }
+    .state-svg { max-height: 165mm; }
+  }
+</style>
+</head>
+<body>
+<main class="page">
+
+<section class="hero">
+  <div class="hero-logo"><img src="IMAGE/LF.svg" alt="Ludens-Flow logo"></div>
+  <div>
+    <h1>Ludens-Flow 技术文档</h1>
+    <p class="subtitle">面向游戏开发流程的多 Agent 工作台：用状态机、项目工件、工具权限和 MCP 引擎能力，把“聊天式 AI”组织成可解释、可回流、可执行的游戏开发协作系统。在AI生成游戏和AI原生游戏之间寻求“Human in Loop”的“AI伴生游戏”。</p>
+    <div class="meta-grid">
+      <div class="meta-card"><span>作品名称</span><strong>Ludens-Flow</strong></div>
+      <div class="meta-card"><span>代码仓库</span><strong><a class="repo-link" href="https://github.com/franknobox/Ludens-Flow">github.com/franknobox/Ludens-Flow</a></strong></div>
+    </div>
+  </div>
+</section>
+
+<nav class="toc">
+  <div class="toc-item"><strong>1. 项目定位</strong><span>核心创新点 / 方案比较</span></div>
+  <div class="toc-item"><strong>2. 设计意图</strong><span>Human-in-the-loop / 工具整合</span></div>
+  <div class="toc-item"><strong>3. 架构解析</strong><span>主体工程 / 状态机 / 执行链路</span></div>
+  <div class="toc-item"><strong>4. 功能中心</strong><span>Agent 设计 / 前端模块 / 能力目录</span></div>
+  <div class="toc-item"><strong>5. 人机协作流程</strong><span>从想法到 AI 伴生游戏项目</span></div>
+  <div class="toc-item"><strong>6. 未来规划</strong><span>工程闭环 / Benchmark / 桌面端</span></div>
+</nav>
+
+<section id="position">
+  <h2>1. 项目定位</h2>
+  <p><strong>Ludens-Flow 是一个面向游戏开发流程的多 Agent 工作台。</strong>它不是单次对话式的“游戏点子生成器”，也不是只围绕代码仓库工作的 Coding Agent，而是把 Agent 放回真实游戏开发流程里：围绕项目、工件、状态、工具、权限和人类决策组织协作。</p>
+  <p>项目希望解决的问题是：当一个新人或独立开发者想用 AI 做游戏时，AI 不应该只给一堆建议，而应该帮助用户形成可维护的开发资产，并能在后续持续参与项目。</p>
+
+  <div class="grid-3">
+    <div class="card score-card">
+      <span class="eyebrow">Innovation</span>
+      <h3>多 Agent + 状态机</h3>
+      <p>Design、PM、Engineering、Review 四类 Agent 通过状态机协作，不把所有职责压给一个通用助手。</p>
+    </div>
+    <div class="card score-card">
+      <span class="eyebrow">Robustness</span>
+      <h3>工件与权限边界</h3>
+      <p>输出落到 Markdown/JSON 工件；文件写入、MCP 操作、Skills 都进入项目级权限边界。</p>
+    </div>
+    <div class="card score-card">
+      <span class="eyebrow">Human Interaction</span>
+      <h3>人在环路中决策</h3>
+      <p>Agent 负责流程、指导、执行，人负责创意、取舍、Review 回流和最终确认。</p>
+    </div>
+  </div>
+
+  <h3>1.1 核心创新点</h3>
+  <p><strong>第一，项目不是把多个 Agent 简单串起来，而是用状态机组织游戏开发流程。</strong><br><code>core/router.py</code> 维护阶段与显式 action，<code>core/graph.py</code> 根据阶段调度 Design、PM、Engineering、Review 节点。用户不再依赖“输入任意内容继续”，而是通过定稿、回流、进入开发等明确动作推动流程。</p>
+  <p><strong>第二，输出不只停留在聊天记录，而是沉淀为可维护的项目工件。</strong><br><code>capabilities/artifacts/artifacts.py</code> 负责 GDD、PROJECT_PLAN、IMPLEMENTATION_PLAN、REVIEW_REPORT 等工件写入，<code>state_models.py</code> 记录 owner、version、hash 和 updated_at。对话、工件、项目状态被拆开管理，便于回看、修改和继续开发。</p>
+  <p><strong>第三，把游戏引擎、创作工具和项目资料抽象成面向游戏制作的统一能力层。</strong><br>Unity、Godot、Blender、Unreal 等外部 MCP 的原始工具并不直接暴露给 Agent，而是通过 <code>capabilities/mcp/adapter.py</code> 映射为 <code>engine_*</code> 这类游戏开发语义能力；文案加工、AIGC 入口、GitHub 协作视图和 Skills 则作为不同 Agent 的子能力进入工作台。创新点在于把“会聊天的模型”变成“理解项目、能读工件、能接引擎、能复用流程”的游戏开发协作系统。</p>
+
+  <h3>1.2 与其他游戏开发辅助方案的比较</h3>
+  <table>
+    <tr><th>方案</th><th>优势</th><th>用于游戏开发时的缺口</th><th>Ludens-Flow 的定位</th></tr>
+    <tr><td>Gemini 等通用对话助手</td><td>知识覆盖广，讨论成本低</td><td>缺少项目状态、阶段边界、工件版本和工具权限</td><td>将对话放入项目工作流，持续维护工件和状态</td></tr>
+    <tr><td>Claude Code / Codex 类 Coding Agent</td><td>工程执行、文件读写、diff、命令反馈强</td><td>主要面向代码仓库，不天然覆盖 GDD、文案、关卡、引擎对象和新人学习</td><td>吸收工程 harness 思路，但面向游戏开发全链路扩展</td></tr>
+    <tr><td>Gambo 等一键生成型产品</td><td>快速出原型</td><td>过程较黑盒，用户控制与学习空间有限</td><td>强调可解释过程、人类决策和可回流工件</td></tr>
+    <tr><td>TapTap 制造等创作平台</td><td>入口友好，生态集中</td><td>更偏平台内创作，工程/工具链自由度受限</td><td>本地优先，可接入用户自己的引擎、仓库和文件系统</td></tr>
+    <tr><td>传统引擎软件组合</td><td>能力完整，可做正式项目</td><td>学习路径陡峭，新人不知道下一步做什么</td><td>用 Agent 工作流、上下文管理和工具调用降低流程门槛</td></tr>
+  </table>
+</section>
+
+<section id="intent">
+  <h2>2. 设计意图</h2>
+  <p>当前宣传的“AI 做游戏”：很多产品展示的是一键生成一个 Web 小程序 demo，但这并不等于真正参与游戏制作。对游戏开发感兴趣的入门者，很难在这种黑盒流程里理解玩法为什么这样设计、工程为什么这样拆、资源为什么这样组织；同时，现阶段生成式开发能力本身也有限，直接把完整游戏交给模型一次性生成并不稳定。</p>
+  <p>核心是让 Agent 参与游戏内容生成、关卡设计、NPC 行为逻辑和开发流程。Ludens-Flow 的设计判断是：游戏制作 Agent 的价值不应只体现在某一次生成，而应体现在一个可持续推进的开发系统里。</p>
+
+  <div class="grid-2">
+    <div class="card">
+      <span class="eyebrow">Practice</span>
+      <h3>来自游戏开发实践的判断</h3>
+      <p>小型游戏开发是一组连续决策：想法是否能形成 MVP、玩法先做哪部分、工程结构怎么搭、什么时候该回流修正、文案和代码如何进入真实项目。通用聊天 AI 能回答部分问题，但缺少稳定的项目记忆和执行边界。</p>
+    </div>
+    <div class="card">
+      <span class="eyebrow">Human-in-the-loop</span>
+      <h3>人在环路中的分工</h3>
+      <p>Agent 负责流程、指导、执行和候选方案；用户负责思考、想法、取舍和最终决策。这样既能降低入门门槛，又不会把创作主体交给黑盒。</p>
+    </div>
+  </div>
+
+  <h3>2.1 工具整合思路</h3>
+  <p>真实游戏开发需要同时使用游戏引擎、代码编辑器、建模工具、GitHub、AIGC 网站和文档系统。Ludens-Flow 的工作台层将这些能力整合为项目级入口，后端能力层再通过统一权限与 Adapter 把它们暴露给 Agent。</p>
+
+  <div class="diagram">
+    <div class="diagram-title">设计意图图：人负责判断，Agent 负责流程与执行</div>
+    <div class="flow">
+      <div class="flow-step"><b>1</b><strong>人提出想法</strong><br><span class="muted">主题、玩法、目标风格</span></div>
+      <div class="flow-step"><b>2</b><strong>Agent 澄清</strong><br><span class="muted">需求边界、MVP、风险</span></div>
+      <div class="flow-step"><b>3</b><strong>生成工件</strong><br><span class="muted">GDD / Plan / Impl</span></div>
+      <div class="flow-step"><b>4</b><strong>人确认</strong><br><span class="muted">定稿或回流</span></div>
+      <div class="flow-step"><b>5</b><strong>工具执行</strong><br><span class="muted">文件 / MCP / GitHub</span></div>
+      <div class="flow-step"><b>6</b><strong>结果反馈</strong><br><span class="muted">工具事件、工件版本</span></div>
+      <div class="flow-step"><b>7</b><strong>沉淀复用</strong><br><span class="muted">Skills / Benchmark</span></div>
+    </div>
+  </div>
+
+  <h3>2.2 参考项目与吸收点</h3>
+  <table>
+    <tr><th>参考对象</th><th>吸收点</th><th>在 Ludens-Flow 中的落点</th></tr>
+    <tr><td>LangGraph / 状态图思想</td><td>复杂任务需要状态和边，而不是无限聊天上下文</td><td><code>Phase</code>、<code>RouterNode</code>、<code>PHASE_NODE_MAP</code></td></tr>
+    <tr><td>MetaGPT</td><td>多角色协作能降低职责混乱</td><td>Design / PM / Engineering / Review 四 Agent</td></tr>
+    <tr><td>Claude Code / Codex</td><td>工具权限、执行过程、文件变更反馈比“裸写文件”更重要</td><td>permission_required、file_changed、tool_progress、workspace access</td></tr>
+    <tr><td>MCP 生态</td><td>Agent 可通过协议连接外部编辑器/引擎</td><td>Unity、Godot、Blender、Unreal Adapter</td></tr>
+  </table>
+</section>
+
+<section id="architecture">
+  <h2>3. 架构解析</h2>
+
+  <h3>3.1 主体工程架构</h3>
+  <div class="diagram">
+    <div class="diagram-title">图 1：Ludens-Flow 主体工程架构</div>
+    <div class="layers">
+      <div class="layer">
+        <div class="layer-label">Web 工作台</div>
+        <div class="layer-items">
+          <div class="box"><strong>Workbench</strong>对话、项目、工件、工具过程</div>
+          <div class="box"><strong>Settings</strong>模型、工作区、MCP、Skills</div>
+          <div class="box"><strong>Copywriting</strong>文案加工台与导出</div>
+          <div class="box"><strong>SSE Client</strong>消息、进度、权限事件</div>
+        </div>
+      </div>
+      <div class="layer">
+        <div class="layer-label">FastAPI 层</div>
+        <div class="layer-items">
+          <div class="box"><strong>chat.py</strong><span class="file-ref">/api/chat</span></div>
+          <div class="box"><strong>projects.py</strong>项目生命周期</div>
+          <div class="box"><strong>settings.py</strong>模型/Skills/MCP</div>
+          <div class="box"><strong>events.py</strong>SSE 推送</div>
+        </div>
+      </div>
+      <div class="layer">
+        <div class="layer-label">Core 内核</div>
+        <div class="layer-items">
+          <div class="box"><strong>graph.py</strong>节点执行与自动推进</div>
+          <div class="box"><strong>router.py</strong>阶段路由和 action</div>
+          <div class="box"><strong>agents/</strong>四类角色 Agent</div>
+          <div class="box"><strong>schemas/</strong>结构化输出契约</div>
+        </div>
+      </div>
+      <div class="layer">
+        <div class="layer-label">Capabilities</div>
+        <div class="layer-items">
+          <div class="box"><strong>mcp/</strong>引擎 Adapter 与健康检查</div>
+          <div class="box"><strong>workspaces/</strong>路径审核与权限</div>
+          <div class="box"><strong>skills/</strong>导入、启用、自我沉淀</div>
+          <div class="box"><strong>copywriting/</strong>文案 job 与 schema</div>
+        </div>
+      </div>
+      <div class="layer">
+        <div class="layer-label">Workspace</div>
+        <div class="layer-items">
+          <div class="box"><strong>projects/</strong>状态、工件、配置</div>
+          <div class="box"><strong>skills/installed</strong>全局 Skill 包</div>
+          <div class="box"><strong>USER_PROFILE.md</strong>用户画像</div>
+          <div class="box"><strong>logs</strong>路由、工具、工件日志</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3>3.2 状态机内核</h3>
+  <p>当前流程通过 <code>core/router.py</code> 和 <code>core/graph.py</code> 共同实现。Router 只负责判断下一阶段，Graph 负责执行对应 Agent、合并状态、写工件和自动推进非交互节点。</p>
+
+  <div class="diagram">
+    <div class="diagram-title">图 2：核心状态机</div>
+    <svg class="state-svg" viewBox="0 0 980 430" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Ludens-Flow state machine">
+      <defs>
+        <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L9,3 z" fill="#475569"/>
+        </marker>
+        <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+          <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#334155" flood-opacity="0.08"/>
+        </filter>
+      </defs>
+      <rect width="980" height="430" rx="0" fill="transparent"/>
+      <g filter="url(#shadow)" font-family="Noto Serif CJK SC, Source Han Serif SC, SimSun, serif" font-size="15">
+        <g>
+          <rect x="40" y="70" width="150" height="72" rx="14" fill="#ffffff" stroke="#94a3b8"/>
+          <text x="115" y="103" text-anchor="middle" font-weight="800">GDD_DISCUSS</text>
+          <text x="115" y="125" text-anchor="middle" fill="#64748b" font-size="12">Design Agent</text>
+        </g>
+        <g>
+          <rect x="235" y="70" width="150" height="72" rx="14" fill="#ffffff" stroke="#94a3b8"/>
+          <text x="310" y="103" text-anchor="middle" font-weight="800">GDD_COMMIT</text>
+          <text x="310" y="125" text-anchor="middle" fill="#64748b" font-size="12">写入 GDD.md</text>
+        </g>
+        <g>
+          <rect x="430" y="70" width="150" height="72" rx="14" fill="#ffffff" stroke="#94a3b8"/>
+          <text x="505" y="103" text-anchor="middle" font-weight="800">PM_DISCUSS</text>
+          <text x="505" y="125" text-anchor="middle" fill="#64748b" font-size="12">项目计划</text>
+        </g>
+        <g>
+          <rect x="625" y="70" width="150" height="72" rx="14" fill="#ffffff" stroke="#94a3b8"/>
+          <text x="700" y="103" text-anchor="middle" font-weight="800">ENG_DISCUSS</text>
+          <text x="700" y="125" text-anchor="middle" fill="#64748b" font-size="12">工程方案</text>
+        </g>
+        <g>
+          <rect x="625" y="210" width="150" height="72" rx="14" fill="#ffffff" stroke="#94a3b8"/>
+          <text x="700" y="243" text-anchor="middle" font-weight="800">ENG_COMMIT</text>
+          <text x="700" y="265" text-anchor="middle" fill="#64748b" font-size="12">写入实现计划</text>
+        </g>
+        <g>
+          <rect x="430" y="210" width="150" height="72" rx="14" fill="#ffffff" stroke="#94a3b8"/>
+          <text x="505" y="243" text-anchor="middle" font-weight="800">REVIEW</text>
+          <text x="505" y="265" text-anchor="middle" fill="#64748b" font-size="12">Review Gate</text>
+        </g>
+        <g>
+          <rect x="210" y="210" width="170" height="72" rx="14" fill="#ffffff" stroke="#94a3b8"/>
+          <text x="295" y="243" text-anchor="middle" font-weight="800">POST_REVIEW</text>
+          <text x="295" y="265" text-anchor="middle" fill="#64748b" font-size="12">人工回流/通过</text>
+        </g>
+        <g>
+          <rect x="390" y="335" width="200" height="72" rx="14" fill="#ffffff" stroke="#94a3b8"/>
+          <text x="490" y="368" text-anchor="middle" font-weight="800">DEV_COACHING</text>
+          <text x="490" y="390" text-anchor="middle" fill="#64748b" font-size="12">持续开发辅导 · 工件冻结</text>
+        </g>
+      </g>
+      <g stroke="#475569" stroke-width="2" marker-end="url(#arrow)" fill="none">
+        <path d="M190 106 H235"/>
+        <path d="M385 106 H430"/>
+        <path d="M580 106 H625"/>
+        <path d="M700 142 V210"/>
+        <path d="M625 246 H580"/>
+        <path d="M430 246 H380"/>
+        <path d="M295 282 C295 330 360 370 390 370"/>
+        <path d="M295 210 C220 165 125 165 115 142"/>
+        <path d="M295 210 C370 168 500 165 505 142"/>
+        <path d="M330 210 C420 160 690 165 700 142"/>
+      </g>
+      <text x="70" y="36" font-family="Noto Serif CJK SC, Source Han Serif SC, SimSun, serif" font-weight="800" fill="#334155">显式 action 推动阶段，不依赖“输入任意内容继续”</text>
+      <text x="650" y="36" font-family="Noto Serif CJK SC, Source Han Serif SC, SimSun, serif" fill="#64748b" font-size="13">Review 可按 target 回流到 GDD / PM / ENG</text>
+    </svg>
+  </div>
+
+  <h3>3.2.1 关键实现方法</h3>
+  <p>状态机内核的重点不是枚举阶段名称，而是把“当前阶段”“用户显式动作”“Agent 执行结果”和“项目状态落盘”拆成稳定接口。这样 Agent 不需要在上下文里记住流程，前端也不需要靠用户输入任意文本来推进阶段。</p>
+  <div class="method-list">
+    <div class="method-item">
+      <h4>显式动作驱动阶段跳转</h4>
+      <p class="file-ref">agent_workbench/src/ludens_flow/core/router.py</p>
+      <p>前端按钮发送 <code>explicit_action</code>，Router 根据当前 <code>phase</code> 查询允许动作。未声明的动作直接留在当前阶段，避免自由文本误触发流程推进。</p>
+<pre>allowed = transition_table[current_phase]
+if explicit_action not in allowed:
+    return stay(current_phase)
+
+next_phase = allowed[explicit_action]
+return route_to(next_phase)</pre>
+    </div>
+    <div class="method-item">
+      <h4>状态持久化只保存流程事实</h4>
+      <p class="file-ref">agent_workbench/src/ludens_flow/core/state/state_models.py</p>
+      <p><code>LudensState</code> 不把工件正文塞进状态文件，而是保存阶段、ReviewGate、短期对话、完整流水和工件元数据。工件正文由 artifacts 层管理，状态文件负责恢复流程和判断下一步。</p>
+<pre>state = {
+  phase,
+  review_gate,
+  artifact_frozen,
+  chat_history,
+  transcript_history,
+  artifact_meta: { owner, version, hash, updated_at }
+}</pre>
+    </div>
+    <div class="method-item">
+      <h4>Graph 合并 Agent 结果并推动副作用</h4>
+      <p class="file-ref">agent_workbench/src/ludens_flow/core/graph.py</p>
+      <p>Router 只决定路由，Graph 负责真正执行：组装上下文、调用 Agent、合并结构化结果、写入工件、发送 SSE 事件，并在非交互节点中继续推进。</p>
+<pre>result = agent.run(context)
+state.merge(result.state_updates)
+artifacts.commit(result.artifact_updates)
+events.emit(result.events)</pre>
+    </div>
+  </div>
+
+  <h3>3.3 Agent 执行链路</h3>
+  <div class="diagram">
+    <div class="diagram-title">图 3：一次用户输入到最终输出的执行链路</div>
+    <div class="flow">
+      <div class="flow-step"><b>1</b><strong>用户输入</strong><br><span class="muted">文本、图片、文件、action</span></div>
+      <div class="flow-step"><b>2</b><strong>输入解析</strong><br><span class="muted">附件转上下文</span></div>
+      <div class="flow-step"><b>3</b><strong>Router</strong><br><span class="muted">决定 phase</span></div>
+      <div class="flow-step"><b>4</b><strong>Graph</strong><br><span class="muted">选 Agent / mode</span></div>
+      <div class="flow-step"><b>5</b><strong>Prompt 组装</strong><br><span class="muted">画像、引擎、Skills</span></div>
+      <div class="flow-step"><b>6</b><strong>LLM / Tools</strong><br><span class="muted">模型路由、工具循环</span></div>
+      <div class="flow-step"><b>7</b><strong>落盘展示</strong><br><span class="muted">工件、SSE、状态</span></div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3>Graph 层上下文注入</h3>
+      <p class="file-ref">core/graph.py</p>
+      <ul>
+        <li>加载 <code>USER_PROFILE.md</code> 并格式化为用户画像上下文。</li>
+        <li>调用 <code>format_project_engine_for_prompt()</code> 注入 Unity / Godot / Unreal / Generic 引擎规则。</li>
+        <li>调用 <code>build_enabled_skill_context()</code> 注入当前项目启用且适用于当前 Agent 的 Skills。</li>
+        <li>通过 <code>resolve_model_config()</code> 按 agent + capability 解析模型路由。</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>BaseAgent 工具调用循环</h3>
+      <p class="file-ref">core/agents/base.py</p>
+      <ul>
+        <li>最多 5 轮工具迭代，避免 Agent 无限调用工具。</li>
+        <li>工具执行前发送 <code>tool_started</code>，结束后发送 <code>tool_completed</code> 或 <code>tool_failed</code>。</li>
+        <li>纯文本路径支持分段流式输出，不是一字一字刷新。</li>
+        <li>结构化解析统一走 <code>extract_structured_json_object()</code>。</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>3.4 模型路由实现</h3>
+  <p>模型路由分两层：环境变量中配置 Provider Profile，前端项目设置只选择 profile、model、temperature。这样前端不会接触 API Key。</p>
+  <pre>priority:
+  default_route
+  → capability_defaults
+  → project settings.global
+  → project settings.agents[agent]
+  → project settings.capabilities[capability]
+  → project settings.agent_capabilities[agent][capability]
+  → Provider Profile from LUDENS_MODEL_PROFILES</pre>
+  <p class="file-ref">实现文件：agent_workbench/src/llm/modelrouter.py, agent_workbench/src/llm/model_profiles.py</p>
+
+  <h3>3.5 后端能力层</h3>
+  <p>后端能力层位于 <code>agent_workbench/src/ludens_flow/capabilities</code>。它的目标是把“Agent 可以做什么”收敛成可审计、可组合、可限制的系统能力，而不是让每个 Agent 自己随意处理文件、引擎或外部平台。</p>
+  <div class="plain-grid">
+    <div class="plain-item"><h4>artifacts</h4><p>管理 GDD、PROJECT_PLAN、IMPLEMENTATION_PLAN、REVIEW_REPORT、DEVLOG、NOTES 等项目工件，记录 actor、reason、version、hash 和日志。</p></div>
+    <div class="plain-item"><h4>ingest</h4><p>将图片、文本、代码、PDF 等输入转成模型可消费上下文，并向前端返回 warning，避免附件静默失败。</p></div>
+    <div class="plain-item"><h4>workspaces</h4><p>统一路径审核，解析项目工作区、检查可写开关、阻止路径逃逸；所有文件写入必须经过项目级边界。</p></div>
+    <div class="plain-item"><h4>tools</h4><p>注册 <code>web_search</code>、<code>workspace_*</code>、<code>engine_*</code>、<code>skill_*</code> 等 Agent 工具，并标记权限和类别。</p></div>
+    <div class="plain-item"><h4>mcp</h4><p>连接 Unity、Godot、Blender、Unreal MCP，并映射到统一 <code>engine_*</code> 能力，不直接暴露原始 MCP 工具。</p></div>
+    <div class="plain-item"><h4>copywriting</h4><p>Design Agent 子能力，读取 GDD 与外部资料生成游戏文案，输出候选文本、Markdown 和 CSV。</p></div>
+    <div class="plain-item"><h4>skills</h4><p>导入外部 Skill，按项目启用，并支持自我沉淀；运行时只注入当前项目启用且适用的 Skill。</p></div>
+    <div class="plain-item"><h4>github</h4><p>只读接入 GitHub 协作信息，辅助 PM Agent 理解 issue、PR、commit、CI 等研发节奏。</p></div>
+  </div>
+  <p><code>capabilities/tools/registry.py</code> 是 Agent 工具调用入口。工具目录会标记 category、是否需要 workspace、是否会写文件；写入类操作统一发出 <code>permission_required</code>、<code>file_changed</code>、<code>tool_completed</code> 等事件，前端再展示确认和执行过程。</p>
+  <p>MCP Adapter 不直接把外部 MCP 工具列表暴露给 Agent，而是先映射成稳定的 <code>engine_*</code> 能力。这样 Unity、Godot、Blender 的底层工具名不同，但上层 Agent 学到的是同一套能力语义。</p>
+</section>
+
+<section id="capabilities">
+  <h2>4. 功能中心</h2>
+  <p>功能中心对应前端 <code>agent_workbench/web/src/features</code>。它更接近用户实际看到和使用的产品层：项目工作台、AIGC 快捷入口、文案加工、引擎 MCP、Skills、GitHub 协作视图、游戏内模型接入和设置管理。</p>
+
+  <h3>4.1 Agent 设计：人设、职责边界与子能力</h3>
+  <p>Ludens-Flow 没有把所有工作压给一个“全能助手”，而是把游戏开发流程拆成四个稳定角色。每个 Agent 都有明确的人设语气、阶段职责、工件 owner 和可使用的子能力；Graph 层再根据 <code>Phase</code> 决定当前应该调用谁。</p>
+  <div class="plain-grid">
+    <div class="plain-item">
+      <h4>Dam / Design</h4>
+      <p>策划伙伴，负责把模糊创意收束为可制作的玩法方案。主要工作在 <code>GDD_DISCUSS</code> 与 <code>GDD_COMMIT</code>，产出 <code>GDD.md</code>、游戏标签和文案候选。</p>
+      <p>职责边界是核心体验、题材、系统设定和 MVP 边界；不负责排期和工程落地细节。子能力包括文案加工台：读取 GDD、外部参考和用户约束，生成台词、物品描述、世界观片段等可导出的游戏文案。</p>
+      <span class="file-ref">capabilities/copywriting, core/schemas/copywriting.py</span>
+    </div>
+    <div class="plain-item">
+      <h4>Pax / PM</h4>
+      <p>项目伙伴，负责范围控制、里程碑和开发节奏。主要工作在 <code>PM_DISCUSS</code> 与 <code>PM_COMMIT</code>，产出 <code>PROJECT_PLAN.md</code>、ChangeRequest 和协作概览。</p>
+      <p>职责边界是决定什么先做、什么砍掉、如何拆阶段；不替 Engineering 输出具体代码方案。子能力包括 GitHub 协作视图：只读获取 issue、PR、commit、CI 等协作信息，辅助判断研发节奏。</p>
+      <span class="file-ref">capabilities/github</span>
+    </div>
+    <div class="plain-item">
+      <h4>Eon / Engineering</h4>
+      <p>工程合伙人，负责工程结构、实现路径和持续开发指导。主要工作在 <code>ENG_DISCUSS</code>、<code>ENG_COMMIT</code> 与 <code>DEV_COACHING</code>，产出 <code>IMPLEMENTATION_PLAN.md</code>、<code>DEVLOG.md</code> 和工具执行结果。</p>
+      <p>讨论阶段只确定架构和路线；进入持续开发后才执行文件写入、Patch、引擎 MCP 等操作。子能力包括工作区文件工具、Unity / Godot / Blender / Unreal MCP 统一能力和工程类 Skills。</p>
+      <span class="file-ref">capabilities/workspaces, capabilities/mcp, capabilities/tools</span>
+    </div>
+    <div class="plain-item">
+      <h4>Revs / Review</h4>
+      <p>评审关卡，负责从设计、工程和范围健康度审查项目。主要工作在 <code>REVIEW</code> 与 <code>POST_REVIEW</code>，产出 <code>REVIEW_REPORT.md</code>、ReviewGate JSON 和回流目标。</p>
+      <p>职责边界是不继续扩写方案，而是判断 PASS / REQUEST_CHANGES / BLOCK，并指出应回流到 GDD、PM 或 ENG。Review 结果驱动前端只展示对应的下一步操作。</p>
+      <span class="file-ref">core/schemas/review_gate.py, core/agents/review_agent.py</span>
+    </div>
+  </div>
+
+  <h3>4.2 前端功能模块</h3>
+  <div class="plain-grid">
+    <div class="plain-item"><h4>workbench</h4><p>项目主工作台，承载多 Agent 对话、项目选单、工件查看、附件输入、流式输出、流程按钮和工具执行过程展示。</p></div>
+    <div class="plain-item"><h4>settings</h4><p>配置中心，管理模型路由、工作区清单、引擎连接、工具权限、Skills 管理、用户画像和历史项目。</p></div>
+    <div class="plain-item"><h4>copywriting</h4><p>文案加工台，挂在 Design Agent 子能力下，用于生成台词、物品描述、世界观片段，并导出 Markdown / CSV。</p></div>
+    <div class="plain-item"><h4>aigc</h4><p>AIGC 能力中心，提供图像、声音、3D 模型、原型设计和文字创作网站的快捷入口，服务资产生产与灵感探索。</p></div>
+    <div class="plain-item"><h4>mcp</h4><p>引擎连接页面，展示 Unity、Godot、Blender、Unreal 的配置状态、健康检查、工具映射和安装指引。</p></div>
+    <div class="plain-item"><h4>skills</h4><p>项目级 Skill 使用入口与全局 Skill 管理入口，支持外部导入、启用/禁用和自我沉淀演示流程。</p></div>
+    <div class="plain-item"><h4>github</h4><p>GitHub 协作视图，绑定仓库后只读展示 issue、PR、commit、CI 等信息，作为 PM Agent 的协作平台子能力。</p></div>
+    <div class="plain-item"><h4>game-model</h4><p>游戏内模型接入的产品入口，用于规划 NPC 对话、敌人行为、动态任务提示等“AI 伴生”玩法能力。</p></div>
+  </div>
+
+  <h3>4.3 功能中心与后端能力的关系</h3>
+  <p>功能中心并不直接等同后端能力层。前端 feature 负责让用户看见、选择和确认能力；后端 capability 负责真正执行权限审核、工具调用、上下文解析和状态落盘。例如用户在 <code>mcp</code> 页面看到 Unity 已连接，真正的工具调用仍会进入后端 <code>capabilities/mcp</code> Adapter；用户在 <code>copywriting</code> 页面生成台词，实际 schema、上下文加载和 job 进度由后端文案能力完成。</p>
+</section>
+
+<section id="workflow">
+  <h2>5. 人机协作流程</h2>
+  <p>这一节以“新人想做一个小型游戏 Demo”为例，说明 Ludens-Flow 如何作为辅助性产品参与全流程。</p>
+
+  <div class="demo-timeline">
+    <div class="demo-time">Step 1</div>
+    <div class="demo-item"><h3>输入粗略想法</h3><p>用户只需要描述“想做一个校园塔防 / 像素冒险 / 对话解谜”等初始想法。Design Agent 会追问玩法核心、题材边界、美术成本和 MVP 范围，而不是直接输出大而全设定。</p></div>
+    <div class="demo-time">Step 2</div>
+    <div class="demo-item"><h3>生成并确认 GDD</h3><p>系统将讨论结果写入 <code>GDD.md</code>。用户可以编辑，也可以导入已有策划案进入快速开发。GDD 定稿后才进入 PM 阶段。</p></div>
+    <div class="demo-time">Step 3</div>
+    <div class="demo-item"><h3>PM 拆解任务</h3><p>PM Agent 读取 GDD，生成 <code>PROJECT_PLAN.md</code>，区分 MVP 必做项、延后项和风险。新人由此理解“先做什么”和“为什么先做”。</p></div>
+    <div class="demo-time">Step 4</div>
+    <div class="demo-item"><h3>Engineering 输出工程方案</h3><p>Engineering Agent 根据目标引擎、项目工件和工作区结构生成 <code>IMPLEMENTATION_PLAN.md</code>。如果项目设置为 Godot，就注入 Godot 专用规则；如果没有设置，则使用通用小型游戏 demo 视角，不默认 Unity。</p></div>
+    <div class="demo-time">Step 5</div>
+    <div class="demo-item"><h3>Review Gate 评审</h3><p>Review Agent 审查 GDD、计划和工程方案的一致性，给出 PASS / BLOCK / MAJOR 等问题。用户可以选择回流修正或进入持续开发。</p></div>
+    <div class="demo-time">Step 6</div>
+    <div class="demo-item"><h3>持续开发与工具执行</h3><p>进入 <code>DEV_COACHING</code> 后，Agent 可以读取工作区、创建目录、写脚本、patch 文件、调用 Unity/Godot/Blender MCP。前端展示权限确认、执行中、失败或成功结果。</p></div>
+    <div class="demo-time">Step 7</div>
+    <div class="demo-item"><h3>生成项目文案与数据表</h3><p>用户可用文案工作台生成 NPC 台词、物品描述、任务文本和世界观片段，并导出可进入游戏工程的 Markdown 或 CSV，例如 dialogue.csv、quest.csv、item.csv。</p></div>
+    <div class="demo-time">Step 8</div>
+    <div class="demo-item"><h3>生产美术与声音资产</h3><p>用户从 AIGC 中心快速访问图像、声音、3D 模型和原型设计工具，例如生成角色立绘、敌人图标、UI 草图、环境音或低模资产；生成结果再作为附件或工作区文件交给 Agent 解释、整理和写入资源清单。</p></div>
+    <div class="demo-time">Step 9</div>
+    <div class="demo-item"><h3>写入工程并操作引擎</h3><p>Engineering Agent 在用户批准的工作区内创建目录、写入脚本、Patch 文件，并通过 Unity / Godot / Blender MCP 执行受控操作，例如读取场景层级、创建对象、移动物体、保存场景或生成脚本骨架。</p></div>
+    <div class="demo-time">Step 10</div>
+    <div class="demo-item"><h3>接入游戏内模型能力</h3><p>当项目需要“AI 原生”玩法时，工作台可以规划游戏内大模型调用方式：例如 NPC 对话、敌人行为决策、动态任务提示或教学反馈。PM Agent 控制功能范围，Engineering Agent 给出客户端调用、状态缓存、失败兜底和成本控制方案。</p></div>
+    <div class="demo-time">Step 11</div>
+    <div class="demo-item"><h3>测试、回流与协作追踪</h3><p>用户运行 Demo 后把错误日志、截图或录屏作为附件交给系统。Agent 读取工作区文件和 Console 结果定位问题，Review Agent 再评估设计、工程和体验是否需要回流。GitHub 页面用于查看 issue、PR、commit 和 CI 状态。</p></div>
+    <div class="demo-time">Step 12</div>
+    <div class="demo-item"><h3>沉淀成可复用流程</h3><p>当某类任务反复出现，例如“生成一关敌人配置并写入 CSV”或“从立绘生成 NPC 设定与台词”，用户可以开启 Skills 自我沉淀，把稳定流程保存为项目可启用 Skill，供后续游戏项目复用。</p></div>
+    <div class="demo-time">Step 13</div>
+    <div class="demo-item"><h3>形成 AI 伴生游戏项目</h3><p>最终项目不只是“用 AI 生成过内容”，而是形成一套可继续迭代的游戏工程：有 GDD、计划、实现方案、代码、资产、数据表、引擎场景、协作记录，以及可在游戏内调用模型能力的玩法模块。</p></div>
+  </div>
+
+  <blockquote>
+    从交互角度看，Ludens-Flow 不是“给答案”，而是提供一个可解释的协作过程：用户能看到当前阶段、Agent 角色、工件、工具动作、权限确认和下一步选择。
+  </blockquote>
+</section>
+
+<section id="future">
+  <h2>6. 未来规划</h2>
+  <h3>产品与工程方向</h3>
+  <ul>
+    <li>完善任务执行循环：读取上下文、计划、执行工具、观察结果、继续修正。</li>
+    <li>强化 Patch / Diff 级编辑体验，展示将改什么、已改什么、风险是什么。</li>
+    <li>继续推进 Unity、Godot、Blender、Unreal 的 MCP 接入与统一能力层。</li>
+    <li>丰富 Skills 生态：外部导入、自我沉淀、项目级启用、适用阶段和工具权限。</li>
+    <li>探索 Tauri 桌面版，降低本地启动和配置门槛。</li>
+  </ul>
+
+  <h3>AI 开发游戏 Benchmark</h3>
+  <p>项目之外，希望建立专门衡量“AI 辅助开发游戏”的 Benchmark，而不是只用通用问答或代码题评估。计划重点覆盖需求澄清、工件一致性、工具调用质量、人机协作、异常恢复和真实产出等维度。</p>
+
+  <h3>6.1 Benchmark 计划指标</h3>
+  <table>
+    <tr><th>指标</th><th>评估问题</th><th>与比赛维度的关系</th></tr>
+    <tr><td>阶段推进成功率</td><td>能否从 GDD 到 PM 到 ENG 到 Review 稳定推进</td><td>鲁棒性、效率</td></tr>
+    <tr><td>工件完整性</td><td>生成的 GDD、计划、工程方案是否结构完整且互相一致</td><td>实用价值</td></tr>
+    <tr><td>工具调用正确率</td><td>是否正确选择文件、MCP、GitHub 或文案工具，并处理失败</td><td>技术创新、鲁棒性</td></tr>
+    <tr><td>人类决策清晰度</td><td>用户是否能理解当前状态和下一步选择</td><td>人机交互</td></tr>
+    <tr><td>真实可用产出</td><td>是否生成可进入游戏工程的代码、CSV、配置或引擎对象</td><td>应用价值</td></tr>
+  </table>
+
+  <blockquote>
+    Ludens-Flow 的核心观点是：游戏制作 Agent 不应该只是“生成游戏内容”的工具，而应该成为一个有边界、有状态、有工件、有工具能力的协作系统。
+  </blockquote>
+</section>
+
+</main>
+</body>
+</html>
