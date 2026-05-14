@@ -1,4 +1,5 @@
 import argparse
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,15 +12,20 @@ from .common import *  # Re-export legacy direct-call API used by tests and scri
 _subscribe_project_events = common._subscribe_project_events
 _unsubscribe_project_events = common._unsubscribe_project_events
 
-app = FastAPI(title="Ludens-Flow API")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    common.startup()
+    yield
+
+
+app = FastAPI(title="Ludens-Flow API", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
 )
 
 if common.STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(common.STATIC_DIR)), name="static")
-
-app.add_event_handler("startup", common.startup)
 
 app.include_router(events.router)
 app.include_router(chat.router)

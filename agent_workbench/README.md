@@ -91,7 +91,7 @@ workspace/skills/installed/<skill_id>/
 └── prompt.md
 ```
 
-可以在 Web 设置页的 `Skills` 中导入、删除和管理 Skill，并在工作台的 Skills 页面为当前项目启用或关闭。当前阶段已完成外部导入与项目级开关；已启用 Skill 接入 Agent 运行时加载仍在后续开发中。
+可以在 Web 设置页的 `Skills` 中导入、删除和管理 Skill，并在工作台的 Skills 页面为当前项目启用或关闭，现已支持自主沉淀Skills。
 
 ### 2. 安装依赖
 

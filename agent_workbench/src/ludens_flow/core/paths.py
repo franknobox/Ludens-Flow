@@ -12,6 +12,7 @@ import os
 import re
 import shutil
 import threading
+import time
 import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
@@ -537,7 +538,14 @@ def _write_project_meta(project_id: str, meta: Dict[str, Any]) -> Dict[str, Any]
             handle.write(payload)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temp_file, meta_file)
+        for attempt in range(6):
+            try:
+                os.replace(temp_file, meta_file)
+                break
+            except PermissionError:
+                if attempt >= 5:
+                    raise
+                time.sleep(0.05 * (attempt + 1))
     finally:
         temp_file.unlink(missing_ok=True)
     return meta

@@ -71,6 +71,14 @@ Ludens-Flow is currently focused on:
 
 See [ROADMAP.md](11_docs/ROADMAP.md) for the longer-term direction.
 
+## Sponsor
+
+<p align="center">
+  <img src="11_docs\IMAGE\mimo.png" alt="Xiaomi MiMO logo" width="360" />
+</p>
+
+Ludens-Flow receives token support from **Xiaomi MiMO**.
+
 ## Quick Start
 
 #### 1. Install

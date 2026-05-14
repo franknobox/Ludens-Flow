@@ -84,6 +84,14 @@ Web 态：
 - 外部 AIGC 服务统一入口
 - 收版验收基线与自动化 smoke 测试
 
+## 赞助支持
+
+<p align="center">
+  <img src="11_docs\IMAGE\mimo.png" alt="Xiaomi MiMO logo" width="360" />
+</p>
+
+Ludens-Flow 获得 **Xiaomi MiMO** 的 token 支持。
+
 ## 开源信息
 
 - 仓库地址：<https://github.com/franknobox/Ludens-Flow>
