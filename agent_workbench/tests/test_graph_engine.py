@@ -129,7 +129,7 @@ def mock_eng_coach(
     return AgentResult(assistant_message="coach", state_updates={})
 
 
-class Step5GraphEngineTests(unittest.TestCase):
+class GraphEngineTests(unittest.TestCase):
     def setUp(self):
         self.previous_workspace = os.environ.get("LUDENS_WORKSPACE_DIR")
         self.previous_project = os.environ.get("LUDENS_PROJECT_ID")

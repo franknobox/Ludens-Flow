@@ -172,26 +172,88 @@
 .settings-skills-whole {
   min-height: 0;
   height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 14px;
   overflow: hidden;
+}
+
+.settings-skills-topline {
+  margin-bottom: 0;
+}
+
+.settings-skill-self-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 42px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(29, 39, 52, 0.08);
+  background: rgba(247, 250, 253, 0.72);
+}
+
+.settings-skill-self-toggle.is-on {
+  border-color: rgba(22, 99, 255, 0.22);
+  background: rgba(235, 241, 255, 0.72);
+}
+
+.settings-skill-self-toggle > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.settings-skill-self-toggle strong {
+  display: inline;
+  flex: 0 0 auto;
+  color: #1f2b3c;
+  font-size: 13px;
+}
+
+.settings-skill-self-toggle > div > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #6b7b8f;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.settings-skill-self-toggle .settings-toggle {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 6px 10px;
+  border-radius: 10px;
 }
 
 .settings-skills-layout {
   height: 100%;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
-  gap: 14px;
+  grid-template-columns: minmax(0, 1.55fr) minmax(360px, 1fr);
+  gap: 18px;
 }
 
 .settings-skills-list-area,
 .settings-skills-import-area {
   min-height: 0;
-  overflow: hidden;
 }
 
 .settings-skills-list-area {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
+  gap: 10px;
+  overflow: hidden;
+}
+
+.settings-skills-import-area {
+  overflow: auto;
+  padding-left: 18px;
+  border-left: 1px solid rgba(29, 39, 52, 0.08);
 }
 
 .settings-skill-groups {
@@ -217,10 +279,31 @@
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 14px;
   align-items: center;
-  padding: 14px;
-  border-radius: 16px;
+  padding: 12px 0;
+  border-radius: 0;
   border: 1px solid rgba(29, 39, 52, 0.08);
-  background: rgba(247, 250, 253, 0.9);
+  border-width: 0 0 1px;
+  background: transparent;
+}
+
+.settings-skill-card.is-active {
+  padding-left: 12px;
+  padding-right: 12px;
+  border: 1px solid rgba(22, 99, 255, 0.18);
+  border-radius: 14px;
+  background: rgba(235, 241, 255, 0.72);
+}
+
+.settings-chip.source {
+  border-color: rgba(29, 39, 52, 0.12);
+  background: rgba(247, 250, 253, 0.85);
+  color: #64748b;
+}
+
+.settings-chip.source.self {
+  border-color: rgba(22, 99, 255, 0.2);
+  background: rgba(226, 236, 255, 0.8);
+  color: #1663ff;
 }
 
 .settings-skill-card h3 {
@@ -229,11 +312,25 @@
   font-size: 15px;
 }
 
+.skill-card-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .settings-skill-card p {
   margin: 7px 0 0;
   color: #6b7b8f;
   font-size: 13px;
   line-height: 1.55;
+}
+
+.skill-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
 }
 
 .settings-skill-agent-grid {
@@ -244,15 +341,22 @@
 
 .settings-skill-import-actions {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
+}
+
+.settings-inline-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
 }
 
 .settings-skill-format,
 .settings-skill-message {
-  border-radius: 16px;
+  border-radius: 12px;
   border: 1px solid rgba(29, 39, 52, 0.08);
-  background: rgba(247, 250, 253, 0.78);
+  background: rgba(247, 250, 253, 0.58);
 }
 
 .settings-skill-format {
@@ -274,9 +378,52 @@
 }
 
 .settings-skill-message {
-  padding: 10px 12px;
+  padding: 9px 11px;
   color: #52637a;
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.settings-skill-message.success {
+  border-color: rgba(23, 99, 71, 0.18);
+  background: rgba(231, 248, 242, 0.78);
+  color: #176347;
+}
+
+.settings-skill-message.error {
+  border-color: rgba(197, 58, 47, 0.2);
+  background: rgba(255, 244, 243, 0.78);
+  color: #8c302a;
+}
+
+.settings-skill-details {
+  border-top: 1px solid rgba(29, 39, 52, 0.08);
+  padding-top: 10px;
+}
+
+.settings-skill-details summary {
+  cursor: pointer;
+  color: #5f6e82;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.settings-skill-details-body {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.settings-skill-details-body strong {
+  color: #1f2b3c;
+  font-size: 12px;
+}
+
+.settings-skill-details-body code {
+  white-space: pre-wrap;
+  color: #52637a;
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 @media (max-width: 1180px) {
@@ -288,6 +435,11 @@
   .settings-skills-list-area,
   .settings-skills-import-area {
     overflow: visible;
+  }
+
+  .settings-skills-import-area {
+    padding-left: 0;
+    border-left: none;
   }
 }
 
@@ -992,6 +1144,12 @@
 }
 
 .settings-guide-overlay {
+  --guide-accent: #e87d0d;
+  --guide-accent-strong: #b85d00;
+  --guide-accent-soft: rgba(232, 125, 13, 0.14);
+  --guide-accent-border: rgba(232, 125, 13, 0.22);
+  --guide-accent-button-bg: rgba(232, 125, 13, 0.1);
+  --guide-accent-button-hover: rgba(232, 125, 13, 0.16);
   position: fixed;
   inset: 0;
   z-index: 160;
@@ -1000,6 +1158,24 @@
   justify-content: center;
   padding: 28px;
   background: rgba(17, 25, 38, 0.42);
+}
+
+.settings-guide-overlay--unity {
+  --guide-accent: #5f6e82;
+  --guide-accent-strong: #344255;
+  --guide-accent-soft: rgba(255, 255, 255, 0.95);
+  --guide-accent-border: rgba(95, 110, 130, 0.2);
+  --guide-accent-button-bg: rgba(245, 248, 252, 0.96);
+  --guide-accent-button-hover: rgba(232, 237, 245, 0.98);
+}
+
+.settings-guide-overlay--godot {
+  --guide-accent: #1f78ff;
+  --guide-accent-strong: #1556c0;
+  --guide-accent-soft: rgba(31, 120, 255, 0.12);
+  --guide-accent-border: rgba(31, 120, 255, 0.24);
+  --guide-accent-button-bg: rgba(31, 120, 255, 0.1);
+  --guide-accent-button-hover: rgba(31, 120, 255, 0.16);
 }
 
 .settings-guide-panel {
@@ -1039,7 +1215,7 @@
 .settings-guide-kicker {
   display: block;
   margin-bottom: 7px;
-  color: #e87d0d;
+  color: var(--guide-accent);
   font-size: 12px;
   font-weight: 900;
   letter-spacing: 0.12em;
@@ -1087,8 +1263,8 @@
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: rgba(232, 125, 13, 0.14);
-  color: #b85d00;
+  background: var(--guide-accent-soft);
+  color: var(--guide-accent-strong);
   font-weight: 900;
 }
 
@@ -1135,7 +1311,7 @@
   display: inline-flex;
   align-items: center;
   margin-top: 10px;
-  color: #1663ff;
+  color: var(--guide-accent-strong);
   font-weight: 800;
   font-size: 13px;
   text-decoration: none;
@@ -1150,16 +1326,16 @@
   margin-top: 10px;
   padding: 0 13px;
   border-radius: 999px;
-  border: 1px solid rgba(232, 125, 13, 0.22);
-  background: rgba(232, 125, 13, 0.1);
-  color: #ad5d08;
+  border: 1px solid var(--guide-accent-border);
+  background: var(--guide-accent-button-bg);
+  color: var(--guide-accent-strong);
   font-size: 12px;
   font-weight: 800;
   cursor: pointer;
 }
 
 .settings-guide-inline-button:hover {
-  background: rgba(232, 125, 13, 0.16);
+  background: var(--guide-accent-button-hover);
 }
 
 .settings-guide-config-grid {
@@ -1174,6 +1350,34 @@
   color: #7a8798;
   font-size: 12px;
   font-weight: 800;
+}
+
+[data-theme="dark"] .settings-guide-overlay--unity {
+  --guide-accent: #d7dde6;
+  --guide-accent-strong: #f4f7fb;
+  --guide-accent-soft: rgba(255, 255, 255, 0.08);
+  --guide-accent-border: rgba(255, 255, 255, 0.16);
+  --guide-accent-button-bg: rgba(255, 255, 255, 0.07);
+  --guide-accent-button-hover: rgba(255, 255, 255, 0.12);
+}
+
+[data-theme="dark"] .settings-guide-overlay--godot {
+  --guide-accent: #5aa2ff;
+  --guide-accent-strong: #7cb6ff;
+  --guide-accent-soft: rgba(90, 162, 255, 0.14);
+  --guide-accent-border: rgba(90, 162, 255, 0.26);
+  --guide-accent-button-bg: rgba(90, 162, 255, 0.1);
+  --guide-accent-button-hover: rgba(90, 162, 255, 0.16);
+}
+
+[data-theme="dark"] .settings-guide-inline-button {
+  border-color: var(--guide-accent-border);
+  background: var(--guide-accent-button-bg);
+  color: var(--guide-accent-strong);
+}
+
+[data-theme="dark"] .settings-guide-inline-button:hover {
+  background: var(--guide-accent-button-hover);
 }
 
 @media (max-width: 1180px) {
@@ -1421,4 +1625,152 @@
 
 [data-theme="dark"] .theme-option-desc {
   color: var(--muted) !important;
+}
+
+/* Dark mode interaction polish for settings navigation and native selects. */
+[data-theme="dark"] .settings-nav-item {
+  background: #262626;
+  border-color: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+[data-theme="dark"] .settings-nav-item:hover {
+  background: #2f343b;
+  border-color: rgba(88, 166, 255, 0.32);
+  box-shadow: none;
+}
+
+[data-theme="dark"] .settings-nav-item.is-active {
+  background: rgba(31, 78, 121, 0.38);
+  border-color: rgba(88, 166, 255, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(88, 166, 255, 0.1);
+}
+
+[data-theme="dark"] .settings-nav-item.is-active:hover {
+  background: rgba(37, 88, 136, 0.46);
+}
+
+[data-theme="dark"] .settings-nav-label {
+  color: var(--text);
+}
+
+[data-theme="dark"] .settings-nav-text {
+  color: var(--muted);
+}
+
+[data-theme="dark"] .settings-field input,
+[data-theme="dark"] .settings-field select,
+[data-theme="dark"] .settings-field textarea {
+  color-scheme: dark;
+  background: #232323;
+  border-color: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+}
+
+[data-theme="dark"] .settings-field input:hover,
+[data-theme="dark"] .settings-field select:hover,
+[data-theme="dark"] .settings-field textarea:hover {
+  background: #292929;
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+[data-theme="dark"] .settings-field input:focus,
+[data-theme="dark"] .settings-field select:focus,
+[data-theme="dark"] .settings-field textarea:focus {
+  background: #202833;
+  border-color: rgba(88, 166, 255, 0.7);
+  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.18);
+}
+
+[data-theme="dark"] .settings-field select option {
+  background: #242424;
+  color: var(--text);
+}
+
+[data-theme="dark"] .settings-field select option:checked,
+[data-theme="dark"] .settings-field select option:hover {
+  background: #334155;
+  color: #fff;
+}
+
+[data-theme="dark"] .settings-skill-card .settings-chip.subtle {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: var(--muted);
+}
+
+[data-theme="dark"] .settings-skill-card.is-active {
+  background: rgba(255, 255, 255, 0.035);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+[data-theme="dark"] .settings-skill-self-toggle {
+  border-color: var(--line);
+  background: #262626;
+}
+
+[data-theme="dark"] .settings-skill-self-toggle.is-on {
+  border-color: rgba(88, 166, 255, 0.42);
+  background: rgba(31, 41, 55, 0.72);
+}
+
+[data-theme="dark"] .settings-skill-self-toggle strong {
+  color: var(--text);
+}
+
+[data-theme="dark"] .settings-skill-self-toggle > div > span {
+  color: var(--muted);
+}
+
+[data-theme="dark"] .settings-chip.source {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: var(--muted);
+}
+
+[data-theme="dark"] .settings-chip.source.self {
+  background: rgba(88, 166, 255, 0.16);
+  border-color: rgba(88, 166, 255, 0.34);
+  color: #8ec5ff;
+}
+
+[data-theme="dark"] .settings-skills-import-area {
+  border-left-color: var(--line);
+}
+
+[data-theme="dark"] .settings-skill-format,
+[data-theme="dark"] .settings-skill-details {
+  border-color: var(--line);
+}
+
+[data-theme="dark"] .settings-skill-format {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+[data-theme="dark"] .settings-skill-details summary,
+[data-theme="dark"] .settings-skill-details-body code {
+  color: var(--muted);
+}
+
+[data-theme="dark"] .settings-skill-details-body strong {
+  color: var(--text);
+}
+
+/* Tool Status Badge Colors */
+.settings-chip.subtle.status-writable {
+  background: rgba(255, 246, 235, 0.96);
+  border-color: rgba(232, 125, 13, 0.22);
+  color: #c96500;
+}
+
+.settings-chip.subtle.status-workspace {
+  background: rgba(231, 248, 242, 0.96);
+  border-color: rgba(22, 163, 106, 0.22);
+  color: #118152;
+}
+
+.settings-chip.subtle.status-readonly {
+  background: rgba(242, 245, 249, 0.96);
+  border-color: rgba(29, 39, 52, 0.08);
+  color: #5f6e82;
 }

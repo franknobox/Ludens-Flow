@@ -6,10 +6,11 @@
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Literal, Optional
+from typing import Iterable, List, Literal, Optional
 
 from ludens_flow.core.paths import (
     get_project_agent_file_write_enabled,
@@ -284,3 +285,113 @@ def check_workspace_write_permission(
     if file_kind == "text":
         ensure_text_file_target(workspace_target, allowed_extensions=allowed_extensions)
     return workspace_target
+
+
+# ---------------------------------------------------------------------------
+# 工作区上下文摘要（供 Agent 注入上下文使用）
+# ---------------------------------------------------------------------------
+
+_SKIP_DIRS = frozenset({
+    "__pycache__", ".git", ".svn", ".hg", "node_modules",
+    ".vs", ".idea", ".vscode", "Temp", "Library", "obj", "bin",
+    "Logs", "UserSettings",
+})
+
+_CONTEXT_EXTENSIONS = frozenset({
+    ".cs", ".py", ".js", ".ts", ".json", ".yaml", ".yml",
+    ".md", ".txt", ".shader", ".hlsl", ".uxml", ".uss",
+    ".asmdef", ".tscn", ".gd", ".cfg",
+})
+
+
+def _walk_tree(
+    root: Path,
+    rel: str,
+    lines: List[str],
+    *,
+    max_files: int,
+    file_count: List[int],
+    depth: int,
+    max_depth: int,
+) -> None:
+    if depth > max_depth or file_count[0] >= max_files:
+        return
+    indent = "  " * depth
+    try:
+        entries = sorted(root.iterdir(), key=lambda p: (p.is_file(), p.name.lower()))
+    except PermissionError:
+        return
+    dirs = [e for e in entries if e.is_dir() and e.name not in _SKIP_DIRS]
+    files = [e for e in entries if e.is_file() and e.suffix.lower() in _CONTEXT_EXTENSIONS]
+    for d in dirs:
+        lines.append(f"{indent}{d.name}/")
+        _walk_tree(
+            d,
+            f"{rel}/{d.name}" if rel else d.name,
+            lines,
+            max_files=max_files,
+            file_count=file_count,
+            depth=depth + 1,
+            max_depth=max_depth,
+        )
+        if file_count[0] >= max_files:
+            break
+    for f in files:
+        if file_count[0] >= max_files:
+            lines.append(f"{indent}... (文件过多，已截断)")
+            break
+        lines.append(f"{indent}{f.name}")
+        file_count[0] += 1
+
+
+def build_workspace_context_for_prompt(
+    project_id: Optional[str] = None,
+    *,
+    max_files: int = 120,
+    max_depth: int = 5,
+) -> str:
+    """生成工作区文件树摘要文本，供 Agent 系统提示注入使用。
+
+    只列出代码/配置/文档类文件，跳过构建产物、版本控制目录等。
+    结果紧凑、有界，不读取任何文件内容。
+    """
+    resolved = resolve_project_id(project_id)
+    if not resolved:
+        return ""
+
+    workspaces = list_project_workspaces(resolved)
+    if not workspaces:
+        return ""
+
+    enabled = [ws for ws in workspaces if ws.get("enabled", True)]
+    if not enabled:
+        return ""
+
+    sections: List[str] = []
+    for ws in enabled:
+        root = Path(str(ws.get("root", "") or "")).resolve()
+        if not root.exists() or not root.is_dir():
+            continue
+        ws_id = ws.get("id") or ws.get("workspace_id") or root.name
+        ws_label = ws.get("label") or ws_id
+        lines: List[str] = []
+        file_count: List[int] = [0]
+        _walk_tree(root, "", lines, max_files=max_files, file_count=file_count, depth=0, max_depth=max_depth)
+        if lines:
+            tree_text = "\n".join(lines)
+            sections.append(
+                f"工作区：{ws_label}（{ws_id}）根目录：{root}\n"
+                f"{tree_text}\n"
+                f"共 {file_count[0]} 个可读文件"
+            )
+
+    if not sections:
+        return ""
+
+    body = "\n\n".join(sections)
+    return (
+        "[WORKSPACE_FILES]\n"
+        "以下是当前项目工作区的文件结构（仅列出代码/配置/文档类文件）：\n\n"
+        f"{body}\n"
+        "[/WORKSPACE_FILES]"
+    )

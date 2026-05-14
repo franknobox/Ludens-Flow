@@ -5,6 +5,7 @@ import { ProjectToolbar } from "./components/ProjectToolbar";
 import { RightSidebar } from "./components/RightSidebar";
 import { useWorkbenchController } from "./hooks/useWorkbenchController";
 import { projectUpdated } from "./utils";
+import "./styles/workbench.css";
 
 type WorkbenchPageProps = {
   isActive?: boolean;
@@ -20,10 +21,12 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
     currentView,
     errorText,
     fileCache,
+    fastDevProgress,
     historyByAgent,
     mcpMode,
     model,
     projectName,
+    permissionPrompt,
     readOnly,
     requestInFlight,
     statusNote,
@@ -33,6 +36,7 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
     transientChat,
     warningText,
     setMcpMode,
+    submitPermissionPrompt,
     createProject,
     handleArchiveProject,
     handleRenameProject,
@@ -44,6 +48,8 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
     openMcp,
     openSkills,
     openProject,
+    importGddFastDev,
+    closeFastDevProgress,
     saveWorkspaceFile,
     selectAgent,
     sendAction,
@@ -52,23 +58,7 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
   } = controller;
 
   const phaseLabel = PHASE_LABEL[model.phase] || model.phase || "-";
-
-  const modeBadge =
-    currentView.type === "github"
-      ? "GitHub 可视化"
-      : currentView.type === "aigc"
-      ? "AIGC 集成"
-      : currentView.type === "copywriting"
-      ? "文案加工台"
-      : currentView.type === "game-model"
-      ? "游戏内模型接入"
-      : currentView.type === "skills"
-      ? "Skills 能力"
-      : currentView.type === "mcp"
-      ? "MCP 集成"
-      : currentView.type === "agent"
-      ? "Agent 对话"
-      : "文件查看";
+  const engineLabel = engineStatusLabel(activeProject?.target_engine);
 
   return (
     <div className="app">
@@ -111,8 +101,7 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
           currentProjectId={model.project_id}
           currentAgent={model.current_agent}
           projectName={projectName}
-          phaseLabel={phaseLabel}
-          modeBadge={modeBadge}
+          gameTags={activeProject?.game_tags || []}
           readOnly={readOnly}
           subtitle={subtitle}
           title={title}
@@ -123,6 +112,7 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
           mcpMode={mcpMode}
           fileItems={model.files}
           fileCache={fileCache}
+          fastDevProgress={fastDevProgress}
           fileEditable={!activeProject?.archived}
           errorText={errorText}
           warningText={warningText}
@@ -141,6 +131,8 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
             await saveWorkspaceFile(fileId, content);
           }}
           onUploadFileAsset={uploadWorkspaceFileAsset}
+          onImportGddFastDev={importGddFastDev}
+          onCloseFastDevProgress={closeFastDevProgress}
         />
       </div>
 
@@ -152,12 +144,62 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
         iterationCount={model.iteration_count || 0}
         filesCount={model.files.length}
         modeLabel={readOnly ? "只读" : "可写"}
-        statusUpdated={projectUpdated(activeProject)}
-        statusLastPhase={activeProject?.last_phase || "-"}
+        engineLabel={engineLabel}
         statusNote={statusNote}
         activeProject={activeProject}
         onSelectAgent={selectAgent}
       />
+
+      {permissionPrompt ? (
+        <div className="permission-modal-backdrop" role="presentation">
+          <section
+            className="permission-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="permission-modal-title"
+          >
+            <div className="permission-modal-kicker">权限确认</div>
+            <h2 id="permission-modal-title">{permissionPrompt.title}</h2>
+            <p>{permissionPrompt.message}</p>
+            {permissionPrompt.filePath ? (
+              <div className="permission-modal-target">
+                目标：{permissionPrompt.filePath}
+              </div>
+            ) : null}
+            <div className="permission-modal-actions">
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() => submitPermissionPrompt(false)}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                className="primary-btn"
+                onClick={() => submitPermissionPrompt(true)}
+              >
+                允许
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
+}
+
+function engineStatusLabel(targetEngine?: string): string {
+  switch ((targetEngine || "").toLowerCase()) {
+    case "unity":
+      return "Unity";
+    case "godot":
+      return "Godot";
+    case "unreal":
+      return "Unreal Engine";
+    case "generic":
+      return "通用";
+    default:
+      return "通用";
+  }
 }

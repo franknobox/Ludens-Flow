@@ -12,6 +12,14 @@ from ludens_flow.capabilities.mcp.adapter import (
 )
 from ludens_flow.capabilities.mcp.health import McpClientError
 from ludens_flow.capabilities.tools.search import SEARCH_TOOL_SCHEMA, web_search
+from ludens_flow.capabilities.tools.skills import (
+    SKILL_CREATE_DRAFT_TOOL_SCHEMA,
+    skill_create_draft,
+)
+from ludens_flow.capabilities.tools.project import (
+    PROJECT_UPDATE_TARGET_ENGINE_TOOL_SCHEMA,
+    project_update_target_engine,
+)
 from ludens_flow.capabilities.tools.unity_files import (
     UNITY_FIND_FILES_TOOL_SCHEMA,
     UNITY_LIST_DIR_TOOL_SCHEMA,
@@ -43,6 +51,8 @@ COMMON_TOOL_SCHEMAS: List[Dict[str, Any]] = [
     WORKSPACE_PATCH_TEXT_FILE_TOOL_SCHEMA,
     WORKSPACE_WRITE_TEXT_FILE_TOOL_SCHEMA,
     WORKSPACE_DELETE_FILE_TOOL_SCHEMA,
+    SKILL_CREATE_DRAFT_TOOL_SCHEMA,
+    PROJECT_UPDATE_TARGET_ENGINE_TOOL_SCHEMA,
     UNITY_LIST_DIR_TOOL_SCHEMA,
     UNITY_READ_FILE_TOOL_SCHEMA,
     UNITY_FIND_FILES_TOOL_SCHEMA,
@@ -74,6 +84,11 @@ def list_common_tools() -> List[Dict[str, Any]]:
                 "workspace_patch_text_file",
                 "workspace_delete_file",
             }
+        elif name.startswith("skill_"):
+            category = "skills"
+            writes_files = True
+        elif name.startswith("project_"):
+            category = "project"
         elif name.startswith("unity_"):
             category = "unity"
             workspace_kind = "unity"
@@ -168,6 +183,21 @@ def dispatch_tool_call(
                 workspace_id=args.get("workspace_id"),
                 project_id=project_id,
                 tool_event_handler=tool_event_handler,
+            )
+
+        if tool_name == "skill_create_draft":
+            return skill_create_draft(
+                manifest=args.get("manifest", {}),
+                prompt=args.get("prompt", ""),
+                project_id=project_id,
+                source_agent=args.get("source_agent", ""),
+                reason=args.get("reason", ""),
+            )
+
+        if tool_name == "project_update_target_engine":
+            return project_update_target_engine(
+                target_engine=args.get("target_engine", ""),
+                project_id=project_id,
             )
 
         if tool_name == "unity_list_dir":

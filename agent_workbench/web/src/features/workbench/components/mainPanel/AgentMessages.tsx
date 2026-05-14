@@ -1,4 +1,4 @@
-import { memo, useMemo } from "react";
+import { memo, useEffect, useMemo, useRef } from "react";
 
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { agentName } from "../../utils";
@@ -158,6 +158,8 @@ export const AgentMessages = memo(function AgentMessages(props: AgentMessagesPro
     onAction,
   } = props;
 
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
   const messageRows = useMemo(() => {
     const rows: RenderMessage[] = [...(historyByAgent[agentKey] || [])];
     if (transientChat && transientChat.agentKey === agentKey) {
@@ -177,6 +179,11 @@ export const AgentMessages = memo(function AgentMessages(props: AgentMessagesPro
     }
     return rows;
   }, [agentKey, historyByAgent, transientChat]);
+
+  // 消息数量变化或流式内容更新时，自动滚到最底部
+  useEffect(() => {
+    sentinelRef.current?.scrollIntoView({ block: "end" });
+  }, [messageRows.length, transientChat?.assistantText, transientChat?.thinking]);
 
   const maxRenderMessages = 160;
   const hiddenCount =
@@ -229,6 +236,8 @@ export const AgentMessages = memo(function AgentMessages(props: AgentMessagesPro
           </div>
         </div>
       ) : null}
+      {/* 滚动锚点：始终跟随到消息列表末尾 */}
+      <div ref={sentinelRef} style={{ height: 0 }} />
     </div>
   );
 });

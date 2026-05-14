@@ -12,6 +12,7 @@ from typing import Optional
 from ludens_flow.core.agents.base import AgentResult, BaseAgent, CommitSpec
 from ludens_flow.capabilities.artifacts.artifacts import read_artifact
 from ludens_flow.core.schemas import DISCUSS_RESPONSE_SCHEMA_TEXT, parse_discuss_payload
+from ludens_flow.core.engine_context import format_project_engine_for_prompt
 from ludens_flow.core.state import LudensState
 from llm.provider import LLMConfig
 
@@ -35,6 +36,7 @@ class PMAgent(BaseAgent):
     ) -> AgentResult:
         gdd_content = read_artifact("GDD", project_id=state.project_id)
         existing_pm = read_artifact("PROJECT_PLAN", project_id=state.project_id)
+        engine_context = format_project_engine_for_prompt(state.project_id)
 
         pm_context = ""
         if existing_pm.strip():
@@ -46,11 +48,12 @@ class PMAgent(BaseAgent):
 
         base_prompt_text = (
             f"现有 GDD：\n{gdd_content}\n\n"
+            f"{engine_context}\n\n"
             f"{pm_context}"
             "请完成以下任务，默认使用简体中文回复，除非用户明确要求英文：\n"
             "1. 作为项目伙伴 Pax，帮助用户确认最重要的排期输入，例如大致周期和团队规模。\n"
             "2. 基于 GDD，判断哪些功能是核心体验，哪些功能应该在 game jam 或 MVP 范围内暂时砍掉。\n"
-            "3. 默认假设 Unity PC 单机版本是主要目标。除非用户主动提出，不要扩展到多人或跨平台规划。\n"
+            "3. 交付目标必须由项目目标引擎、工作区配置和 GDD 决定；没有配置时使用通用小型单机 demo 视角，不要默认假设 Unity。\n"
             "4. 用清晰、自然的语言回复，重点给出可执行的范围控制建议。\n"
         )
 
@@ -105,15 +108,17 @@ class PMAgent(BaseAgent):
         tool_event_handler=None,
     ) -> AgentResult:
         gdd_content = read_artifact("GDD", project_id=state.project_id)
+        engine_context = format_project_engine_for_prompt(state.project_id)
 
         prompt_text = (
             f"现有 GDD：\n{gdd_content}\n\n"
+            f"{engine_context}\n\n"
             "请生成一份适合独立游戏或 game jam 项目的 PROJECT_PLAN.md。\n"
             "默认使用简体中文撰写，除非用户明确要求英文。\n"
             "要求：\n"
-            "1. 里程碑：拆分为 M0 / M1 / M2，并让每个里程碑都能在 Unity Editor Play Mode 中验证。\n"
-            "2. 任务拆解：按 Unity 项目模块组织，例如 Scripts / Prefabs / SceneSetup / Animations / Audio。\n"
-            "3. Unity 文件夹结构建议：给出实用的 Assets/ 目录规划。\n"
+            "1. 里程碑：拆分为 M0 / M1 / M2，并说明每个里程碑如何在当前目标引擎或通用 demo 环境中验证。\n"
+            "2. 任务拆解：按当前目标引擎适合的项目模块组织；未配置目标引擎时，使用通用模块边界。\n"
+            "3. 目录结构建议：给出匹配当前目标引擎 / 工作区的实用目录规划；不要无依据输出 Unity Assets/ 结构。\n"
             "4. 风险与缓解：聚焦技术风险和范围风险，不做商业发行规划。\n"
             "5. 如果 GDD 仍缺少关键信息，请在文末追加一个 ChangeRequest JSON 块，严格使用以下格式：\n"
             "<<CHANGE_REQUEST_JSON>>\n"

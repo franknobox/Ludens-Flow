@@ -13,7 +13,11 @@ from ludens_flow.capabilities.artifacts.artifacts import (
     write_artifact,
 )
 from ludens_flow.capabilities.context.prompt_templates import load_prompt_template
+from ludens_flow.capabilities.skills.registry import build_enabled_skill_context
 from llm.modelrouter import resolve_model_config
+from ludens_flow.core.engine_context import format_project_engine_for_prompt
+from ludens_flow.core.game_tags import extract_game_tags_from_gdd
+from ludens_flow.core.paths import touch_project
 from ludens_flow.core.state import LudensState, save_state, write_trace_log
 from ludens_flow.core.router import ludens_router_logic_with_action, Phase, phase_to_agent_name
 from ludens_flow.core.agents.base import AgentResult
@@ -273,6 +277,33 @@ def run_agent_step(
         else:
             user_persona_block = profile_instruction
 
+        try:
+            engine_context = format_project_engine_for_prompt(state.project_id)
+            if engine_context:
+                user_persona_block = (
+                    user_persona_block
+                    + "\n\n---\n\n[PROJECT_ENGINE]\n"
+                    + engine_context
+                    + "\n[/PROJECT_ENGINE]"
+                )
+        except Exception as e:
+            logger.warning("Failed to load project engine context: %s", e)
+
+        try:
+            skill_context = build_enabled_skill_context(
+                project_id=state.project_id,
+                agent_key=getattr(agent, "agent_key", "base"),
+            )
+            if skill_context:
+                user_persona_block = (
+                    user_persona_block
+                    + "\n\n---\n\n[PROJECT_SKILLS]\n"
+                    + skill_context
+                    + "\n[/PROJECT_SKILLS]"
+                )
+        except Exception as e:
+            logger.warning("Failed to load project Skills context: %s", e)
+
         # 按 mode 分发到对应能力入口。
         result = None
         agent_state_snapshot = LudensState.from_dict(state.to_dict())
@@ -458,6 +489,14 @@ def run_agent_step(
                     state=state,
                     project_id=state.project_id,
                 )
+                if art_name == "GDD":
+                    try:
+                        touch_project(
+                            state.project_id,
+                            game_tags=extract_game_tags_from_gdd(artifact_content),
+                        )
+                    except Exception as exc:
+                        logger.warning("Failed to update GDD game tags: %s", exc)
                 commit_flag = "Y"
 
                 # Router 下一轮据此推进 phase。

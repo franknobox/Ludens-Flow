@@ -1,53 +1,15 @@
 ﻿# Ludens-Flow 后续开发计划 (Roadmap)
 
-> 以下为 V3 收版的硬门槛能力，优先级高于扩展性探索项。
-
-1. **收版验收基线（必须）**
-   - 核心链路 smoke 测试通过：项目创建/切换/归档、工作流完整跑完（GDD→PM→ENG→Review→DevCoaching）。
-   - MCP 端到端可用：Blender `engine_list_scene` / `engine_create_object` 在真实环境中稳定调用。
-   - 权限与沙箱正确：写操作必须经 workspace 路径校验 + 用户确认，无 handler 时默认拒绝。
-   - 元数据零丢失：项目 meta 原子写入、坏 meta 隔离、删除项不被 stale touch 复活。
-   - 前端不白屏：Error Boundary 覆盖、SSE 断连有降级（HTTP reply 回填）、无内存泄漏。
-   - 进度：基础 smoke + MCP 实机验证已通过，持续观察稳定性。
-
 ---
 
 ## 架构债务与文件结构优化 (Post-V3 技术债)
 
-> V3 收版后优先偿还的结构性债务，按 P0/P1/P2 分级。
+### P0 — 拆分大文件
 
-### P0 — 必须尽早拆分的大文件
-
-1. **backend `api.py` (1,742 行 / 47 端点)**
-   - 现状：项目 CRUD、chat、workspace、settings、SSE、权限、文案任务全在一文件。
-   - 目标：拆成 `app/routers/{projects, chat, workspaces, settings, copywriting, events}.py`，`api.py` 仅做 `include_router` + 全局 middleware。
-   - 风险：大拆易引入 endpoint 路径 regression，建议 V3 后第一周做，配合完整 endpoint smoke 测试。
-
-2. **backend `paths.py` (1,546 行 / ~60 函数)**
-   - 现状：项目元数据 + workspace + MCP + model routing + GitHub + 路径工具混杂。
-   - 目标：拆成 `core/project_meta.py`、`core/workspaces.py`、`core/mcp_config.py`、`core/model_routing.py`、`core/path_utils.py`。
-   - 兼容：过渡期保留 `paths.py` thin re-export，下游逐步迁移，避免一次性改全库 import。
-
-### P1 — 高价值中等成本
-
-3. **frontend `SettingsSections.tsx` (1,243 行)**
-   - 现状：6 个 section 组件 + constants + validation 全在一个文件。
-   - 目标：`features/settings/sections/{General,UserProfile,Tools,EngineConnections,Workspaces,History}.tsx` + `constants.ts` + `utils.ts`。
-
-4. **tests `test_project_lifecycle.py` (1,600+ 行)**
-   - 现状：覆盖 API / state / paths / MCP / skills / workspace / import-export / archive 等 7 个域。
-   - 目标：按域拆到 `tests/api/test_projects.py`、`tests/core/test_project_meta.py`、`tests/capabilities/test_mcp_regressions.py` 等。
-   - 价值：并行跑更快，失败定位更准，减少单文件 merge conflict。
-
-5. **frontend 全局 CSS 垄断 (5,800+ 行)**
-   - 现状：`styles/workbench.css`、`settings.css`、`layout.css`、`theme-dark.css`、`markdown.css` 共 5,800+ 行，部分 feature 有本地 CSS，部分没有。
-   - 目标：逐步把 feature 样式迁入 `features/<name>/styles/`；统一变量系统；V3 已先清理 `theme-dark.css` 的 `!important`。
-
-### P2 — 低成本结构整理
-
-6. **MCP schema 与 adapter 混放**
-   - 现状：`blender_schema.py`、`safe_schema.py` 放在 `mcp/adapters/`。
-   - 目标：建 `mcp/schemas/`，纯 schema/validator 移过去，`adapters/` 只保留运行时映射。
+1. **backend API 入口拆分**
+   - 现状：已从单文件 `app/api.py` 拆为 `app/api/` package，`__init__.py` 负责 FastAPI app、middleware、static mount 与 `include_router`。
+   - 当前结构：`api/{chat, projects, workspaces, settings, copywriting, events}.py` 负责端点注册，`api/common.py` 暂时保留共享模型、事件与业务辅助函数。
+   - 后续：逐步把 `common.py` 内的业务函数继续下沉到对应 API 模块，并补完整 endpoint smoke 测试。
 
 ---
 
@@ -56,21 +18,19 @@
 ### 1. 常态化的稳定性、体验性优化
 - **核心目标**：持续提升系统稳定性、状态流转一致性与整体可维护性，优先解决影响体验和可扩展性的基础问题。
 - **具体方向**：
-  - 完善工作流设定能力，支持用户选择从标准完整流程开始，或从外部导入已有工件后直接进入开发辅导/工程协作。
-  - 建立文件与上下文策略，明确附件、工件、工作区文件、用户画像和 Skills 何时进入上下文、保留多久、如何被 Agent 引用。
   - 持续验证 Prompt 分层、共享 schema 和结构化解析在真实项目中的稳定性，减少非结构化输出、协议漂移的问题。
-  - 继续打磨工具调用相关提示词，使工具使用、工作区上下文和执行反馈更自然地融入 Agent 回复过程。
+  - 继续打磨工具调用提示词和上下文策略（重点），使工具使用、上下文和执行反馈更自然地融入 Agent 回复过程。
   - 持续优化前端外观、交互细节和结构分层，让工作台更好承接结构化结果、权限确认、文件上下文和工具过程展示。
   - 持续清理冗余代码、旧兼容链路和历史遗留实现，降低后续扩展成本。
-- **进度状态**：基础稳定性、第一轮 Prompt 重写和 schema 基础层已明显提升；当前重点转向工作流入口选择、上下文策略、工具执行体验和真实场景下的提示词调优。
+  - 内部沉淀skills，做好演示流程。
+- **进度状态**：当前重点转向工作流灵活化、上下文策略、工具执行体验和真实场景下的提示词调优。
 
 ### 2. 工程执行闭环
-- **核心目标**：让 Agent 从“给出建议”进一步走向“可控地执行工程任务”，形成接近通用 coding agent 的读文件、改文件、运行验证、反馈修正闭环。
+- **核心目标**：让 Agent 从“给出建议”进一步走向“可控地执行工程任务”。
 - **具体方向**：
   - 建立真正的任务执行循环，让 Agent 能围绕一个目标持续完成读取上下文、制定步骤、执行工具、观察结果和继续修正。
   - 完善 Patch / Diff 级编辑体验，展示将要修改和已经修改的文件、变更摘要、风险提示与确认结果。
   - 补齐命令执行与测试反馈能力，优先支持工作区内受控命令、测试/构建输出读取、失败原因回传与下一步建议。
-  - 统一权限与确认工作流，将读、写、删、patch、命令执行和 MCP 操作都纳入同一套权限事件与安全模式。
   - 提升会话中的工作过程可见性，让用户能看到 Agent 正在搜索什么、读取什么、修改什么、运行什么，以及每一步的结果。
 - **进度状态**：已有工作区读写、patch/delete、权限模式和工具事件基础；下一步重点是把它们串成稳定的端到端执行体验。
 
@@ -78,18 +38,14 @@
 - **核心目标**：围绕游戏开发的真实产出需求，补齐工程文件协作、编辑器/创作工具接入和文案生成等面向游戏项目的专项辅助能力。
 - **具体方向**：
   - 做稳 Unity 工程文件读写、工程阅读与检索，让 Agent 能围绕 `.cs` 等文本工程文件持续协作，并为 `.prefab`、`.unity` 等高风险文件类型预留扩展位。
-  - 推进 Unity 编辑器侧 MCP 接入，将放置 Prefab、移动物体、保存场景等操作做成受控、可确认、可追踪的工具。
-  - 将各种类型的文案生成能力补全。
-  - 持续优化 GitHub 等协作平台接入与可视化。
-- **进度状态**：Unity 基础工作区边界、首批读写工具、目录创建、patch/delete、权限模式已落地；文案能力的台词案例已经跑通；Blender MCP 能力已基本接入完成，持续优化。
+  - 将各种类型的文案生成能力补全。持续优化 GitHub 等协作平台接入与可视化。
+- **进度状态**：聚焦MCP稳定性。
 
-### 4. Agent 能力 Skills 化 (Skill-based Agent Architecture)
-- **核心目标**：让 Agent 能把重复的任务操作沉淀为可复用的 Skills，实现自我总结与持续进化，而不是每次都依赖固定 Prompt 从零开始。
+### 4. 更多引擎兼容与生态扩展 (Broader Engine Compatibility)
+- **核心目标**：把 Ludens-Flow 从“默认偏 Unity 的游戏开发工作台”收敛为真正的多引擎游戏开发工作台，让 Unity、Godot、UE 等能力共享同一套项目、工作区、权限、工具和提示词模型。
 - **具体方向**：
-  - 下一步把已启用 Skill 接入 Agent Prompt / Tool 上下文，使 Skill 不只是前端清单，而是真正影响对应 Agent 的行为。
-  - 推进内部沉淀：Agent 在真实项目协作中识别重复任务模式（文件操作、代码生成、文案润色等），抽象为 Skill 模板。
-  - 逐步形成“外部导入 -> 项目启用 -> 运行时加载 -> 效果反馈 -> 内部沉淀”的演进闭环。
-- **进度状态**：第一阶段外部导入与项目级启用管理已落地；运行时加载与内部自沉淀尚未开始。
+  - 保留 Unity 作为一个成熟能力分支，继续推进，同时让 Godot、Blender、UE 复用统一能力层，避免每个引擎长出一套彼此割裂的产品逻辑。
+- **进度状态**：预期与工作流优化相结合，设定出更完善的引擎确定方式。
 
 ---
 
@@ -97,30 +53,23 @@
 
 > 以下为探索性方向，不设硬性排期，将根据近期计划推进情况逐步展开。
 
-### 6. 更多引擎兼容与生态扩展 (Broader Engine Compatibility)
-- **核心目标**：在当前游戏开发辅助能力逐步稳定之后，把能力扩展到更多引擎与生态工具，形成更统一的游戏开发工作台能力框架。
-- **具体方向**：
-  - 支持 Godot 等更开放的引擎方向，优先围绕文本化工程文件、项目阅读、检索、编辑器插件与 MCP 工具桥能力展开。
-  - 将 UE 纳入长期兼容规划，优先考虑项目结构理解、配置与 C++ 工程辅助，再逐步评估编辑器侧与资源侧能力接入。
-  - 与现有工作区、权限、工具目录、执行过程和设置页统一，避免每个引擎都长出一套彼此割裂的能力模型。
-
-### 7. 游戏内模型能力接入 (In-Game LLM Integration)
+### 5. 游戏内模型能力接入 (In-Game LLM Integration)
 - **核心目标**：让开发者可以通过工作台，低门槛地配置、测试并接入面向游戏运行时的大模型能力。
 - **具体方向**：
   - 支持在工作台中定义游戏内可调用的 Agent / Prompt / Tool 组合，用于 NPC 对话、任务提示、剧情回顾、世界观问答等场景。
   - 提供适合游戏接入的配置与导出能力，例如运行时配置、调用方案、服务端接口约定和 Unity 侧接入骨架。
   - 逐步形成“工作台内配置与测试 -> 游戏工程接入 -> 运行时调试与迭代”的闭环，而不是只停留在开发期辅助。
   - 在设计上同步考虑成本控制、上下文边界、权限限制与运行时体验，避免把开发态能力直接粗暴搬进游戏运行时。
-- **进度状态**：前端配置与导出页面壳已完成（模型目录、场景配置、自定义接入、导出说明），待推进真实运行时接入与闭环验证。
+- **进度状态**：前端配置与导出页面壳已完成，待推进真实运行时接入与闭环验证。
 
-### 8. Welcome 与启动体验丰富化 (Welcome & Onboarding Experience)
+### 6. Welcome 与启动体验丰富化 (Welcome & Onboarding Experience)
 - **核心目标**：把当前轻量启动页扩展为更完整的产品入口，让用户在进入工作台前快速理解项目状态、配置完整度和下一步可做什么。
 - **具体方向**：
   - 从单纯 Logo / 加载动画逐步扩展到首次使用引导、项目选择、配置检查、能力入口提示和 Demo 模式入口。
   - 在不打断熟练用户的前提下，为新用户提供模型配置、工作区权限、GitHub/Skills/MCP 等关键能力的状态提示。
   - 让 Welcome 页成为“进入工作台前的轻量总览”，而不是额外的登录或阻塞页面。
 
-### 9. 外部 AIGC 能力集成 (External AIGC Integration)
+### 7. 外部 AIGC 能力集成 (External AIGC Integration)
 - **核心目标**：让工作台可以作为游戏开发 AIGC 能力的统一入口，帮助用户更方便地访问外部生成式服务，而不是在多个网站之间来回切换。
 - **具体方向**：
   - 在现有 AIGC 快捷入口目录基础上，继续维护图片、声音、视频、3D 模型、原型设计等主流平台入口。
@@ -128,14 +77,14 @@
   - 逐步形成“在 Ludens-Flow 内选择能力 -> 跳转或调用外部 AIGC 服务 -> 回收结果继续进入项目工作流”的顺滑闭环。
   - 在设计上同步考虑账户体系、权限、结果回流、资产组织和后续可替换性，避免把工作台做成单纯的链接集合页。
 
-### 10. Benchmark 与评测体系构建 (Benchmark & Evaluation)
+### 8. Benchmark 与评测体系构建 (Benchmark & Evaluation)
 - **核心目标**：建立适配 Ludens-Flow 的评测体系，用可重复、可比较的方式衡量工作流质量、稳定性与真实任务完成度。
 - **具体方向**：
   - 构建项目自定义 workflow benchmark，覆盖需求澄清、定稿确认、工件生成、Review 回流、多模态输入与异常场景处理。
   - 参考真实任务型 benchmark 与工具调用 benchmark，评估多 Agent 协作、结构化输出和工具使用质量。
   - 沉淀统一的评估指标，例如阶段推进成功率、误跳转率、工件完整性、响应时延与演示稳定性。
 
-### 11. 桌面安装版与本地应用化 (Desktop App Packaging)
+### 9. 桌面安装版与本地应用化 (Desktop App Packaging)
 - **核心目标**：在 V3 工作台能力稳定后，将 Ludens-Flow 打包成更适合本地游戏开发场景的桌面应用，而不是长期依赖手动启动 Web/后端服务。
 - **具体方向**：
   - 采用 Tauri Shell + Python 后端 Sidecar + 现有 React 前端的路线，尽量保留当前前后端业务结构。

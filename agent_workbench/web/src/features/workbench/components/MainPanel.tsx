@@ -11,6 +11,7 @@ import { agentName } from "../utils";
 import type {
   AgentKey,
   ComposerAttachment,
+  FastDevProgress,
   HistoryByAgent,
   TransientChat,
   ViewState,
@@ -57,8 +58,7 @@ interface MainPanelProps {
   currentProjectId: string;
   currentAgent: AgentKey;
   projectName: string;
-  phaseLabel: string;
-  modeBadge: string;
+  gameTags: string[];
   readOnly: boolean;
   subtitle: string;
   title: string;
@@ -69,6 +69,7 @@ interface MainPanelProps {
   mcpMode: boolean;
   fileItems: WorkspaceFileItem[];
   fileCache: Record<string, string>;
+  fastDevProgress: FastDevProgress;
   fileEditable: boolean;
   errorText: string;
   warningText: string;
@@ -82,6 +83,8 @@ interface MainPanelProps {
     name: string,
     dataUrl: string,
   ) => Promise<{ markdown: string }>;
+  onImportGddFastDev: (file: File) => Promise<void>;
+  onCloseFastDevProgress: () => void;
 }
 
 function LazyPersistentView({
@@ -118,8 +121,7 @@ export function MainPanel(props: MainPanelProps) {
     currentProjectId,
     currentAgent,
     projectName,
-    phaseLabel,
-    modeBadge,
+    gameTags,
     readOnly,
     subtitle,
     title,
@@ -130,6 +132,7 @@ export function MainPanel(props: MainPanelProps) {
     mcpMode,
     fileItems,
     fileCache,
+    fastDevProgress,
     fileEditable,
     errorText,
     warningText,
@@ -139,6 +142,8 @@ export function MainPanel(props: MainPanelProps) {
     onToggleMcpMode,
     onSaveFile,
     onUploadFileAsset,
+    onImportGddFastDev,
+    onCloseFastDevProgress,
   } = props;
 
   const isSpecialView =
@@ -148,6 +153,7 @@ export function MainPanel(props: MainPanelProps) {
     currentView.type === "game-model" ||
     currentView.type === "skills" ||
     currentView.type === "mcp";
+  const showGddFastDevImport = currentView.type === "file" && currentView.id === "gdd";
 
   return (
     <main className={`main${isSpecialView ? " main-special-view" : ""}`}>
@@ -160,13 +166,33 @@ export function MainPanel(props: MainPanelProps) {
           </div>
           <div className="meta-stack">
             <div className="meta">
-              <span className="badge project">{projectName}</span>
-              <span className="badge phase">{phaseLabel}</span>
-              <span className="badge mode">{modeBadge}</span>
+              {gameTags.slice(0, 4).map((tag) => (
+                <span className="badge game-tag" key={tag}>
+                  {tag}
+                </span>
+              ))}
               {readOnly && currentView.type === "agent" ? (
                 <span className="badge readonly">只读 · {agentName(currentAgent)}</span>
               ) : null}
             </div>
+            {showGddFastDevImport ? (
+              <label className="gdd-fastdev-import main-header-import">
+                <input
+                  type="file"
+                  accept=".md,.txt,.pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  hidden
+                  onChange={(event) => {
+                    const file = event.currentTarget.files?.[0];
+                    event.currentTarget.value = "";
+                    if (file) {
+                      void onImportGddFastDev(file);
+                    }
+                  }}
+                />
+                <span className="btn-line btn-file">导入 GDD</span>
+                <small>进入快速开发</small>
+              </label>
+            ) : null}
             {currentView.type === "agent" && currentAgent === "engineering" ? (
               <button
                 type="button"
@@ -248,6 +274,35 @@ export function MainPanel(props: MainPanelProps) {
           />
         </div>
       </section>
+
+      {fastDevProgress.open ? (
+        <div className="fastdev-modal-backdrop" role="presentation">
+          <div className="fastdev-modal" role="dialog" aria-modal="true">
+            <div className="fastdev-modal-kicker">快速开发</div>
+            <h2>
+              {fastDevProgress.status === "completed"
+                ? "生成完成"
+                : fastDevProgress.status === "failed"
+                  ? "生成失败"
+                  : "正在生成"}
+            </h2>
+            <p>{fastDevProgress.message}</p>
+            {fastDevProgress.status === "running" ? (
+              <div className="fastdev-progress-bar">
+                <span />
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="btn"
+                onClick={onCloseFastDevProgress}
+              >
+                确定
+              </button>
+            )}
+          </div>
+        </div>
+      ) : null}
 
       {!isSpecialView && currentView.type === "agent" ? (
         <Composer

@@ -3,6 +3,12 @@ import type { ProjectMeta } from "./project";
 
 export type ComposerAttachmentKind = "image" | "file";
 
+export interface FastDevProgress {
+  open: boolean;
+  status: "idle" | "running" | "completed" | "failed";
+  message: string;
+}
+
 export interface ComposerAttachment {
   id: string;
   kind: ComposerAttachmentKind;
@@ -85,7 +91,11 @@ export type WorkbenchEventType =
   | "copywriting_job_queued"
   | "copywriting_job_progress"
   | "copywriting_job_completed"
-  | "copywriting_job_failed";
+  | "copywriting_job_failed"
+  | "fastdev_started"
+  | "fastdev_progress"
+  | "fastdev_completed"
+  | "fastdev_failed";
 
 export interface WorkbenchEvent {
   type: WorkbenchEventType;
@@ -110,5 +120,6 @@ export interface WorkbenchEvent {
   permission_request_id?: string;
   job_id?: string;
   status?: string;
+  step?: string;
   response?: unknown;
 }

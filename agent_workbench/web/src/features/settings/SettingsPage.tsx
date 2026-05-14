@@ -24,6 +24,7 @@ import {
   UserProfileSection,
   WorkspacesSection,
 } from "./sections/SettingsSections";
+import "./styles/settings.css";
 
 const SETTINGS_SECTIONS = [
   { id: "general", label: "通用设置", hint: "写入与模型" },
@@ -132,7 +133,7 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
   const [activeSection, setActiveSection] =
     useState<SettingsSectionId>("general");
   const [labelInput, setLabelInput] = useState("");
-  const [kindInput, setKindInput] = useState("unity");
+  const [kindInput, setKindInput] = useState("generic");
   const [pathInput, setPathInput] = useState("");
   const [writableInput, setWritableInput] = useState(false);
   const [mcpEngineInput, setMcpEngineInput] =
@@ -744,12 +745,28 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
               onCommandChange={setMcpCommandInput}
               onArgsChange={setMcpArgsInput}
               onEnvChange={setMcpEnvInput}
-              onFillBlenderPreset={() => {
-                setMcpEngineInput("blender");
-                setMcpLabelInput("Blender MCP");
-                setMcpCommandInput("cmd");
-                setMcpArgsInput("/c\nuvx\nblender-mcp");
-                setMcpEnvInput("DISABLE_TELEMETRY=true");
+              onFillEnginePreset={(engine) => {
+                setMcpEngineInput(engine);
+                if (engine === "unity") {
+                  setMcpLabelInput("Unity MCP");
+                  setMcpCommandInput("cmd");
+                  setMcpArgsInput("/c\nuvx\n--from\nmcpforunityserver\nmcp-for-unity");
+                  setMcpEnvInput("");
+                  return;
+                }
+                if (engine === "godot") {
+                  setMcpLabelInput("Godot MCP");
+                  setMcpCommandInput("cmd");
+                  setMcpArgsInput("/c\nnpx\n-y\n@coding-solo/godot-mcp");
+                  setMcpEnvInput("GODOT_PATH=");
+                  return;
+                }
+                if (engine === "blender") {
+                  setMcpLabelInput("Blender MCP");
+                  setMcpCommandInput("cmd");
+                  setMcpArgsInput("/c\nuvx\nblender-mcp");
+                  setMcpEnvInput("DISABLE_TELEMETRY=true");
+                }
               }}
               onAddConnection={() => {
                 void handleAddMcpConnection();

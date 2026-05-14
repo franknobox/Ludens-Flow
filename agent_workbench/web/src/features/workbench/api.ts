@@ -27,6 +27,7 @@ import {
   getCurrentWorkspaces,
   getWorkspaceFileContent,
   getWorkspaceFiles,
+  importGddFastDev,
   uploadWorkspaceFileAsset,
   updateWorkspaceFileContent,
 } from "./api/workspace";
@@ -55,6 +56,7 @@ export const workbenchApi = {
   updateCurrentUserProfile,
   getWorkspaceFiles,
   getWorkspaceFileContent,
+  importGddFastDev,
   uploadWorkspaceFileAsset,
   updateWorkspaceFileContent,
   getCurrentWorkspaces,

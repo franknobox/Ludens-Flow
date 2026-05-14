@@ -25,6 +25,12 @@ export interface WorkspaceFileUpdateResponse extends WorkspaceFileContent {
   state?: StateResponse;
 }
 
+export interface GddFastDevImportResponse {
+  state: StateResponse;
+  gdd_content: string;
+  message: string;
+}
+
 export interface WorkspaceFileAssetUploadResponse {
   file_id: string;
   name: string;

@@ -26,6 +26,10 @@ const KNOWN_EVENT_TYPES = new Set<WorkbenchEventType>([
   "copywriting_job_progress",
   "copywriting_job_completed",
   "copywriting_job_failed",
+  "fastdev_started",
+  "fastdev_progress",
+  "fastdev_completed",
+  "fastdev_failed",
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -86,6 +90,7 @@ export function normalizeWorkbenchEvent(
     permission_request_id: asString(raw.permission_request_id),
     job_id: asString(raw.job_id),
     status: asString(raw.status),
+    step: asString(raw.step),
     response: raw.response,
   };
 }

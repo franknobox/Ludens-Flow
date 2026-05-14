@@ -2,7 +2,7 @@
 文件功能：项目与工作区路径管理器，统一维护项目元数据和目录结构。
 核心内容：提供项目创建、切换、归档、工作区绑定与 settings 读写能力。
 核心内容：负责 schema_version 迁移与 model_routing 持久化规范化处理。
-关联文件：core/state/, app/api.py, llm/modelrouter.py
+关联文件：core/state/, app/api/, llm/modelrouter.py
 """
 
 from __future__ import annotations
@@ -12,10 +12,17 @@ import os
 import re
 import shutil
 import threading
+import time
 import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from ludens_flow.capabilities.paths import (
+    _merge_mcp_connection_lists,
+    _normalize_github_repo,
+    _normalize_mcp_connections,
+)
 
 WORKSPACE_ENV_VAR = "LUDENS_WORKSPACE_DIR"
 PROJECT_ENV_VAR = "LUDENS_PROJECT_ID"
@@ -23,11 +30,11 @@ ACTIVE_PROJECT_FILE = ".active_project"
 PROJECTS_DIR_NAME = "projects"
 PROJECT_META_FILE_NAME = "meta.json"
 DEFAULT_PROJECT_PREFIX = "project"
-PROJECT_META_SCHEMA_VERSION = 4
+PROJECT_META_SCHEMA_VERSION = 6
 _UNSET = object()
 DEFAULT_UNITY_WORKSPACE_ID = "unity-main"
-SUPPORTED_WORKSPACE_KINDS = {"unity", "generic", "blender"}
-SUPPORTED_MCP_ENGINES = {"unity", "godot", "blender", "unreal"}
+SUPPORTED_WORKSPACE_KINDS = {"unity", "generic", "blender", "godot"}
+SUPPORTED_TARGET_ENGINES = {"generic", "unity", "godot", "unreal"}
 _PROJECT_META_LOCKS: Dict[str, threading.RLock] = {}
 _PROJECT_META_LOCKS_GUARD = threading.Lock()
 
@@ -107,6 +114,61 @@ def _normalize_workspace_kind(kind: Optional[str]) -> str:
             f"Unsupported workspace kind '{raw}'. Supported kinds: {', '.join(sorted(SUPPORTED_WORKSPACE_KINDS))}."
         )
     return raw
+
+
+def _normalize_target_engine(value: Any) -> str:
+    raw = str(value or "").strip().lower()
+    if not raw:
+        return ""
+    aliases = {
+        "ue": "unreal",
+        "unreal_engine": "unreal",
+        "unreal engine": "unreal",
+        "general": "generic",
+        "none": "generic",
+        "blender": "generic",
+    }
+    normalized = aliases.get(raw, raw)
+    if normalized not in SUPPORTED_TARGET_ENGINES:
+        raise ValueError(
+            f"Unsupported target engine '{raw}'. Supported engines: {', '.join(sorted(SUPPORTED_TARGET_ENGINES))}."
+        )
+    return normalized
+
+
+def _normalize_engine_profile(value: Any) -> str:
+    return str(value or "").strip()[:4000]
+
+
+def _normalize_game_tags(value: Any) -> List[str]:
+    if isinstance(value, str):
+        raw_items = re.split(r"[,，/、|]+", value)
+    elif isinstance(value, list):
+        raw_items = value
+    else:
+        raw_items = []
+
+    tags: List[str] = []
+    for item in raw_items:
+        tag = re.sub(r"\s+", " ", str(item or "")).strip(" -#/，,。；;:：")
+        if not tag or tag in tags:
+            continue
+        tags.append(tag[:16])
+        if len(tags) >= 4:
+            break
+    return tags
+
+
+def _derive_game_tags_from_gdd(project_id: str) -> List[str]:
+    gdd_path = get_projects_dir() / project_id / "GDD.md"
+    if not gdd_path.exists() or not gdd_path.is_file():
+        return []
+    try:
+        from ludens_flow.core.game_tags import extract_game_tags_from_gdd
+
+        return extract_game_tags_from_gdd(gdd_path.read_text(encoding="utf-8"))
+    except Exception:
+        return []
 
 
 def _normalize_model_route_entry(raw: Any) -> Dict[str, Any]:
@@ -204,113 +266,6 @@ def _normalize_model_routing(raw: Any) -> Dict[str, Any]:
             normalized["agent_capabilities"] = agent_capabilities
 
     return normalized
-
-
-def _normalize_mcp_engine(engine: Optional[str]) -> str:
-    raw = str(engine or "").strip().lower()
-    if raw == "ue":
-        raw = "unreal"
-    if raw not in SUPPORTED_MCP_ENGINES:
-        raise ValueError(
-            f"Unsupported MCP engine '{raw}'. Supported engines: {', '.join(sorted(SUPPORTED_MCP_ENGINES))}."
-        )
-    return raw
-
-
-def _normalize_mcp_connection_id(connection_id: Optional[str], fallback: str) -> str:
-    normalized = _normalize_project_id(connection_id or fallback)
-    if not normalized:
-        raise ValueError("MCP connection id is required.")
-    return normalized
-
-
-def _normalize_mcp_env(raw: Any) -> Dict[str, str]:
-    if not isinstance(raw, dict):
-        return {}
-    env: Dict[str, str] = {}
-    for key, value in raw.items():
-        name = str(key or "").strip()
-        if not name:
-            continue
-        env[name] = str(value or "")
-    return env
-
-
-def _normalize_mcp_args(raw: Any) -> List[str]:
-    if not isinstance(raw, list):
-        return []
-    return [str(item) for item in raw if str(item).strip()]
-
-
-def _normalize_mcp_connections(raw: Any) -> List[Dict[str, Any]]:
-    if not isinstance(raw, list):
-        return []
-
-    entries: List[Dict[str, Any]] = []
-    seen_ids: set[str] = set()
-    for index, item in enumerate(raw):
-        if not isinstance(item, dict):
-            continue
-        try:
-            engine = _normalize_mcp_engine(item.get("engine"))
-            connection_id = _normalize_mcp_connection_id(
-                item.get("id"),
-                f"{engine}-mcp",
-            )
-        except ValueError:
-            continue
-
-        if connection_id in seen_ids:
-            connection_id = _normalize_mcp_connection_id(
-                f"{connection_id}-{index + 1}",
-                f"{engine}-mcp-{index + 1}",
-            )
-        seen_ids.add(connection_id)
-
-        label = str(item.get("label") or "").strip() or f"{engine.title()} MCP"
-        command = str(item.get("command") or "").strip()
-        entries.append(
-            {
-                "id": connection_id,
-                "engine": engine,
-                "label": label,
-                "command": command,
-                "args": _normalize_mcp_args(item.get("args")),
-                "env": _normalize_mcp_env(item.get("env")),
-                "enabled": _coerce_bool(item.get("enabled", True)),
-            }
-        )
-    return entries
-
-
-def _merge_mcp_connection_lists(
-    preferred: List[Dict[str, Any]], fallback: List[Dict[str, Any]]
-) -> List[Dict[str, Any]]:
-    merged: List[Dict[str, Any]] = []
-    seen_ids: set[str] = set()
-    for item in [*preferred, *fallback]:
-        connection_id = str(item.get("id", "") or "").strip()
-        if not connection_id or connection_id in seen_ids:
-            continue
-        seen_ids.add(connection_id)
-        merged.append(dict(item))
-    return merged
-
-
-def _normalize_github_repo(raw: Any) -> Dict[str, str]:
-    if not isinstance(raw, dict):
-        return {}
-    owner = str(raw.get("owner") or "").strip()
-    repo = str(raw.get("repo") or "").strip()
-    if not owner or not repo:
-        return {}
-    result = {
-        "owner": owner,
-        "repo": repo.removesuffix(".git"),
-    }
-    url = str(raw.get("url") or "").strip()
-    result["url"] = url or f"https://github.com/{result['owner']}/{result['repo']}"
-    return result
 
 
 def _normalize_workspace_id(workspace_id: Optional[str], fallback: str) -> str:
@@ -531,6 +486,10 @@ def _migrate_project_meta_payload(
         legacy_unity_root=str(meta.get("unity_root", "") or ""),
     )
 
+    game_tags = _normalize_game_tags(meta.get("game_tags"))
+    if not game_tags:
+        game_tags = _derive_game_tags_from_gdd(project_id)
+
     migrated = {
         "schema_version": PROJECT_META_SCHEMA_VERSION,
         "id": normalized_id,
@@ -548,9 +507,15 @@ def _migrate_project_meta_payload(
         "agent_file_write_confirm_required": _coerce_bool(
             meta.get("agent_file_write_confirm_required", False)
         ),
+        "skill_self_capture_enabled": _coerce_bool(
+            meta.get("skill_self_capture_enabled", False)
+        ),
         "model_routing": _normalize_model_routing(meta.get("model_routing")),
         "mcp_connections": _normalize_mcp_connections(meta.get("mcp_connections")),
         "github_repo": _normalize_github_repo(meta.get("github_repo")),
+        "target_engine": _normalize_target_engine(meta.get("target_engine")),
+        "engine_profile": _normalize_engine_profile(meta.get("engine_profile")),
+        "game_tags": game_tags,
         "unity_root": _first_workspace_root(workspaces, kind="unity"),
         "workspaces": workspaces,
     }
@@ -573,7 +538,14 @@ def _write_project_meta(project_id: str, meta: Dict[str, Any]) -> Dict[str, Any]
             handle.write(payload)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temp_file, meta_file)
+        for attempt in range(6):
+            try:
+                os.replace(temp_file, meta_file)
+                break
+            except PermissionError:
+                if attempt >= 5:
+                    raise
+                time.sleep(0.05 * (attempt + 1))
     finally:
         temp_file.unlink(missing_ok=True)
     return meta
@@ -606,9 +578,15 @@ def _build_project_meta_record(
         "agent_file_write_confirm_required": _coerce_bool(
             meta.get("agent_file_write_confirm_required", False)
         ),
+        "skill_self_capture_enabled": _coerce_bool(
+            meta.get("skill_self_capture_enabled", False)
+        ),
         "model_routing": _normalize_model_routing(meta.get("model_routing")),
         "mcp_connections": _normalize_mcp_connections(meta.get("mcp_connections")),
         "github_repo": _normalize_github_repo(meta.get("github_repo")),
+        "target_engine": _normalize_target_engine(meta.get("target_engine")),
+        "engine_profile": _normalize_engine_profile(meta.get("engine_profile")),
+        "game_tags": _normalize_game_tags(meta.get("game_tags")),
         "unity_root": _first_workspace_root(workspaces, kind="unity"),
         "workspaces": workspaces,
     }
@@ -628,9 +606,13 @@ def _upsert_project_meta(
     last_message_preview: Optional[str] = None,
     agent_file_write_enabled: Any = _UNSET,
     agent_file_write_confirm_required: Any = _UNSET,
+    skill_self_capture_enabled: Any = _UNSET,
     model_routing: Any = _UNSET,
     mcp_connections: Any = _UNSET,
     github_repo: Any = _UNSET,
+    target_engine: Any = _UNSET,
+    engine_profile: Any = _UNSET,
+    game_tags: Any = _UNSET,
     unity_root: Any = _UNSET,
     workspaces: Any = _UNSET,
     allow_remove_mcp_connections: bool = False,
@@ -675,9 +657,15 @@ def _upsert_project_meta(
         "agent_file_write_confirm_required": _coerce_bool(
             existing.get("agent_file_write_confirm_required", False)
         ),
+        "skill_self_capture_enabled": _coerce_bool(
+            existing.get("skill_self_capture_enabled", False)
+        ),
         "model_routing": _normalize_model_routing(existing.get("model_routing")),
         "mcp_connections": _normalize_mcp_connections(existing.get("mcp_connections")),
         "github_repo": _normalize_github_repo(existing.get("github_repo")),
+        "target_engine": _normalize_target_engine(existing.get("target_engine")),
+        "engine_profile": _normalize_engine_profile(existing.get("engine_profile")),
+        "game_tags": _normalize_game_tags(existing.get("game_tags")),
         "unity_root": _first_workspace_root(existing_workspaces, kind="unity"),
         "workspaces": existing_workspaces,
     }
@@ -694,12 +682,20 @@ def _upsert_project_meta(
         meta["agent_file_write_confirm_required"] = _coerce_bool(
             agent_file_write_confirm_required
         )
+    if skill_self_capture_enabled is not _UNSET:
+        meta["skill_self_capture_enabled"] = _coerce_bool(skill_self_capture_enabled)
     if model_routing is not _UNSET:
         meta["model_routing"] = _normalize_model_routing(model_routing)
     if mcp_connections is not _UNSET:
         meta["mcp_connections"] = _normalize_mcp_connections(mcp_connections)
     if github_repo is not _UNSET:
         meta["github_repo"] = _normalize_github_repo(github_repo)
+    if target_engine is not _UNSET:
+        meta["target_engine"] = _normalize_target_engine(target_engine)
+    if engine_profile is not _UNSET:
+        meta["engine_profile"] = _normalize_engine_profile(engine_profile)
+    if game_tags is not _UNSET:
+        meta["game_tags"] = _normalize_game_tags(game_tags)
     if unity_root is not _UNSET:
         if str(unity_root or "").strip():
             next_workspaces = [
@@ -927,6 +923,9 @@ def create_project(
     model_routing: Any = _UNSET,
     mcp_connections: Any = _UNSET,
     github_repo: Any = _UNSET,
+    target_engine: Any = _UNSET,
+    engine_profile: Any = _UNSET,
+    game_tags: Any = _UNSET,
     unity_root: Any = _UNSET,
     workspaces: Any = _UNSET,
     allow_remove_mcp_connections: bool = False,
@@ -948,6 +947,9 @@ def create_project(
             model_routing=model_routing,
             mcp_connections=mcp_connections,
             github_repo=github_repo,
+            target_engine=target_engine,
+            engine_profile=engine_profile,
+            game_tags=game_tags,
             unity_root=unity_root,
             workspaces=workspaces,
             allow_remove_mcp_connections=allow_remove_mcp_connections,
@@ -970,9 +972,13 @@ def touch_project(
     last_message_preview: Optional[str] = None,
     agent_file_write_enabled: Any = _UNSET,
     agent_file_write_confirm_required: Any = _UNSET,
+    skill_self_capture_enabled: Any = _UNSET,
     model_routing: Any = _UNSET,
     mcp_connections: Any = _UNSET,
     github_repo: Any = _UNSET,
+    target_engine: Any = _UNSET,
+    engine_profile: Any = _UNSET,
+    game_tags: Any = _UNSET,
     unity_root: Any = _UNSET,
     workspaces: Any = _UNSET,
     allow_remove_mcp_connections: bool = False,
@@ -994,9 +1000,13 @@ def touch_project(
             last_message_preview=last_message_preview,
             agent_file_write_enabled=agent_file_write_enabled,
             agent_file_write_confirm_required=agent_file_write_confirm_required,
+            skill_self_capture_enabled=skill_self_capture_enabled,
             model_routing=model_routing,
             mcp_connections=mcp_connections,
             github_repo=github_repo,
+            target_engine=target_engine,
+            engine_profile=engine_profile,
+            game_tags=game_tags,
             unity_root=unity_root,
             workspaces=workspaces,
             allow_remove_mcp_connections=allow_remove_mcp_connections,
@@ -1139,8 +1149,32 @@ def get_project_settings(project_id: Optional[str] = None) -> Dict[str, Any]:
         "agent_file_write_confirm_required": _coerce_bool(
             record.get("agent_file_write_confirm_required", False)
         ),
+        "skill_self_capture_enabled": _coerce_bool(
+            record.get("skill_self_capture_enabled", False)
+        ),
         "model_routing": _normalize_model_routing(record.get("model_routing")),
         "mcp_connections": _normalize_mcp_connections(record.get("mcp_connections")),
+        "target_engine": _normalize_target_engine(record.get("target_engine")),
+        "engine_profile": _normalize_engine_profile(record.get("engine_profile")),
+    }
+
+
+def _settings_response_from_meta(project_id: str, meta: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "project_id": project_id,
+        "agent_file_write_enabled": _coerce_bool(
+            meta.get("agent_file_write_enabled", True)
+        ),
+        "agent_file_write_confirm_required": _coerce_bool(
+            meta.get("agent_file_write_confirm_required", False)
+        ),
+        "skill_self_capture_enabled": _coerce_bool(
+            meta.get("skill_self_capture_enabled", False)
+        ),
+        "model_routing": _normalize_model_routing(meta.get("model_routing")),
+        "mcp_connections": _normalize_mcp_connections(meta.get("mcp_connections")),
+        "target_engine": _normalize_target_engine(meta.get("target_engine")),
+        "engine_profile": _normalize_engine_profile(meta.get("engine_profile")),
     }
 
 
@@ -1172,17 +1206,7 @@ def set_project_agent_file_write_enabled(
         resolved,
         agent_file_write_enabled=_coerce_bool(enabled),
     )
-    return {
-        "project_id": resolved,
-        "agent_file_write_enabled": _coerce_bool(
-            meta.get("agent_file_write_enabled", True)
-        ),
-        "agent_file_write_confirm_required": _coerce_bool(
-            meta.get("agent_file_write_confirm_required", False)
-        ),
-        "model_routing": _normalize_model_routing(meta.get("model_routing")),
-        "mcp_connections": _normalize_mcp_connections(meta.get("mcp_connections")),
-    }
+    return _settings_response_from_meta(resolved, meta)
 
 
 def set_project_agent_file_write_confirm_required(
@@ -1195,17 +1219,20 @@ def set_project_agent_file_write_confirm_required(
         resolved,
         agent_file_write_confirm_required=_coerce_bool(required),
     )
-    return {
-        "project_id": resolved,
-        "agent_file_write_enabled": _coerce_bool(
-            meta.get("agent_file_write_enabled", True)
-        ),
-        "agent_file_write_confirm_required": _coerce_bool(
-            meta.get("agent_file_write_confirm_required", False)
-        ),
-        "model_routing": _normalize_model_routing(meta.get("model_routing")),
-        "mcp_connections": _normalize_mcp_connections(meta.get("mcp_connections")),
-    }
+    return _settings_response_from_meta(resolved, meta)
+
+
+def set_project_skill_self_capture_enabled(
+    enabled: bool, *, project_id: Optional[str] = None
+) -> Dict[str, Any]:
+    resolved = resolve_project_id(project_id)
+    if not resolved:
+        raise ValueError("Project id is required.")
+    meta = touch_project(
+        resolved,
+        skill_self_capture_enabled=_coerce_bool(enabled),
+    )
+    return _settings_response_from_meta(resolved, meta)
 
 
 def get_project_model_routing(project_id: Optional[str] = None) -> Dict[str, Any]:
@@ -1223,23 +1250,31 @@ def set_project_model_routing(
 
     normalized = _normalize_model_routing(model_routing)
     meta = touch_project(resolved, model_routing=normalized)
-    return {
-        "project_id": resolved,
-        "agent_file_write_enabled": _coerce_bool(
-            meta.get("agent_file_write_enabled", True)
-        ),
-        "agent_file_write_confirm_required": _coerce_bool(
-            meta.get("agent_file_write_confirm_required", False)
-        ),
-        "model_routing": _normalize_model_routing(meta.get("model_routing")),
-        "mcp_connections": _normalize_mcp_connections(meta.get("mcp_connections")),
-    }
+    return _settings_response_from_meta(resolved, meta)
+
+
+def set_project_engine_settings(
+    *,
+    target_engine: Any = _UNSET,
+    engine_profile: Any = _UNSET,
+    project_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    resolved = resolve_project_id(project_id)
+    if not resolved:
+        raise ValueError("Project id is required.")
+
+    meta = touch_project(
+        resolved,
+        target_engine=target_engine,
+        engine_profile=engine_profile,
+    )
+    return _settings_response_from_meta(resolved, meta)
 
 
 def get_project_mcp_connections(project_id: Optional[str] = None) -> List[Dict[str, Any]]:
-    return _normalize_mcp_connections(
-        get_project_settings(project_id=project_id).get("mcp_connections")
-    )
+    from ludens_flow.capabilities.paths import get_project_mcp_connections as _get
+
+    return _get(project_id=project_id)
 
 
 def set_project_mcp_connections(
@@ -1248,48 +1283,27 @@ def set_project_mcp_connections(
     project_id: Optional[str] = None,
     allow_remove_mcp_connections: bool = False,
 ) -> Dict[str, Any]:
-    resolved = resolve_project_id(project_id)
-    if not resolved:
-        raise ValueError("Project id is required.")
+    from ludens_flow.capabilities.paths import set_project_mcp_connections as _set
 
-    normalized = _normalize_mcp_connections(connections)
-    meta = touch_project(
-        resolved,
-        mcp_connections=normalized,
+    return _set(
+        connections,
+        project_id=project_id,
         allow_remove_mcp_connections=allow_remove_mcp_connections,
     )
-    return {
-        "project_id": resolved,
-        "agent_file_write_enabled": _coerce_bool(
-            meta.get("agent_file_write_enabled", True)
-        ),
-        "agent_file_write_confirm_required": _coerce_bool(
-            meta.get("agent_file_write_confirm_required", False)
-        ),
-        "model_routing": _normalize_model_routing(meta.get("model_routing")),
-        "mcp_connections": _normalize_mcp_connections(meta.get("mcp_connections")),
-    }
 
 
 def get_project_github_repo(project_id: Optional[str] = None) -> Dict[str, str]:
-    resolved = resolve_project_id(project_id)
-    if not resolved:
-        raise ValueError("Project id is required.")
-    return _normalize_github_repo(_read_project_meta(resolved).get("github_repo"))
+    from ludens_flow.capabilities.paths import get_project_github_repo as _get
+
+    return _get(project_id=project_id)
 
 
 def set_project_github_repo(
     github_repo: Any, *, project_id: Optional[str] = None
 ) -> Dict[str, Any]:
-    resolved = resolve_project_id(project_id)
-    if not resolved:
-        raise ValueError("Project id is required.")
+    from ludens_flow.capabilities.paths import set_project_github_repo as _set
 
-    meta = touch_project(resolved, github_repo=github_repo)
-    return {
-        "project_id": resolved,
-        "github_repo": _normalize_github_repo(meta.get("github_repo")),
-    }
+    return _set(github_repo, project_id=project_id)
 
 
 def set_project_unity_root(
@@ -1402,6 +1416,9 @@ def _build_broken_project_meta_record(
         "model_routing": {},
         "mcp_connections": [],
         "github_repo": {},
+        "target_engine": "",
+        "engine_profile": "",
+        "game_tags": [],
         "unity_root": "",
         "workspaces": [],
         "path": str(project_dir),

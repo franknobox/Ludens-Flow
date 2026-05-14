@@ -73,7 +73,7 @@ def _resolve_write_target_with_events(
             path=path,
             message=f"Checking write permission for: {path}",
         )
-        if approved is False:
+        if approved is not True:
             _emit_permission_event(
                 tool_event_handler,
                 event_type="permission_denied",
@@ -84,7 +84,7 @@ def _resolve_write_target_with_events(
             )
             raise WorkspaceAccessError(
                 "PERMISSION_DENIED",
-                "User denied this workspace write operation.",
+                "User denied this workspace write operation, or no permission handler was available.",
             )
     try:
         target = check_workspace_write_permission(

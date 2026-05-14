@@ -32,7 +32,9 @@ from ludens_flow.capabilities.mcp.adapter import ENGINE_TOOL_SCHEMAS
 from ludens_flow.capabilities.mcp.adapters import get_engine_adapter
 from ludens_flow.capabilities.mcp.health import McpClientError
 from ludens_flow.capabilities.tools.registry import dispatch_tool_call, list_common_tools
+from ludens_flow.capabilities.skills.registry import build_enabled_skill_context
 from ludens_flow.core.agents.base import AgentResult, BaseAgent
+from ludens_flow.core.game_tags import extract_game_tags_from_gdd
 from ludens_flow.core.paths import (
     PROJECT_META_SCHEMA_VERSION,
     add_project_workspace,
@@ -44,6 +46,7 @@ from ludens_flow.core.paths import (
     get_logs_dir,
     get_project_dir,
     get_project_meta_file,
+    get_project_settings,
     list_active_projects,
     list_archived_projects,
     list_projects,
@@ -51,6 +54,10 @@ from ludens_flow.core.paths import (
     rename_project,
     restore_project,
     touch_project,
+)
+from ludens_flow.core.engine_context import (
+    format_project_engine_for_prompt,
+    resolve_project_engine_context,
 )
 from ludens_flow.core.state import (
     STATE_SCHEMA_VERSION,
@@ -536,6 +543,131 @@ class ProjectLifecycleTests(unittest.TestCase):
             api.get_current_project_skills()["enabled_skill_ids"],
         )
 
+    def test_api_imports_skill_package_with_assets_and_runtime_context(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+        package_files = [
+            {
+                "path": "bundle/my-skill/skill.json",
+                "text": json.dumps(
+                    {
+                        "id": "dialogue-style",
+                        "name": "Dialogue Style",
+                        "description": "Dialogue writing conventions.",
+                        "agents": ["design"],
+                        "tags": ["copywriting"],
+                    }
+                ),
+            },
+            {
+                "path": "bundle/my-skill/prompt.md",
+                "text": "Use concise character voice rules.",
+            },
+            {
+                "path": "bundle/my-skill/examples/sample.md",
+                "text": "Example line.",
+            },
+            {
+                "path": "bundle/my-skill/ignored.txt",
+                "text": "Should not be installed.",
+            },
+        ]
+
+        imported = api.post_import_skill(api.SkillImportRequest(files=package_files))
+        self.assertIn("dialogue-style", {item["id"] for item in imported["skills"]})
+        skill_dir = self.workspace_root / "skills" / "installed" / "dialogue-style"
+        self.assertTrue((skill_dir / "prompt.md").exists())
+        self.assertTrue((skill_dir / "examples" / "sample.md").exists())
+        self.assertFalse((skill_dir / "ignored.txt").exists())
+
+        api.post_current_project_skill_toggle(
+            "dialogue-style",
+            api.ProjectSkillToggleRequest(enabled=True),
+        )
+        context = build_enabled_skill_context(project_id="alpha", agent_key="design")
+        self.assertIn("Dialogue Style", context)
+        self.assertIn("Use concise character voice rules.", context)
+        self.assertEqual(
+            build_enabled_skill_context(project_id="alpha", agent_key="engineering"),
+            "",
+        )
+
+    def test_api_imports_skill_md_package_without_skill_json(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+        package_files = [
+            {
+                "path": "repo/skills/frontend-design/SKILL.md",
+                "text": (
+                    "---\n"
+                    "name: frontend-design\n"
+                    "description: Create distinctive frontend interfaces.\n"
+                    "---\n\n"
+                    "# Frontend Design\n\n"
+                    "Avoid generic UI and choose a clear visual direction."
+                ),
+            },
+            {
+                "path": "repo/skills/frontend-design/references/style.md",
+                "text": "Reference notes.",
+            },
+            {
+                "path": "repo/skills/frontend-design/LICENSE.txt",
+                "text": "Should not be installed.",
+            },
+        ]
+
+        imported = api.post_import_skill(api.SkillImportRequest(files=package_files))
+        self.assertIn("frontend-design", {item["id"] for item in imported["skills"]})
+        skill_dir = self.workspace_root / "skills" / "installed" / "frontend-design"
+        self.assertTrue((skill_dir / "skill.json").exists())
+        self.assertTrue((skill_dir / "prompt.md").exists())
+        self.assertTrue((skill_dir / "references" / "style.md").exists())
+        self.assertFalse((skill_dir / "LICENSE.txt").exists())
+
+        manifest = json.loads((skill_dir / "skill.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["name"], "frontend-design")
+        self.assertEqual(manifest["description"], "Create distinctive frontend interfaces.")
+        self.assertEqual(manifest["agents"], ["engineering"])
+        self.assertIn(
+            "Avoid generic UI",
+            (skill_dir / "prompt.md").read_text(encoding="utf-8"),
+        )
+
+    def test_skill_create_draft_tool_writes_self_learned_installed_skill(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+
+        result = dispatch_tool_call(
+            "skill_create_draft",
+            {
+                "manifest": {
+                    "id": "repeat-debug-flow",
+                    "name": "Repeat Debug Flow",
+                    "agents": ["engineering"],
+                    "tags": ["debug"],
+                },
+                "prompt": "When debugging, inspect logs before proposing edits.",
+                "source_agent": "engineering",
+                "reason": "Repeated successful workflow.",
+            },
+            project_id="alpha",
+        )
+
+        self.assertIn("repeat-debug-flow", result)
+        draft_dir = self.workspace_root / "skills" / "drafts" / "repeat-debug-flow"
+        installed_dir = self.workspace_root / "skills" / "installed" / "repeat-debug-flow"
+        self.assertFalse(draft_dir.exists())
+        self.assertTrue((installed_dir / "skill.json").exists())
+        self.assertTrue((installed_dir / "prompt.md").exists())
+        self.assertTrue((installed_dir / "self_meta.json").exists())
+
+        manifest = json.loads((installed_dir / "skill.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["source"], "self")
+
+        catalog = api.get_skill_catalog()["skills"]
+        self.assertIn(
+            "repeat-debug-flow",
+            {item["id"] for item in catalog if item.get("source") == "self"},
+        )
+
     def test_api_returns_404_when_deleting_missing_skill(self):
         api.post_project(api.ProjectRequest(project_id="alpha"))
 
@@ -728,19 +860,15 @@ class ProjectLifecycleTests(unittest.TestCase):
         }
         calls = []
 
-        def fake_run(command, *, input, **kwargs):
-            calls.append(input)
-            return subprocess.CompletedProcess(
-                command,
+        def fake_interactive(command, args, *, input_data, timeout_seconds, env=None):
+            calls.append(input_data)
+            return (
+                b'{"jsonrpc":"2.0","id":1,"result":{}}\n'
+                b'{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"get_scene_info"}]}}\n',
                 0,
-                stdout=(
-                    b'{"jsonrpc":"2.0","id":1,"result":{}}\n'
-                    b'{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"get_scene_info"}]}}\n'
-                ),
-                stderr=b"",
             )
 
-        with patch("ludens_flow.capabilities.mcp.health.subprocess.run", side_effect=fake_run):
+        with patch("ludens_flow.capabilities.mcp.health._run_stdio_interactive", side_effect=fake_interactive):
             first = mcp_health.check_mcp_connection(config)
             second = mcp_health.check_mcp_connection(config)
 
@@ -1002,7 +1130,9 @@ class ProjectLifecycleTests(unittest.TestCase):
         )
 
         self.assertIsNotNone(script_call)
-        self.assertEqual(script_call.arguments["path"], str(unity_root / "Assets" / "Scripts" / "Foo.cs"))
+        self.assertEqual(script_call.tool_name, "create_script")
+        self.assertEqual(script_call.arguments["path"], "Assets/Scripts/Foo.cs")
+        self.assertEqual(script_call.arguments["contents"], "public class Foo {}")
         self.assertNotIn("workspace_id", script_call.arguments)
 
         with self.assertRaisesRegex(McpClientError, "PATH_ESCAPE"):
@@ -1018,7 +1148,7 @@ class ProjectLifecycleTests(unittest.TestCase):
                 project_id="alpha",
             )
 
-        with self.assertRaisesRegex(McpClientError, "extensions"):
+        with self.assertRaisesRegex(McpClientError, r"\.cs"):
             adapter.map_call(
                 "engine_create_script",
                 {
@@ -1033,9 +1163,18 @@ class ProjectLifecycleTests(unittest.TestCase):
 
     def test_godot_and_unreal_adapters_require_workspace_sandbox_for_writes(self):
         api.post_project(api.ProjectRequest(project_id="alpha"))
+        godot_root = self.workspace_root / "godot_project"
+        (godot_root / "scenes").mkdir(parents=True)
+        (godot_root / "project.godot").write_text('[application]\nconfig/name="Test"\n', encoding="utf-8")
         generic_root = self.workspace_root / "generic_engine_project"
-        (generic_root / "scripts").mkdir(parents=True)
         (generic_root / "Content" / "Maps").mkdir(parents=True)
+        add_project_workspace(
+            str(godot_root),
+            project_id="alpha",
+            kind="godot",
+            workspace_id="godot-main",
+            writable=True,
+        )
         add_project_workspace(
             str(generic_root),
             project_id="alpha",
@@ -1046,18 +1185,19 @@ class ProjectLifecycleTests(unittest.TestCase):
 
         godot = get_engine_adapter("godot")
         godot_call = godot.map_call(
-            "engine_create_script",
+            "engine_save_scene",
             {
                 "engine": "godot",
-                "workspace_id": "engine-main",
-                "path": "scripts/player.gd",
-                "content": "extends Node",
+                "workspace_id": "godot-main",
+                "scene_path": "scenes/main.tscn",
             },
-            [{"name": "create_script"}],
+            [{"name": "save_scene"}],
             project_id="alpha",
         )
         self.assertIsNotNone(godot_call)
-        self.assertEqual(godot_call.arguments["path"], str(generic_root / "scripts" / "player.gd"))
+        self.assertEqual(godot_call.tool_name, "save_scene")
+        self.assertEqual(godot_call.arguments["projectPath"], str(godot_root))
+        self.assertEqual(godot_call.arguments["scenePath"], "scenes/main.tscn")
 
         unreal = get_engine_adapter("unreal")
         save_call = unreal.map_call(
@@ -1075,16 +1215,137 @@ class ProjectLifecycleTests(unittest.TestCase):
 
         with self.assertRaisesRegex(McpClientError, "Project id is required"):
             godot.map_call(
-                "engine_create_script",
+                "engine_save_scene",
                 {
                     "engine": "godot",
-                    "workspace_id": "engine-main",
-                    "path": "scripts/player.gd",
-                    "content": "extends Node",
+                    "workspace_id": "godot-main",
+                    "scene_path": "scenes/main.tscn",
                 },
-                [{"name": "create_script"}],
+                [{"name": "save_scene"}],
                 project_id=None,
             )
+
+    def test_godot_adapter_maps_ludens_capabilities_to_coding_solo_tools(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+        godot_root = self.workspace_root / "godot_project"
+        (godot_root / "scenes").mkdir(parents=True)
+        (godot_root / "scripts").mkdir(parents=True)
+        (godot_root / "project.godot").write_text('[application]\nconfig/name="Godot Test"\n', encoding="utf-8")
+        add_project_workspace(
+            str(godot_root),
+            project_id="alpha",
+            kind="godot",
+            workspace_id="godot-main",
+            writable=True,
+        )
+        adapter = get_engine_adapter("godot")
+        available = [
+            {"name": "get_project_info"},
+            {"name": "get_debug_output"},
+            {"name": "create_scene"},
+            {"name": "add_node"},
+            {"name": "save_scene"},
+            {"name": "run_project"},
+            {"name": "launch_editor"},
+            {"name": "stop_project"},
+        ]
+
+        info_call = adapter.map_call(
+            "engine_list_scene",
+            {"engine": "godot", "workspace_id": "godot-main"},
+            available,
+            project_id="alpha",
+        )
+        self.assertEqual(info_call.tool_name, "get_project_info")
+        self.assertEqual(info_call.arguments["projectPath"], str(godot_root))
+
+        console_call = adapter.map_call(
+            "engine_read_console",
+            {"engine": "godot"},
+            available,
+            project_id="alpha",
+        )
+        self.assertEqual(console_call.tool_name, "get_debug_output")
+        self.assertEqual(console_call.arguments, {})
+
+        scene_call = adapter.map_call(
+            "engine_create_object",
+            {
+                "engine": "godot",
+                "workspace_id": "godot-main",
+                "name": "Root",
+                "object_type": "Node2D",
+                "scene_path": "scenes/main.tscn",
+                "create_scene": True,
+            },
+            available,
+            project_id="alpha",
+        )
+        self.assertEqual(scene_call.tool_name, "create_scene")
+        self.assertEqual(scene_call.arguments["scenePath"], "scenes/main.tscn")
+        self.assertEqual(scene_call.arguments["rootNodeType"], "Node2D")
+
+        node_call = adapter.map_call(
+            "engine_create_object",
+            {
+                "engine": "godot",
+                "workspace_id": "godot-main",
+                "name": "Player",
+                "object_type": "CharacterBody2D",
+                "scene_path": "res://scenes/main.tscn",
+                "parent": "root",
+            },
+            available,
+            project_id="alpha",
+        )
+        self.assertEqual(node_call.tool_name, "add_node")
+        self.assertEqual(node_call.arguments["nodeName"], "Player")
+        self.assertEqual(node_call.arguments["nodeType"], "CharacterBody2D")
+        self.assertEqual(node_call.arguments["scenePath"], "scenes/main.tscn")
+
+        run_call = adapter.map_call(
+            "engine_run_project",
+            {
+                "engine": "godot",
+                "workspace_id": "godot-main",
+                "mode": "run",
+                "scene_path": "scenes/main.tscn",
+            },
+            available,
+            project_id="alpha",
+        )
+        self.assertEqual(run_call.tool_name, "run_project")
+        self.assertEqual(run_call.arguments["scene"], "scenes/main.tscn")
+
+        editor_call = adapter.map_call(
+            "engine_run_project",
+            {"engine": "godot", "workspace_id": "godot-main", "mode": "editor"},
+            available,
+            project_id="alpha",
+        )
+        self.assertEqual(editor_call.tool_name, "launch_editor")
+
+        stop_call = adapter.map_call(
+            "engine_run_project",
+            {"engine": "godot", "workspace_id": "godot-main", "mode": "stop"},
+            available,
+            project_id="alpha",
+        )
+        self.assertEqual(stop_call.tool_name, "stop_project")
+        self.assertEqual(stop_call.arguments, {})
+
+        script_call = adapter.map_call(
+            "engine_create_script",
+            {
+                "engine": "godot",
+                "workspace_id": "godot-main",
+                "path": "scripts/player.gd",
+                "content": "extends Node",
+            },
+            available,
+            project_id="alpha",
+        )
+        self.assertIsNone(script_call)
 
     def test_safe_engine_adapters_validate_run_mode_and_scene_extension(self):
         api.post_project(api.ProjectRequest(project_id="alpha"))
@@ -1108,12 +1369,12 @@ class ProjectLifecycleTests(unittest.TestCase):
                 "mode": "play",
                 "scene_path": "Assets/Scenes/Main.unity",
             },
-            [{"name": "start_play_mode"}],
+            [{"name": "manage_editor"}],
             project_id="alpha",
         )
         self.assertIsNotNone(run_call)
-        self.assertEqual(run_call.arguments["mode"], "play")
-        self.assertEqual(run_call.arguments["scene_path"], str(unity_root / "Assets" / "Scenes" / "Main.unity"))
+        self.assertEqual(run_call.tool_name, "manage_editor")
+        self.assertEqual(run_call.arguments["action"], "play")
 
         with self.assertRaisesRegex(McpClientError, "Unsupported Unity run mode"):
             adapter.map_call(
@@ -1123,11 +1384,11 @@ class ProjectLifecycleTests(unittest.TestCase):
                     "workspace_id": "unity-main",
                     "mode": "shell",
                 },
-                [{"name": "start_play_mode"}],
+                [{"name": "manage_editor"}],
                 project_id="alpha",
             )
 
-        with self.assertRaisesRegex(McpClientError, "extensions"):
+        with self.assertRaisesRegex(McpClientError, r"\.unity"):
             adapter.map_call(
                 "engine_save_scene",
                 {
@@ -1135,9 +1396,108 @@ class ProjectLifecycleTests(unittest.TestCase):
                     "workspace_id": "unity-main",
                     "scene_path": "Assets/Scenes/Main.txt",
                 },
-                [{"name": "save_scene"}],
+                [{"name": "manage_scene"}],
                 project_id="alpha",
             )
+
+    def test_unity_adapter_maps_ludens_capabilities_to_coplay_tools(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+        unity_root = self.workspace_root / "unity_project"
+        (unity_root / "Assets" / "Scripts").mkdir(parents=True)
+        (unity_root / "Assets" / "Scenes").mkdir(parents=True)
+        (unity_root / "ProjectSettings").mkdir(parents=True)
+        add_project_workspace(
+            str(unity_root),
+            project_id="alpha",
+            kind="unity",
+            workspace_id="unity-main",
+            writable=True,
+        )
+        adapter = get_engine_adapter("unity")
+
+        available = [
+            {"name": "manage_scene"},
+            {"name": "read_console"},
+            {"name": "manage_gameobject"},
+            {"name": "manage_editor"},
+            {"name": "create_script"},
+            {"name": "run_tests"},
+        ]
+
+        list_call = adapter.map_call(
+            "engine_list_scene",
+            {"engine": "unity", "max_items": 25},
+            available,
+            project_id="alpha",
+        )
+        self.assertEqual(list_call.tool_name, "manage_scene")
+        self.assertEqual(list_call.arguments["action"], "get_hierarchy")
+        self.assertEqual(list_call.arguments["page_size"], 25)
+
+        console_call = adapter.map_call(
+            "engine_read_console",
+            {"engine": "unity", "max_entries": 10, "filter": "NullReference"},
+            available,
+            project_id="alpha",
+        )
+        self.assertEqual(console_call.tool_name, "read_console")
+        self.assertEqual(console_call.arguments["action"], "get")
+        self.assertEqual(console_call.arguments["count"], 10)
+        self.assertEqual(console_call.arguments["filter_text"], "NullReference")
+
+        create_call = adapter.map_call(
+            "engine_create_object",
+            {
+                "engine": "unity",
+                "name": "Player",
+                "object_type": "cube",
+                "position": {"x": 1, "y": 2, "z": 3},
+            },
+            available,
+            project_id="alpha",
+        )
+        self.assertEqual(create_call.tool_name, "manage_gameobject")
+        self.assertEqual(create_call.arguments["action"], "create")
+        self.assertEqual(create_call.arguments["primitive_type"], "Cube")
+        self.assertEqual(create_call.arguments["position"], [1.0, 2.0, 3.0])
+
+        move_call = adapter.map_call(
+            "engine_move_object",
+            {
+                "engine": "unity",
+                "target": "Player",
+                "rotation": [0, 90, 0],
+            },
+            available,
+            project_id="alpha",
+        )
+        self.assertEqual(move_call.tool_name, "manage_gameobject")
+        self.assertEqual(move_call.arguments["action"], "modify")
+        self.assertEqual(move_call.arguments["rotation"], [0.0, 90.0, 0.0])
+
+        save_call = adapter.map_call(
+            "engine_save_scene",
+            {
+                "engine": "unity",
+                "workspace_id": "unity-main",
+                "scene_path": "Assets/Scenes/Main.unity",
+            },
+            available,
+            project_id="alpha",
+        )
+        self.assertEqual(save_call.tool_name, "manage_scene")
+        self.assertEqual(save_call.arguments["action"], "save")
+        self.assertEqual(save_call.arguments["name"], "Main")
+        self.assertEqual(save_call.arguments["path"], "Assets/Scenes")
+
+        tests_call = adapter.map_call(
+            "engine_run_project",
+            {"engine": "unity", "mode": "playmode_tests"},
+            available,
+            project_id="alpha",
+        )
+        self.assertEqual(tests_call.tool_name, "run_tests")
+        self.assertEqual(tests_call.arguments["mode"], "PlayMode")
 
     def test_blender_adapter_rejects_unsafe_python(self):
         adapter = get_engine_adapter("blender")
@@ -1386,6 +1746,8 @@ class ProjectLifecycleTests(unittest.TestCase):
         self.assertEqual(current["project_id"], "alpha")
         self.assertTrue(current["agent_file_write_enabled"])
         self.assertEqual(current.get("model_routing"), {})
+        self.assertEqual(current.get("target_engine"), "")
+        self.assertEqual(current.get("engine_profile"), "")
 
         updated = api.post_current_project_settings(
             api.ProjectSettingsRequest(agent_file_write_enabled=False)
@@ -1395,6 +1757,98 @@ class ProjectLifecycleTests(unittest.TestCase):
 
         reloaded = api.get_current_project_settings()
         self.assertFalse(reloaded["agent_file_write_enabled"])
+
+    def test_project_engine_settings_are_project_scoped_and_prompt_ready(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+
+        updated = api.post_current_project_settings(
+            api.ProjectSettingsRequest(
+                target_engine="godot",
+                engine_profile="2D prototype, prefer GDScript.",
+            )
+        )
+
+        self.assertEqual(updated["target_engine"], "godot")
+        self.assertIn("GDScript", updated["engine_profile"])
+
+        reloaded = get_project_settings(project_id="alpha")
+        self.assertEqual(reloaded["target_engine"], "godot")
+
+        context = resolve_project_engine_context("alpha")
+        self.assertEqual(context["target_engine"], "godot")
+        self.assertEqual(context["source"], "explicit")
+
+        prompt_context = format_project_engine_for_prompt("alpha")
+        self.assertIn("Godot 项目思路", prompt_context)
+        self.assertIn("res://", prompt_context)
+        self.assertNotIn("Unity 小团队项目思路", prompt_context)
+
+    def test_project_engine_context_infers_single_engine_workspace(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+        godot_root = (self.workspace_root / "godot_project").resolve()
+        godot_root.mkdir(parents=True)
+
+        add_project_workspace(
+            str(godot_root),
+            project_id="alpha",
+            kind="godot",
+            workspace_id="godot-main",
+        )
+
+        context = resolve_project_engine_context("alpha")
+        self.assertEqual(context["target_engine"], "godot")
+        self.assertEqual(context["source"], "inferred")
+
+    def test_blender_workspace_does_not_set_project_engine(self):
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+        blender_root = (self.workspace_root / "blender_assets").resolve()
+        blender_root.mkdir(parents=True)
+
+        add_project_workspace(
+            str(blender_root),
+            project_id="alpha",
+            kind="blender",
+            workspace_id="blender-main",
+        )
+
+        context = resolve_project_engine_context("alpha")
+        self.assertEqual(context["target_engine"], "generic")
+        self.assertEqual(context["source"], "fallback")
+
+        prompt_context = format_project_engine_for_prompt("alpha")
+        self.assertIn("通用小型游戏 demo", prompt_context)
+        self.assertIn("不要默认输出 Unity", prompt_context)
+
+    def test_gdd_game_tags_are_extracted_and_persisted_on_project_meta(self):
+        tags = extract_game_tags_from_gdd(
+            """
+            # GDD
+            类型：类 PVZ 塔防 / 校园题材
+            核心体验：围绕深圳大学选课系统和社团 Buff 做关卡变化。
+            美术方向：轻量像素风。
+            """
+        )
+        self.assertEqual(tags[:4], ["类 PVZ", "塔防", "校园题材", "选课系统"])
+
+        create_project("alpha")
+        touch_project("alpha", game_tags=tags)
+        project = next(item for item in list_projects() if item["id"] == "alpha")
+        self.assertEqual(project["game_tags"], tags)
+
+    def test_existing_gdd_backfills_game_tags_when_project_is_listed(self):
+        create_project("alpha")
+        (get_project_dir("alpha") / "GDD.md").write_text(
+            "类型：校园塔防\n核心体验：围绕选课系统和社团 Buff 推进关卡。",
+            encoding="utf-8",
+        )
+
+        project = next(item for item in list_projects() if item["id"] == "alpha")
+        self.assertEqual(project["game_tags"], ["塔防", "校园题材", "选课系统", "社团 Buff"])
+
+        saved_meta = json.loads(
+            get_project_meta_file("alpha").read_text(encoding="utf-8")
+        )
+        self.assertEqual(saved_meta["game_tags"], project["game_tags"])
 
     def test_api_can_update_project_model_routing(self):
         api.post_project(api.ProjectRequest(project_id="alpha"))

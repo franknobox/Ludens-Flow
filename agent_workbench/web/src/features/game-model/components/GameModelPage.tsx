@@ -370,7 +370,7 @@ export function GameModelPage() {
                     id: `scene-${Date.now()}`,
                     name: `新场景 ${scenes.length + 1}`,
                     category: "npc",
-                    modelId: "gpt-4o",
+                    modelId: "gpt-4.5",
                     systemPrompt: "",
                     temperature: 0.8,
                     maxTokens: 300,
@@ -533,7 +533,7 @@ export function GameModelPage() {
                 <span>模型名称</span>
                 <input
                   type="text"
-                  placeholder="gpt-4o / claude-3-5-sonnet / ..."
+                  placeholder="gpt-4.5 / claude-3.7-sonnet / ..."
                   value={customModelName}
                   onChange={(e) => setCustomModelName(e.target.value)}
                 />

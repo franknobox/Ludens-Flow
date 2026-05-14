@@ -1,7 +1,7 @@
 """
 文件功能：模型 Provider Profile 解析层，从环境变量读取可复用的供应商连接配置。
 核心内容：解析 LUDENS_MODEL_PROFILES JSON，输出不含明文 key 的安全摘要与路由用配置。
-关联文件：llm/modelrouter.py, ludens_flow/app/api.py
+关联文件：llm/modelrouter.py, ludens_flow/app/api/
 """
 
 from __future__ import annotations

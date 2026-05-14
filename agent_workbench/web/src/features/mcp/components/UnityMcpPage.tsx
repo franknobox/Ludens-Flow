@@ -19,54 +19,48 @@ const UNITY_CAPABILITIES: EngineCapability[] = [
   {
     id: "engine_create_script",
     label: "创建脚本",
-    desc: "在受控路径内创建 C# 脚本。",
+    desc: "在受控 Assets 路径内创建 C# 脚本。",
     level: "需权限",
     risk: "write",
   },
   {
     id: "engine_create_object",
     label: "创建对象",
-    desc: "创建 GameObject 或放置 Prefab。",
+    desc: "创建 GameObject、基础 Primitive 或放置 Prefab。",
     level: "需权限",
     risk: "write",
   },
   {
     id: "engine_move_object",
-    label: "移动对象",
-    desc: "调整 GameObject 的 Transform。",
+    label: "调整 Transform",
+    desc: "修改 GameObject 的 Transform、父级、Tag、Layer 或组件。",
     level: "需权限",
     risk: "write",
   },
   {
     id: "engine_save_scene",
     label: "保存场景",
-    desc: "保存当前或指定 Scene。",
+    desc: "保存当前 Scene，或保存到受控 Assets 路径。",
     level: "需权限",
     risk: "write",
   },
   {
     id: "engine_run_project",
-    label: "运行项目",
-    desc: "进入 Play Mode 或执行测试 / 运行动作。",
+    label: "运行 / 测试",
+    desc: "进入 Play Mode、暂停、停止，或执行 Unity 测试。",
     level: "需权限",
     risk: "write",
   },
 ];
 
 const UNITY_MAPPING_HINTS: Record<string, string[]> = {
-  engine_list_scene: [
-    "get_scene_hierarchy",
-    "get_current_scene_hierarchy",
-    "list_scene",
-    "list_gameobjects",
-    "get_hierarchy",
-  ],
-  engine_read_console: ["read_console", "get_console_logs", "get_logs", "get_log_entries"],
-  engine_create_script: ["create_script", "create_csharp_script"],
-  engine_create_object: ["create_gameobject", "create_object", "create_prefab", "add_gameobject"],
-  engine_move_object: ["move_gameobject", "set_transform", "modify_gameobject", "update_transform"],
-  engine_save_scene: ["save_scene", "save_current_scene"],
-  engine_run_project: ["start_play_mode", "run_tests", "play_unity_game"],
+  engine_list_scene: ["manage_scene"],
+  engine_read_console: ["read_console"],
+  engine_create_script: ["create_script", "manage_script"],
+  engine_create_object: ["manage_gameobject"],
+  engine_move_object: ["manage_gameobject"],
+  engine_save_scene: ["manage_scene"],
+  engine_run_project: ["manage_editor", "run_tests"],
 };
 
 export function UnityMcpPage() {

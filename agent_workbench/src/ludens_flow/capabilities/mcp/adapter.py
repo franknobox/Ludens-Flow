@@ -16,7 +16,8 @@ from ludens_flow.capabilities.mcp.health import (
     call_mcp_tool,
     check_mcp_connection,
 )
-from ludens_flow.core.paths import get_project_mcp_connections, get_project_settings
+from ludens_flow.capabilities.paths import get_project_mcp_connections
+from ludens_flow.core.paths import get_project_settings
 
 
 ToolEventHandler = Optional[Callable[[dict[str, Any]], Any]]
@@ -74,6 +75,22 @@ ENGINE_CREATE_OBJECT_TOOL_SCHEMA = {
                 "name": {"type": "string"},
                 "object_type": {"type": "string"},
                 "parent": {"type": "string"},
+                "scene_path": {
+                    "type": "string",
+                    "description": "Optional engine-relative scene path, such as Godot res:// or project-relative .tscn.",
+                },
+                "workspace_id": {
+                    "type": "string",
+                    "description": "Optional approved workspace id. Required when multiple workspaces are available.",
+                },
+                "create_scene": {
+                    "type": "boolean",
+                    "description": "For Godot: create a new scene instead of adding a node to an existing scene.",
+                },
+                "root_node_type": {
+                    "type": "string",
+                    "description": "For Godot scene creation: root node type such as Node2D or Node3D.",
+                },
                 "position": {"type": "object"},
                 "properties": {"type": "object"},
             },
@@ -92,9 +109,18 @@ ENGINE_MOVE_OBJECT_TOOL_SCHEMA = {
             "properties": {
                 **_base_properties(),
                 "target": {"type": "string"},
+                "scene_path": {
+                    "type": "string",
+                    "description": "Optional engine-relative scene path for engines that require editing a specific scene.",
+                },
+                "workspace_id": {
+                    "type": "string",
+                    "description": "Optional approved workspace id. Required when multiple workspaces are available.",
+                },
                 "position": {"type": "object"},
                 "rotation": {"type": "object"},
                 "scale": {"type": "object"},
+                "properties": {"type": "object"},
             },
             "required": ["engine", "target"],
         },
@@ -153,6 +179,10 @@ ENGINE_RUN_PROJECT_TOOL_SCHEMA = {
                 **_base_properties(),
                 "project_path": {"type": "string"},
                 "scene_path": {"type": "string"},
+                "workspace_id": {
+                    "type": "string",
+                    "description": "Optional approved workspace id. Required when multiple workspaces are available.",
+                },
                 "mode": {"type": "string"},
                 "max_size": {
                     "type": "integer",
@@ -174,6 +204,10 @@ ENGINE_CREATE_SCRIPT_TOOL_SCHEMA = {
             "properties": {
                 **_base_properties(),
                 "path": {"type": "string"},
+                "workspace_id": {
+                    "type": "string",
+                    "description": "Optional approved workspace id. Required when multiple workspaces are available.",
+                },
                 "class_name": {"type": "string"},
                 "language": {"type": "string"},
                 "content": {"type": "string"},

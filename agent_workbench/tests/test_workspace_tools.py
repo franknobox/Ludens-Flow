@@ -106,7 +106,7 @@ class WorkspaceToolsTests(unittest.TestCase):
                 "content": "public class Generated {}\n",
             },
             project_id="alpha",
-            tool_event_handler=events.append,
+            tool_event_handler=lambda e: True if events.append(e) or True else True,
         )
         self.assertIn("Result: created", output)
         self.assertTrue((self.generic_root / "Scripts" / "Generated.cs").exists())
@@ -124,7 +124,7 @@ class WorkspaceToolsTests(unittest.TestCase):
                 "path": "Assets/Scripts/Gameplay",
             },
             project_id="alpha",
-            tool_event_handler=events.append,
+            tool_event_handler=lambda e: True if events.append(e) or True else True,
         )
         self.assertIn("Result: created", create_output)
         self.assertTrue((self.generic_root / "Assets" / "Scripts" / "Gameplay").is_dir())
@@ -137,7 +137,7 @@ class WorkspaceToolsTests(unittest.TestCase):
                 "content": "public class StoryManager {}\n",
             },
             project_id="alpha",
-            tool_event_handler=events.append,
+            tool_event_handler=lambda e: True if events.append(e) or True else True,
         )
         self.assertIn("Result: created", write_output)
         self.assertEqual(
@@ -160,6 +160,7 @@ class WorkspaceToolsTests(unittest.TestCase):
             [{"find": "speed = 1", "replace": "speed = 2"}],
             project_id="alpha",
             workspace_id="generic-main",
+            tool_event_handler=lambda e: True,
         )
         self.assertIn("Result: patched", output)
         self.assertIn("speed = 2", target.read_text(encoding="utf-8"))
@@ -172,6 +173,7 @@ class WorkspaceToolsTests(unittest.TestCase):
             "Scripts/DeleteMe.cs",
             project_id="alpha",
             workspace_id="generic-main",
+            tool_event_handler=lambda e: True,
         )
         self.assertIn("Result: deleted", output)
         self.assertFalse(target.exists())
@@ -183,6 +185,7 @@ class WorkspaceToolsTests(unittest.TestCase):
                 "invalid",
                 project_id="alpha",
                 workspace_id="generic-main",
+                tool_event_handler=lambda e: True,
             )
         self.assertEqual(ctx.exception.code, "FILE_TYPE_NOT_ALLOWED")
 
@@ -198,6 +201,7 @@ class WorkspaceToolsTests(unittest.TestCase):
                 "public class Blocked {}\n",
                 project_id="alpha",
                 workspace_id="generic-main",
+                tool_event_handler=lambda e: True,
             )
         self.assertEqual(ctx.exception.code, "PROJECT_WRITE_DISABLED")
 

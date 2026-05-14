@@ -42,10 +42,10 @@ Instead of treating the agent as a free-form assistant, Ludens-Flow puts it back
 - Supports project-scoped workspaces, structured tool execution, and controlled file operations.
 - Integrates multimodal input such as images, text files, code files, and PDFs.
 - Supports project profiles and externally imported Skills that can be enabled per project.
-- Connects external game engines via MCP for live scene operations and asset manipulation (Blender verified; Unity/Godot/Unreal sandboxed).
+- Connects external game engines through a controlled MCP capability layer (Blender and Unity verified; Godot/Unreal adapters prepared).
 - Provides a copywriting workspace with external references, live generation status, and Markdown/CSV export.
 - Supports capability-aware model routing with per-project configuration.
-- Offers a resilient web workbench with real-time streaming, tool progress tracking, and multi-theme support.
+- Offers a resilient web workbench with real-time streaming, thinking/progress flow, tool progress tracking, and multi-theme support.
 
 ## What It Is Not
 
@@ -64,12 +64,20 @@ It is a workflow system for:
 Ludens-Flow is currently focused on:
 
 - stabilizing the multi-agent workflow core and graph execution
-- connecting real game engines via MCP for live asset and scene operations
+- connecting real game engines via MCP for live asset, scene, and editor operations
 - hardening project-level state persistence, metadata safety, and workspace isolation
 - enriching the web workbench with tool observability, settings management, and responsive UX
-- deepening the integration of Skills and user profiles into agent runtime behavior
+- deepening the integration of Skills, user profiles, and project context into agent runtime behavior
 
 See [ROADMAP.md](11_docs/ROADMAP.md) for the longer-term direction.
+
+## Sponsor
+
+<p align="center">
+  <img src="11_docs\IMAGE\mimo.png" alt="Xiaomi MiMO logo" width="360" />
+</p>
+
+Ludens-Flow receives token support from **Xiaomi MiMO**.
 
 ## Quick Start
 
@@ -87,17 +95,9 @@ Product mode:
 .\agent_workbench\scripts\start_web.ps1
 ```
 
-Development mode:
-
-```powershell
-.\agent_workbench\scripts\start_web.ps1 -Mode dev
-```
-
 Default URLs:
 
 - Product mode: `http://127.0.0.1:8011/`
-- Dev frontend: `http://127.0.0.1:4173/`
-- Dev API: `http://127.0.0.1:8011/`
 
 CLI note: the `ludensflow` command is a legacy/debug entry for now and is not the recommended way to run the project.
 
@@ -105,7 +105,7 @@ CLI note: the `ludensflow` command is a legacy/debug entry for now and is not th
 
 ```text
 Ludens-Flow/
-├─ agent_workbench/   # core workflow engine, API, frontend, tests
+├─ agent_workbench/   # core workflow engine, grouped FastAPI API, frontend, tests
 ├─ 11_docs/           # roadmap, design docs, long-form documentation
 ├─ 00_meta/           # schemas, repo rules, metadata
 ├─ workspace/         # runtime workspace and project data
@@ -130,6 +130,7 @@ Ludens-Flow is evolving toward a broader game-development AI workbench, includin
 - richer file and tool execution flows with batch operations and editor-side visualization
 - broader engine compatibility such as Godot and UE
 - stronger structured agent collaboration with role-based communication protocols
+- project-level Skills usage and self-distilled reusable workflows
 - in-game LLM integration
 - collaboration platform visualization
 - external AIGC ecosystem access

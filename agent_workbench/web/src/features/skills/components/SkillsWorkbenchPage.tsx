@@ -11,6 +11,18 @@ const AGENT_FILTERS: Array<{ value: "all" | SkillAgentScope; label: string }> = 
   { value: "review", label: "Review" },
 ];
 
+function sourceLabel(source: SkillManifest["source"]): string {
+  return source === "self" || source === "draft" ? "自我沉淀" : "外部";
+}
+
+function displayTags(skill: SkillManifest): string[] {
+  const tags = [...skill.tags];
+  if ((skill.source === "self" || skill.source === "draft") && !tags.includes("自我沉淀")) {
+    tags.unshift("自我沉淀");
+  }
+  return tags;
+}
+
 interface SkillsWorkbenchPageProps {
   projectId: string;
 }
@@ -100,7 +112,13 @@ export function SkillsWorkbenchPage({ projectId }: SkillsWorkbenchPageProps) {
                   <div className="skill-card-main">
                     <div className="skill-card-title-row">
                       <h3>{skill.name}</h3>
-                      <span className="skills-pill">外部</span>
+                      <span
+                        className={`skills-pill source${
+                          skill.source === "self" || skill.source === "draft" ? " self" : ""
+                        }`}
+                      >
+                        {sourceLabel(skill.source)}
+                      </span>
                     </div>
                     <p>{skill.description}</p>
                   </div>
@@ -110,7 +128,7 @@ export function SkillsWorkbenchPage({ projectId }: SkillsWorkbenchPageProps) {
                         {agent}
                       </span>
                     ))}
-                    {skill.tags.slice(0, 4).map((tag) => (
+                    {displayTags(skill).slice(0, 4).map((tag) => (
                       <span key={tag} className="skills-pill subtle">
                         {tag}
                       </span>

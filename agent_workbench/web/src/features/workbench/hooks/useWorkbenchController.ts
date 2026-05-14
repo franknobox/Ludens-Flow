@@ -13,6 +13,7 @@ import type {
   AgentKey,
   ChatResponse,
   ComposerAttachment,
+  FastDevProgress,
   McpTool,
   StateResponse,
   TransientChat,
@@ -41,6 +42,15 @@ const INITIAL_MODEL: WorkbenchStateModel = {
 
 const TRANSIENT_CHAT_STORAGE_KEY = "ludensflow.workbench.transientChat";
 const MCP_MODE_STORAGE_PREFIX = "ludensflow.workbench.mcpMode";
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error || new Error("读取文件失败"));
+    reader.readAsDataURL(file);
+  });
+}
 
 function toModelState(state: StateResponse): WorkbenchStateModel {
   return {
@@ -118,6 +128,14 @@ function loadStoredTransientChat(): {
   }
 }
 
+interface PermissionPromptState {
+  requestId: string;
+  title: string;
+  message: string;
+  filePath?: string;
+  isSkillPermission: boolean;
+}
+
 export function useWorkbenchController() {
   const {
     runtimeState,
@@ -143,6 +161,14 @@ export function useWorkbenchController() {
   const [warningText, setWarningText] = useState("");
   const [archiveSubmitting, setArchiveSubmitting] = useState(false);
   const [topbarSlot, setTopbarSlot] = useState<HTMLElement | null>(null);
+  const [permissionPrompt, setPermissionPrompt] =
+    useState<PermissionPromptState | null>(null);
+  const [permissionQueue, setPermissionQueue] = useState<PermissionPromptState[]>([]);
+  const [fastDevProgress, setFastDevProgress] = useState<FastDevProgress>({
+    open: false,
+    status: "idle",
+    message: "",
+  });
 
   const contentAreaRef = useRef<HTMLElement>(null);
   const lastEventAtRef = useRef(0);
@@ -259,6 +285,40 @@ export function useWorkbenchController() {
   const handleWorkbenchEvent = (event: WorkbenchEvent) => {
     lastEventAtRef.current = Date.now();
 
+    if (
+      event.type === "fastdev_started" ||
+      event.type === "fastdev_progress" ||
+      event.type === "fastdev_completed" ||
+      event.type === "fastdev_failed"
+    ) {
+      const status =
+        event.type === "fastdev_completed"
+          ? "completed"
+          : event.type === "fastdev_failed"
+            ? "failed"
+            : "running";
+      setFastDevProgress({
+        open: true,
+        status,
+        message: event.message || "正在处理快速开发流程...",
+      });
+      if (event.state) {
+        setModel((prev) => ({
+          ...prev,
+          ...toModelState(event.state as StateResponse),
+          files: prev.files,
+          projects: prev.projects,
+          active_projects: prev.active_projects,
+          archived_projects: prev.archived_projects,
+          recent_tool_events: prev.recent_tool_events,
+        }));
+      }
+      if (status !== "running") {
+        setRequestInFlight(false);
+      }
+      return;
+    }
+
     if (event.type === "run_started") {
       currentToolEventsRef.current = [];
       setRequestInFlight(true);
@@ -291,16 +351,25 @@ export function useWorkbenchController() {
         const requestId = event.permission_request_id;
         if (!permissionDecisionRef.current.has(requestId)) {
           permissionDecisionRef.current.add(requestId);
-          const approved = window.confirm(
-            `${event.tool_summary || "Agent 请求写入文件"}\n\n${
-              event.file_path ? `目标：${event.file_path}\n` : ""
-            }是否允许这次受控文件操作？`,
-          );
-          void workbenchApi
-            .submitPermissionDecision(requestId, approved)
-            .catch((error) => {
-              setErrorText("权限确认提交失败：" + toErrorMessage(error));
-            });
+          const isSkillPermission = event.tool_name === "skill_create_draft";
+          const nextPrompt: PermissionPromptState = {
+            requestId,
+            title: isSkillPermission
+              ? event.tool_summary || "Agent 建议创建自我沉淀 Skill"
+              : event.tool_summary || "Agent 请求执行受控工具",
+            message: isSkillPermission
+              ? event.message || "是否允许创建这个自我沉淀 Skill？"
+              : event.message || "是否允许这次受控工具操作？",
+            filePath: event.file_path,
+            isSkillPermission,
+          };
+          setPermissionPrompt((currentPrompt) => {
+            if (currentPrompt) {
+              setPermissionQueue((queue) => [...queue, nextPrompt]);
+              return currentPrompt;
+            }
+            return nextPrompt;
+          });
         }
       }
 
@@ -509,6 +578,78 @@ export function useWorkbenchController() {
       });
     } catch (error) {
       throw new Error(`上传失败：${toErrorMessage(error)}`);
+    }
+  };
+
+  const importGddFastDev = async (file: File) => {
+    if (!file || requestInFlight) {
+      return;
+    }
+    setErrorText("");
+    setWarningText("");
+    setRequestInFlight(true);
+    setFastDevProgress({
+      open: true,
+      status: "running",
+      message: "正在读取 GDD 文件...",
+    });
+
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      const response = await workbenchApi.importGddFastDev({
+        project_info: {
+          项目名称: projectName,
+          目标引擎: activeProject?.target_engine || "",
+        },
+        attachments: [
+          {
+            kind: "file",
+            name: file.name,
+            mime_type: file.type || "application/octet-stream",
+            data_url: dataUrl,
+            size: file.size,
+          },
+        ],
+      });
+      setModel((prev) => ({
+        ...prev,
+        ...toModelState(response.state),
+        files: prev.files,
+        projects: prev.projects,
+        active_projects: prev.active_projects,
+        archived_projects: prev.archived_projects,
+        recent_tool_events: prev.recent_tool_events,
+      }));
+      setFileCache((prev) => ({
+        ...prev,
+        [fileCacheKey(response.state.project_id || model.project_id, "gdd")]:
+          response.gdd_content || "",
+      }));
+      setFastDevProgress({
+        open: true,
+        status: "completed",
+        message: response.message || "快速开发工件已生成，点击确定进入持续开发。",
+      });
+      void Promise.all([refreshRuntime(), syncFilesOnly()]).catch(() => {
+        // project metadata and file list can refresh lazily
+      });
+    } catch (error) {
+      setFastDevProgress({
+        open: true,
+        status: "failed",
+        message: `快速开发失败：${toErrorMessage(error)}`,
+      });
+      setErrorText(`快速开发失败：${toErrorMessage(error)}`);
+    } finally {
+      setRequestInFlight(false);
+    }
+  };
+
+  const closeFastDevProgress = () => {
+    const shouldOpenDev = fastDevProgress.status === "completed";
+    setFastDevProgress((prev) => ({ ...prev, open: false }));
+    if (shouldOpenDev) {
+      setCurrentView({ type: "agent", id: "engineering" });
     }
   };
 
@@ -830,6 +971,26 @@ export function useWorkbenchController() {
     setCurrentView({ type: "github" });
   };
 
+  const submitPermissionPrompt = (approved: boolean) => {
+    const prompt = permissionPrompt;
+    if (!prompt) {
+      return;
+    }
+    setPermissionPrompt(null);
+    setPermissionQueue((queue) => {
+      const [nextPrompt, ...rest] = queue;
+      window.setTimeout(() => {
+        setPermissionPrompt(nextPrompt || null);
+      }, 0);
+      return rest;
+    });
+    void workbenchApi
+      .submitPermissionDecision(prompt.requestId, approved)
+      .catch((error) => {
+        setErrorText("权限确认提交失败：" + toErrorMessage(error));
+      });
+  };
+
   return {
     activeProject,
     activeProjects,
@@ -838,9 +999,11 @@ export function useWorkbenchController() {
     currentView,
     errorText,
     fileCache,
+    fastDevProgress,
     historyByAgent,
     model,
     mcpMode,
+    permissionPrompt,
     projectName,
     readOnly,
     requestInFlight,
@@ -851,6 +1014,7 @@ export function useWorkbenchController() {
     transientChat,
     warningText,
     setMcpMode: updateMcpMode,
+    submitPermissionPrompt,
 createProject,
     handleArchiveProject,
     handleRenameProject,
@@ -862,6 +1026,8 @@ createProject,
     openFile,
     openGithub,
     openProject,
+    importGddFastDev,
+    closeFastDevProgress,
     saveWorkspaceFile,
     uploadWorkspaceFileAsset,
     selectAgent,
