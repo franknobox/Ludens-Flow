@@ -123,12 +123,6 @@ pip install -e ./agent_workbench
 .\agent_workbench\scripts\start_web.ps1
 ```
 
-也可显式写为：
-
-```powershell
-.\agent_workbench\scripts\start_web.ps1 -Mode product
-```
-
 访问：`http://127.0.0.1:8011/`
 
 热更新开发模式：

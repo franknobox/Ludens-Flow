@@ -24,7 +24,7 @@
 | 前端工作台 | 已具备项目侧栏、工件查看/编辑、Agent 对话、SSE 增量消息、工具进度事件、多格式附件、项目级操作、Markdown 阅读、暗色主题、AIGC 快捷入口（含文字创作分组）、GitHub 可视化入口、Game Model / MCP / Skills / 文案加工台页面入口；设置页支持通用设置、用户画像、Skills 管理、模型路由图形化编辑、工具、工作区、引擎连接与历史项目；已对设置页与工作台非默认功能页做页面级懒加载；聊天面板已支持随消息或流式输出自动滚底 |
 | 多项目工作台 | 已统一为 `workspace/projects/<project_id>/` 结构，并支持 active project / migrate / project meta |
 | 游戏工程接入（基础） | 已支持项目级工作区清单、目录读取、文本文件读取/写入、路径逃逸拦截、可写开关与统一错误结构 |
-| MCP 引擎接入 | Blender MCP 实机验证通过（`engine_list_scene`、`engine_create_object`、`engine_save_scene`）；Unity MCP 交互配置修正为 stdio 模式；非 Blender 引擎（Unity/Godot/Unreal）已补最小参数校验与 workspace 路径沙箱；health 模块已重构支持跨传输层与时序状态处理；工具事件边界已收敛 |
+| MCP 引擎接入 | Blender MCP 实机验证通过（`engine_list_scene`、`engine_create_object`、`engine_save_scene`）；Unity MCP 已完成实机验证并修正为 stdio 交互配置；Godot/Unreal 已补最小参数校验与 workspace 路径沙箱；health 模块已重构支持跨传输层与时序状态处理；工具事件边界已收敛 |
 | 多模型路由 | 已支持 `.env` 全局保底 + 项目级 `model_routing`（global/agents/capabilities/agent_capabilities）优先级路由；前端已提供图形化行式表单与 provider profile 下拉选择 |
 | 文案能力（基础） | 已提供 `DesignCopywritingRequest/Response` schema、normalize、job/SSE 生成链路、前端文案加工台、外部参考文件、过程状态展示、Markdown 导出与 Dialogue CSV 导出 |
 | Skills 外部导入 | 已支持 `workspace/skills/installed/<skill_id>/` 全局存储、外部 `skill.json` / `prompt.md` 导入、清单展示、删除、项目级启用开关与设置页管理 |
