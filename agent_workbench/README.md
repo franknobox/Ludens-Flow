@@ -197,7 +197,7 @@ agent_workbench/
 │   └── smoke_install.py
 ├── src/                    # 后端源码
 │   ├── ludens_flow/        # 主包
-│   │   ├── app/            # FastAPI 应用与路由（api.py 等）
+│   │   ├── app/            # FastAPI 应用入口与 api/ 分组路由
 │   │   ├── capabilities/   # 能力模块
 │   │   │   ├── artifacts/  # 工件读写管理
 │   │   │   ├── copywriting/# 文案生成能力

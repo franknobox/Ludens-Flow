@@ -2,7 +2,7 @@
 文件功能：项目与工作区路径管理器，统一维护项目元数据和目录结构。
 核心内容：提供项目创建、切换、归档、工作区绑定与 settings 读写能力。
 核心内容：负责 schema_version 迁移与 model_routing 持久化规范化处理。
-关联文件：core/state/, app/api.py, llm/modelrouter.py
+关联文件：core/state/, app/api/, llm/modelrouter.py
 """
 
 from __future__ import annotations

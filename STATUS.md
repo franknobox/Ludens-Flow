@@ -4,7 +4,7 @@
 ---
 
 ## 当前状态
-项目主链路稳定，已进入 **v3 preview** 阶段。近期集中完成了 MCP 稳定性加固、项目元数据持久化保护、前端高危稳定性修复与暗色主题清理。核心能力覆盖多 Agent 工作流、项目级状态管理、工作区受控读写、Blender MCP 实机调用与工具事件可观测性。
+项目主链路稳定，已进入 **v3 preview** 阶段。近期集中完成了 MCP 稳定性加固、工作区文件树上下文自动注入、聊天自动滚底体验优化、项目元数据持久化保护等。核心能力覆盖多 Agent 工作流、项目级状态管理、工作区受控读写、Blender/Unity MCP 实机调用与工具事件可观测性。
 
 ---
 
@@ -19,11 +19,12 @@
 | Artifact 管理 | 已支持 `GDD / PROJECT_PLAN / IMPLEMENTATION_PLAN / REVIEW_REPORT / DEVLOG` 的读写与冻结保护；前端已支持人工编辑、Markdown 渲染与 DEVLOG pipeline（冻结仅限制 Agent 自动提交） |
 | Prompt / Schemas | 已完成 discuss 共享 schema、ReviewGate schema、统一结构化解析、Prompt 分层模板与第一轮 prompt 重写 |
 | 用户画像 | 已完成项目级 `USER_PROFILE.md`、结构化模板、提示词注入规则增强、旧版画像迁移，并在设置页提供读取、编辑、保存入口 |
-| Web API | 已提供 `/api/state`、`/api/chat`、`/api/projects`、项目级 reset、SSE 事件推送、工作区文件读取/写入、目录创建、文件删除与项目 settings 更新接口 |
-| 前端工作台 | 已具备项目侧栏、工件查看/编辑、Agent 对话、SSE 增量消息、工具进度事件、多格式附件、项目级操作、Markdown 阅读、暗色主题、AIGC 快捷入口（含文字创作分组）、GitHub 可视化入口、Game Model / MCP / Skills / 文案加工台页面入口；设置页支持通用设置、用户画像、Skills 管理、模型路由图形化编辑、工具、工作区、引擎连接与历史项目；已对设置页与工作台非默认功能页做页面级懒加载 |
+| 上下文策略 | 已实现工作区文件树目录摘要自动生成，并在 EngineeringAgent 的 plan_discuss 和 coach 阶段进行上下文注入，使 Agent 进入对话时即可感知工作区代码文件结构 |
+| Web API | 已提供 `/api/state`、`/api/chat`、`/api/projects`、项目级 reset、SSE 事件推送、工作区文件读取/写入、目录创建、文件删除与项目 settings 更新接口；API 入口已拆为 `app/api/` 分组模块 |
+| 前端工作台 | 已具备项目侧栏、工件查看/编辑、Agent 对话、SSE 增量消息、工具进度事件、多格式附件、项目级操作、Markdown 阅读、暗色主题、AIGC 快捷入口（含文字创作分组）、GitHub 可视化入口、Game Model / MCP / Skills / 文案加工台页面入口；设置页支持通用设置、用户画像、Skills 管理、模型路由图形化编辑、工具、工作区、引擎连接与历史项目；已对设置页与工作台非默认功能页做页面级懒加载；聊天面板已支持随消息或流式输出自动滚底 |
 | 多项目工作台 | 已统一为 `workspace/projects/<project_id>/` 结构，并支持 active project / migrate / project meta |
 | 游戏工程接入（基础） | 已支持项目级工作区清单、目录读取、文本文件读取/写入、路径逃逸拦截、可写开关与统一错误结构 |
-| MCP 引擎接入 | Blender MCP 实机验证通过（`engine_list_scene`、`engine_create_object`、`engine_save_scene`）；非 Blender 引擎（Unity/Godot/Unreal）已补最小参数校验与 workspace 路径沙箱；健康检查 TTL 缓存避免重复启动外部进程；fallback 收窄并记录尝试参数；工具事件边界已收敛（adapter 只发权限事件，BaseAgent 统一发生命周期事件） |
+| MCP 引擎接入 | Blender MCP 实机验证通过（`engine_list_scene`、`engine_create_object`、`engine_save_scene`）；Unity MCP 交互配置修正为 stdio 模式；非 Blender 引擎（Unity/Godot/Unreal）已补最小参数校验与 workspace 路径沙箱；health 模块已重构支持跨传输层与时序状态处理；工具事件边界已收敛 |
 | 多模型路由 | 已支持 `.env` 全局保底 + 项目级 `model_routing`（global/agents/capabilities/agent_capabilities）优先级路由；前端已提供图形化行式表单与 provider profile 下拉选择 |
 | 文案能力（基础） | 已提供 `DesignCopywritingRequest/Response` schema、normalize、job/SSE 生成链路、前端文案加工台、外部参考文件、过程状态展示、Markdown 导出与 Dialogue CSV 导出 |
 | Skills 外部导入 | 已支持 `workspace/skills/installed/<skill_id>/` 全局存储、外部 `skill.json` / `prompt.md` 导入、清单展示、删除、项目级启用开关与设置页管理 |

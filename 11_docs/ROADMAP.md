@@ -1,33 +1,15 @@
 ﻿# Ludens-Flow 后续开发计划 (Roadmap)
 
-> 以下为 V3 收版的硬门槛能力，优先级高于扩展性探索项。
-
-1. **收版验收基线（必须）**
-   - 核心链路 smoke 测试通过：项目创建/切换/归档、工作流完整跑完（GDD→PM→ENG→Review→DevCoaching）。
-   - MCP 端到端可用：Blender `engine_list_scene` / `engine_create_object` 在真实环境中稳定调用。
-   - 权限与沙箱正确：写操作必须经 workspace 路径校验 + 用户确认，无 handler 时默认拒绝。
-   - 元数据零丢失：项目 meta 原子写入、坏 meta 隔离、删除项不被 stale touch 复活。
-   - 前端不白屏：Error Boundary 覆盖、SSE 断连有降级（HTTP reply 回填）、无内存泄漏。
-   - 进度：基础 smoke + MCP 实机验证已通过，持续观察稳定性。
-
 ---
 
 ## 架构债务与文件结构优化 (Post-V3 技术债)
 
-> V3 收版后优先偿还的结构性债务，按 P0/P1/P2 分级。
+### P0 — 拆分大文件
 
-### P0 — 必须尽早拆分的大文件
-
-1. **backend `api.py` (1,742 行 / 47 端点)**
-   - 现状：项目 CRUD、chat、workspace、settings、SSE、权限、文案任务全在一文件。
-   - 目标：拆成 `app/routers/{projects, chat, workspaces, settings, copywriting, events}.py`，`api.py` 仅做 `include_router` + 全局 middleware。
-   - 风险：大拆易引入 endpoint 路径 regression，建议 V3 后第一周做，配合完整 endpoint smoke 测试。
-
-### P1 — 高价值中等成本
-
-5. **frontend 全局 CSS 垄断 (5,800+ 行)**
-   - 现状：`styles/workbench.css`、`settings.css`、`layout.css`、`theme-dark.css`、`markdown.css` 共 5,800+ 行，部分 feature 有本地 CSS，部分没有。
-   - 目标：逐步把 feature 样式迁入 `features/<name>/styles/`；统一变量系统；V3 已先清理 `theme-dark.css` 的 `!important`。
+1. **backend API 入口拆分**
+   - 现状：已从单文件 `app/api.py` 拆为 `app/api/` package，`__init__.py` 负责 FastAPI app、middleware、static mount 与 `include_router`。
+   - 当前结构：`api/{chat, projects, workspaces, settings, copywriting, events}.py` 负责端点注册，`api/common.py` 暂时保留共享模型、事件与业务辅助函数。
+   - 后续：逐步把 `common.py` 内的业务函数继续下沉到对应 API 模块，并补完整 endpoint smoke 测试。
 
 ---
 
@@ -49,7 +31,6 @@
   - 建立真正的任务执行循环，让 Agent 能围绕一个目标持续完成读取上下文、制定步骤、执行工具、观察结果和继续修正。
   - 完善 Patch / Diff 级编辑体验，展示将要修改和已经修改的文件、变更摘要、风险提示与确认结果。
   - 补齐命令执行与测试反馈能力，优先支持工作区内受控命令、测试/构建输出读取、失败原因回传与下一步建议。
-  - 统一权限与确认工作流，将读、写、删、patch、命令执行和 MCP 操作都纳入同一套权限事件与安全模式。
   - 提升会话中的工作过程可见性，让用户能看到 Agent 正在搜索什么、读取什么、修改什么、运行什么，以及每一步的结果。
 - **进度状态**：已有工作区读写、patch/delete、权限模式和工具事件基础；下一步重点是把它们串成稳定的端到端执行体验。
 
