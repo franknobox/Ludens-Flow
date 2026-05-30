@@ -20,6 +20,9 @@ class UnrealMcpAdapterTests(unittest.TestCase):
             {"name": "add_component_to_blueprint"},
             {"name": "set_blueprint_property"},
             {"name": "create_input_mapping"},
+            {"name": "save_level"},
+            {"name": "read_output_log"},
+            {"name": "run_pie"},
         ]
 
     def test_list_scene_maps_to_actor_list_tool(self) -> None:
@@ -100,9 +103,37 @@ class UnrealMcpAdapterTests(unittest.TestCase):
         self.assertEqual(call.tool_name, "create_blueprint")
         self.assertEqual(call.arguments, {"name": "BP_DemoEnemy", "parent_class": "Character"})
 
-    def test_unsupported_repository_gaps_fail_explicitly(self) -> None:
-        with self.assertRaises(McpClientError):
-            self.adapter.map_call("engine_run_project", {"engine": "unreal"}, self.tools)
+    def test_save_scene_maps_to_save_level(self) -> None:
+        call = self.adapter.map_call("engine_save_scene", {"engine": "unreal"}, self.tools)
+
+        self.assertIsNotNone(call)
+        self.assertEqual(call.tool_name, "save_level")
+        self.assertEqual(call.arguments, {})
+        self.assertEqual(call.operation_name, "unreal.level.save")
+
+    def test_read_console_maps_to_output_log(self) -> None:
+        call = self.adapter.map_call(
+            "engine_read_console",
+            {"engine": "unreal", "lines": 50},
+            self.tools,
+        )
+
+        self.assertIsNotNone(call)
+        self.assertEqual(call.tool_name, "read_output_log")
+        self.assertEqual(call.arguments, {"lines": 50})
+        self.assertEqual(call.operation_name, "unreal.output_log.read")
+
+    def test_run_project_maps_to_pie(self) -> None:
+        call = self.adapter.map_call(
+            "engine_run_project",
+            {"engine": "unreal", "mode": "pie"},
+            self.tools,
+        )
+
+        self.assertIsNotNone(call)
+        self.assertEqual(call.tool_name, "run_pie")
+        self.assertEqual(call.arguments, {"action": "play"})
+        self.assertEqual(call.operation_name, "unreal.pie.run")
 
 
 if __name__ == "__main__":

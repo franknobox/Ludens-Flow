@@ -18,12 +18,6 @@ from ludens_flow.capabilities.mcp.health import McpClientError
 
 
 _CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
-_UNSUPPORTED_CAPABILITIES = {
-    "engine_save_scene": "The current unreal-mcp repository does not expose a stable save-level tool.",
-    "engine_read_console": "The current unreal-mcp repository does not expose a stable output-log tool.",
-    "engine_run_project": "The current unreal-mcp repository does not expose a stable Play-In-Editor tool.",
-}
-
 
 class UnrealEngineAdapter(BaseEngineAdapter):
     engine = "unreal"
@@ -31,18 +25,18 @@ class UnrealEngineAdapter(BaseEngineAdapter):
         "engine_list_scene": "unreal.level.actors",
         "engine_create_object": "unreal.actor.spawn",
         "engine_move_object": "unreal.actor.transform",
-        "engine_save_scene": "unreal.level.save.unsupported",
-        "engine_read_console": "unreal.output_log.read.unsupported",
-        "engine_run_project": "unreal.pie.run.unsupported",
+        "engine_save_scene": "unreal.level.save",
+        "engine_read_console": "unreal.output_log.read",
+        "engine_run_project": "unreal.pie.run",
         "engine_create_script": "unreal.blueprint.asset",
     }
     tool_candidates = {
         "engine_list_scene": ["get_actors_in_level", "find_actors_by_name", "get_actor_properties"],
         "engine_create_object": ["spawn_actor", "spawn_blueprint_actor"],
         "engine_move_object": ["set_actor_transform", "set_actor_property"],
-        "engine_save_scene": [],
-        "engine_read_console": [],
-        "engine_run_project": [],
+        "engine_save_scene": ["save_level"],
+        "engine_read_console": ["read_output_log"],
+        "engine_run_project": ["run_pie"],
         "engine_create_script": [
             "create_blueprint",
             "compile_blueprint",
@@ -60,9 +54,6 @@ class UnrealEngineAdapter(BaseEngineAdapter):
         *,
         project_id: str | None = None,
     ) -> EngineMcpCall | None:
-        if capability in _UNSUPPORTED_CAPABILITIES:
-            raise McpClientError(_UNSUPPORTED_CAPABILITIES[capability])
-
         validated_args = _validate_unreal_args(capability, args, project_id=project_id)
         validated_args["_unreal_validated"] = True
         tool_name = self._select_tool_for_validated_args(capability, validated_args, available_tools)
@@ -104,6 +95,12 @@ class UnrealEngineAdapter(BaseEngineAdapter):
             return _create_object_arguments(validated_args, tool_name)
         if capability == "engine_move_object":
             return _move_object_arguments(validated_args, tool_name)
+        if capability == "engine_save_scene":
+            return {}
+        if capability == "engine_read_console":
+            return _read_console_arguments(validated_args)
+        if capability == "engine_run_project":
+            return _run_project_arguments(validated_args)
         if capability == "engine_create_script":
             return _blueprint_arguments(validated_args, tool_name)
         raise McpClientError(f"Unreal adapter cannot translate capability: {capability}")
@@ -146,6 +143,12 @@ class UnrealEngineAdapter(BaseEngineAdapter):
                 target = explicit_actions[action]
                 return target if target in names else ""
             return "create_blueprint" if "create_blueprint" in names else ""
+        if capability == "engine_save_scene":
+            return "save_level" if "save_level" in names else ""
+        if capability == "engine_read_console":
+            return "read_output_log" if "read_output_log" in names else ""
+        if capability == "engine_run_project":
+            return "run_pie" if "run_pie" in names else ""
         return self.select_underlying_tool(capability, available_tools)
 
 
@@ -160,6 +163,13 @@ def _validate_unreal_args(
     requested_engine = str(args.get("engine") or "").strip().lower()
     if requested_engine not in {"unreal", "ue"}:
         raise McpClientError("Unreal capability requires `engine` to be `unreal`.")
+    if capability == "engine_save_scene":
+        return {"engine": "unreal"}
+    if capability == "engine_read_console":
+        normalized = {**args, "engine": "unreal"}
+        if "max_entries" not in normalized and "lines" in normalized:
+            normalized["max_entries"] = normalized.get("lines")
+        return validate_safe_engine_args("unreal", capability, normalized, project_id=project_id)
     if capability == "engine_create_script":
         return _validate_blueprint_args(args)
     return validate_safe_engine_args("unreal", capability, {**args, "engine": "unreal"}, project_id=project_id)
@@ -265,6 +275,18 @@ def _move_object_arguments(args: Dict[str, Any], tool_name: str) -> Dict[str, An
         if args.get(source) is not None:
             payload[target] = _vector3(args.get(source), field=source, default=None)
     return payload
+
+
+def _read_console_arguments(args: Dict[str, Any]) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {"lines": int(args.get("max_entries") or 200)}
+    if args.get("filter"):
+        payload["filter"] = args.get("filter")
+    return payload
+
+
+def _run_project_arguments(args: Dict[str, Any]) -> Dict[str, Any]:
+    mode = str(args.get("mode") or "pie").strip().lower()
+    return {"action": "simulate" if mode == "simulate" else "play"}
 
 
 def _blueprint_arguments(args: Dict[str, Any], tool_name: str) -> Dict[str, Any]:

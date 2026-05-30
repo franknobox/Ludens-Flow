@@ -38,24 +38,24 @@ const UNREAL_CAPABILITIES: EngineCapability[] = [
     id: "engine_save_scene",
     displayId: "unreal.level.save",
     label: "保存关卡",
-    desc: "当前 unreal-mcp 仓库没有明确稳定的保存关卡工具，后续需要在底层 MCP 补齐。",
-    level: "待补工具",
+    desc: "保存当前 Unreal Editor Level。",
+    level: "需权限",
     risk: "write",
   },
   {
     id: "engine_read_console",
     displayId: "unreal.output_log.read",
     label: "读取 Output Log",
-    desc: "当前 unreal-mcp 仓库没有明确稳定的日志读取工具，后续需要在底层 MCP 补齐。",
-    level: "待补工具",
+    desc: "读取当前项目 Saved/Logs 下的最近日志行，可用于排查编译、运行和插件输出。",
+    level: "只读",
     risk: "safe",
   },
   {
     id: "engine_run_project",
     displayId: "unreal.pie.run",
     label: "运行 / PIE",
-    desc: "当前 unreal-mcp 仓库没有明确稳定的 Play-In-Editor 工具，后续需要在底层 MCP 补齐。",
-    level: "待补工具",
+    desc: "启动 Play-In-Editor，或以模拟模式运行当前关卡。",
+    level: "需权限",
     risk: "write",
   },
 ];
@@ -71,9 +71,9 @@ const UNREAL_MAPPING_HINTS: Record<string, string[]> = {
     "set_blueprint_property",
     "create_input_mapping",
   ],
-  engine_save_scene: [],
-  engine_read_console: [],
-  engine_run_project: [],
+  engine_save_scene: ["save_level"],
+  engine_read_console: ["read_output_log"],
+  engine_run_project: ["run_pie"],
 };
 
 export function UnrealMcpPage() {
