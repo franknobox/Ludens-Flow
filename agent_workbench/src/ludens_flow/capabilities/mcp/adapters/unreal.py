@@ -96,7 +96,7 @@ class UnrealEngineAdapter(BaseEngineAdapter):
         if capability == "engine_move_object":
             return _move_object_arguments(validated_args, tool_name)
         if capability == "engine_save_scene":
-            return {}
+            return _save_scene_arguments(validated_args)
         if capability == "engine_read_console":
             return _read_console_arguments(validated_args)
         if capability == "engine_run_project":
@@ -164,6 +164,8 @@ def _validate_unreal_args(
     if requested_engine not in {"unreal", "ue"}:
         raise McpClientError("Unreal capability requires `engine` to be `unreal`.")
     if capability == "engine_save_scene":
+        if str(args.get("scene_path") or "").strip():
+            return validate_safe_engine_args("unreal", capability, {**args, "engine": "unreal"}, project_id=project_id)
         return {"engine": "unreal"}
     if capability == "engine_read_console":
         normalized = {**args, "engine": "unreal"}
@@ -275,6 +277,12 @@ def _move_object_arguments(args: Dict[str, Any], tool_name: str) -> Dict[str, An
         if args.get(source) is not None:
             payload[target] = _vector3(args.get(source), field=source, default=None)
     return payload
+
+
+def _save_scene_arguments(args: Dict[str, Any]) -> Dict[str, Any]:
+    if args.get("scene_path"):
+        return {"scene_path": args.get("scene_path")}
+    return {}
 
 
 def _read_console_arguments(args: Dict[str, Any]) -> Dict[str, Any]:
