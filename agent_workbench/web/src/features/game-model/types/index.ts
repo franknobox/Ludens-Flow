@@ -32,6 +32,10 @@ export interface GameSceneConfig {
   tools: string[];
   testInput: string;
   testOutput?: string;
+  runtimeStage?: "ready" | "coming_soon" | string;
+  description?: string;
+  modalities?: string[];
+  outputContract?: Record<string, unknown>;
 }
 
 export interface ExportConfig {
@@ -47,6 +51,94 @@ export interface ExportConfig {
   };
   unitySnippet: string;
 }
+
+export interface RuntimeModel {
+  id: string;
+  name: string;
+  provider: string;
+  categories: ModelCategory[];
+  runtime_role: string;
+  status: "available" | "coming_soon" | string;
+  strengths: string[];
+}
+
+export interface RuntimePipeline {
+  id: string;
+  steps: string[];
+}
+
+export interface WorldModelMilestone {
+  id: string;
+  name: string;
+  deliverable: string;
+}
+
+export interface WorldModelPlan {
+  status: "coming_soon" | string;
+  available: boolean;
+  milestones: WorldModelMilestone[];
+  guardrails: string[];
+}
+
+export interface GameModelRuntimeState {
+  schema_version: number;
+  project_id: string;
+  module_status: string;
+  target_engine: string;
+  models: RuntimeModel[];
+  scenes: GameSceneConfig[];
+  runtime_pipeline: RuntimePipeline;
+  world_model: WorldModelPlan;
+  guardrails: Record<string, unknown>;
+}
+
+export interface GameModelGenerationRequest {
+  scene_id?: string;
+  scene?: GameSceneConfig;
+  prompt?: string;
+  context?: string;
+  character_name?: string;
+  goal?: string;
+  traits?: string[];
+  constraints?: string[];
+  theme?: string;
+  player_level?: number;
+  region?: string;
+  beats?: string[];
+  purpose?: string;
+  modalities?: string[];
+}
+
+export interface GameModelExportRequest {
+  scene_ids?: string[];
+  scenes?: GameSceneConfig[];
+}
+
+export interface GameModelRuntimeTestRequest {
+  scene_id?: string;
+  scene?: GameSceneConfig;
+  input?: string;
+  prompt?: string;
+  test_input?: string;
+  attachments?: Array<Record<string, unknown>>;
+  live_model?: boolean;
+}
+
+export interface RuntimeExportBundle {
+  artifact_type: "runtime_export_bundle";
+  project_id: string;
+  runtime_config: Record<string, unknown>;
+  rest_contract: {
+    endpoints: string[];
+    auth: string;
+    request_shape: Record<string, unknown>;
+    response_shape: Record<string, unknown>;
+  };
+  files: Record<string, string>;
+  deployment_checklist: string[];
+}
+
+export type RuntimeArtifact = unknown;
 
 export const MODEL_CATEGORIES: { id: ModelCategory; label: string; icon: string; hint: string }[] = [
   { id: "npc", label: "NPC 对话", icon: "💬", hint: "角色对话、闲聊交互" },

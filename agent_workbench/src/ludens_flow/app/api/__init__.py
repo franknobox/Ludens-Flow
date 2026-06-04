@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import chat, common, copywriting, events, projects, settings, workspaces
+from . import chat, common, copywriting, events, game_model, projects, settings, workspaces
 from .common import *  # Re-export legacy direct-call API used by tests and scripts.
 
 _subscribe_project_events = common._subscribe_project_events
@@ -33,6 +33,7 @@ app.include_router(projects.router)
 app.include_router(workspaces.router)
 app.include_router(settings.router)
 app.include_router(copywriting.router)
+app.include_router(game_model.router)
 
 
 def _sync_common_test_overrides() -> None:
@@ -98,6 +99,18 @@ post_current_project_skill_toggle = settings.post_current_project_skill_toggle
 post_generate_current_project_copywriting = copywriting.post_generate_current_project_copywriting
 post_create_current_project_copywriting_job = copywriting.post_create_current_project_copywriting_job
 get_current_project_copywriting_job = copywriting.get_current_project_copywriting_job
+
+GameModelGenerationRequest = game_model.GameModelGenerationRequest
+GameModelRuntimeScenesRequest = game_model.GameModelRuntimeScenesRequest
+GameModelRuntimeTestRequest = game_model.GameModelRuntimeTestRequest
+GameModelExportRequest = game_model.GameModelExportRequest
+get_current_project_game_model_runtime = game_model.get_current_project_game_model_runtime
+post_current_project_game_model_runtime_scenes = game_model.post_current_project_game_model_runtime_scenes
+post_current_project_game_model_behavior_tree = game_model.post_current_project_game_model_behavior_tree
+post_current_project_game_model_questline = game_model.post_current_project_game_model_questline
+post_current_project_game_model_multimodal_plan = game_model.post_current_project_game_model_multimodal_plan
+post_current_project_game_model_runtime_test = game_model.post_current_project_game_model_runtime_test
+post_current_project_game_model_export = game_model.post_current_project_game_model_export
 
 
 @app.get("/")
