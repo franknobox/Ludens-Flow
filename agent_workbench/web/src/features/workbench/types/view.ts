@@ -30,6 +30,10 @@ export interface ViewStateGameModel {
   type: "game-model";
 }
 
+export interface ViewStateLevelLayout {
+  type: "level-layout";
+}
+
 export interface ViewStateSkills {
   type: "skills";
 }
@@ -48,6 +52,7 @@ export type ViewState =
   | ViewStateAigc
   | ViewStateCopywriting
   | ViewStateGameModel
+  | ViewStateLevelLayout
   | ViewStateSkills
   | ViewStateMcp;
 

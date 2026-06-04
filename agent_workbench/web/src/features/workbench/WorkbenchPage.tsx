@@ -45,6 +45,7 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
     openFile,
     openGameModel,
     openGithub,
+    openLevelLayout,
     openMcp,
     openSkills,
     openProject,
@@ -92,6 +93,7 @@ export function WorkbenchPage({ isActive = false }: WorkbenchPageProps) {
           onOpenAigc={openAigc}
           onOpenCopywriting={openCopywriting}
           onOpenGameModel={openGameModel}
+          onOpenLevelLayout={openLevelLayout}
           onOpenSkills={openSkills}
           onOpenMcp={openMcp}
         />

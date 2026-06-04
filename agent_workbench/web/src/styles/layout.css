@@ -546,6 +546,12 @@ body {
   border-color: rgba(22, 99, 255, 0.18);
 }
 
+.project-toolbar-level-layout-icon {
+  width: 17px;
+  height: 17px;
+  display: block;
+}
+
 .project-toolbar-settings-panel {
   width: 280px;
   right: 0;
