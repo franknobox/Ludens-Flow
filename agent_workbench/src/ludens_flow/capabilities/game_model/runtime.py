@@ -21,7 +21,7 @@ RUNTIME_MODELS: list[dict[str, Any]] = [
         "id": "gpt-5.4-mini",
         "name": "GPT-5.4 Mini",
         "provider": "OpenAI",
-        "categories": ["npc", "quest_behavior"],
+        "categories": ["npc", "quest"],
         "runtime_role": "low_latency_dialogue",
         "status": "available",
         "strengths": ["low_latency", "cost_control", "tool_calling"],
@@ -30,7 +30,7 @@ RUNTIME_MODELS: list[dict[str, Any]] = [
         "id": "o3-mini",
         "name": "o3-mini",
         "provider": "OpenAI",
-        "categories": ["quest_behavior", "world_model"],
+        "categories": ["quest", "behavior_tree", "world_model"],
         "runtime_role": "logic_planner",
         "status": "available",
         "strengths": ["structured_reasoning", "behavior_tree", "quest_logic"],
@@ -77,7 +77,7 @@ DEFAULT_RUNTIME_SCENES: list[dict[str, Any]] = [
     {
         "id": "character-behavior-tree",
         "name": "AI 生成角色行为树",
-        "category": "quest_behavior",
+        "category": "behavior_tree",
         "modelId": "o3-mini",
         "systemPrompt": "你是角色 AI 设计器。根据角色目标、感知输入和战斗规则，输出可导入 Unity 的行为树 JSON。",
         "temperature": 0.25,
@@ -94,7 +94,7 @@ DEFAULT_RUNTIME_SCENES: list[dict[str, Any]] = [
     {
         "id": "questline-generator",
         "name": "AI 生成任务 / 任务线",
-        "category": "quest_behavior",
+        "category": "quest",
         "modelId": "o3-mini",
         "systemPrompt": "你是任务系统设计器。根据区域、玩家等级和剧情节拍，输出任务线 JSON、目标依赖和服务端事件约定。",
         "temperature": 0.35,
@@ -746,7 +746,7 @@ def run_runtime_scene_test(request: dict[str, Any] | None = None) -> dict[str, A
             "severity": "debug",
             "next_debug_steps": ["确认玩家授权", "压缩附件", "记录 session_id"],
         }
-    elif scene["category"] == "quest_behavior":
+    elif scene["category"] in {"quest", "behavior_tree", "quest_behavior"}:
         response = {
             "type": "structured_logic_preview",
             "summary": "运行时测试已生成结构化逻辑预览，可继续生成行为树或任务线工件。",

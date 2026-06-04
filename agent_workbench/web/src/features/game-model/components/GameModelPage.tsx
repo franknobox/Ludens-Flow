@@ -2,9 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   exportGameModelRuntime,
-  generateGameModelBehaviorTree,
-  generateGameModelMultimodalPlan,
-  generateGameModelQuestline,
   getGameModelRuntime,
   runGameModelRuntimeTest,
   saveGameModelRuntimeScenes,
@@ -25,8 +22,7 @@ import {
   generateUnitySnippet,
 } from "../types";
 
-type Tab = "runtime" | "models" | "scenes" | "custom" | "export";
-type GenerateMode = "auto" | "behavior_tree" | "questline" | "multimodal";
+type Tab = "scenes" | "models" | "custom" | "export";
 
 interface ArtifactState {
   title: string;
@@ -92,23 +88,6 @@ function getSceneModel(scene: GameSceneConfig): GameModel {
       recommendedFor: [],
     }
   );
-}
-
-function buildSceneRequest(scene: GameSceneConfig) {
-  return {
-    scene_id: scene.id,
-    scene,
-    context: scene.testInput || scene.description || scene.systemPrompt,
-    character_name: scene.name.includes("行为树") ? "运行时角色" : scene.name,
-    goal: scene.testInput || scene.systemPrompt,
-    traits: scene.tools.slice(0, 4),
-    theme: scene.name,
-    player_level: 20,
-    region: "当前项目区域",
-    beats: ["侦查", "推进", "对抗", "收束"],
-    purpose: scene.testInput || scene.description || "分析运行时多模态输入。",
-    modalities: scene.modalities?.length ? scene.modalities : ["image", "audio", "video"],
-  };
 }
 
 function ModelCard({ model, onSelect }: { model: GameModel; onSelect: () => void }) {
@@ -186,22 +165,28 @@ function SceneItem({
   busyAction,
   onEdit,
   onExport,
-  onGenerate,
   onTest,
+  onDelete,
 }: {
   scene: GameSceneConfig;
   busyAction: string;
   onEdit: () => void;
   onExport: () => void;
-  onGenerate: (mode: GenerateMode) => void;
   onTest: () => void;
+  onDelete: () => void;
 }) {
   const catDef = MODEL_CATEGORIES.find((item) => item.id === scene.category);
   const model = getSceneModel(scene);
   const isComingSoon = scene.runtimeStage === "coming_soon";
   const isBusy = busyAction.endsWith(`:${scene.id}`);
-  const canGenerateLogic = scene.category === "quest_behavior";
-  const canGenerateMultimodal = scene.category === "multimodal";
+  const capabilityTags =
+    scene.category === "quest"
+      ? ["任务"]
+      : scene.category === "behavior_tree"
+        ? ["行为树"]
+        : scene.category === "multimodal"
+          ? ["多模态方案"]
+          : [];
 
   return (
     <div className={`game-scene-item${isComingSoon ? " is-coming-soon" : ""}`}>
@@ -214,6 +199,15 @@ function SceneItem({
             <strong className="game-scene-name">{scene.name}</strong>
             {isComingSoon ? <span className="game-model-badge coming-soon">Coming Soon</span> : null}
           </div>
+          {capabilityTags.length ? (
+            <div className="game-scene-capability-tags">
+              {capabilityTags.map((tag) => (
+                <span key={tag} className="game-scene-capability-tag">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          ) : null}
           {scene.description ? <p className="game-scene-desc">{scene.description}</p> : null}
         </div>
         <div className="game-scene-model-badge">
@@ -245,42 +239,20 @@ function SceneItem({
         </button>
         <button
           type="button"
+          className="game-scene-btn danger"
+          disabled={isBusy}
+          onClick={onDelete}
+        >
+          删除
+        </button>
+        <button
+          type="button"
           className="game-scene-btn"
           disabled={isComingSoon || isBusy}
           onClick={onTest}
         >
           测试调用
         </button>
-        {canGenerateLogic ? (
-          <>
-            <button
-              type="button"
-              className="game-scene-btn"
-              disabled={isBusy}
-              onClick={() => onGenerate("behavior_tree")}
-            >
-              行为树
-            </button>
-            <button
-              type="button"
-              className="game-scene-btn"
-              disabled={isBusy}
-              onClick={() => onGenerate("questline")}
-            >
-              任务线
-            </button>
-          </>
-        ) : null}
-        {canGenerateMultimodal ? (
-          <button
-            type="button"
-            className="game-scene-btn"
-            disabled={isBusy}
-            onClick={() => onGenerate("multimodal")}
-          >
-            多模态方案
-          </button>
-        ) : null}
         <button
           type="button"
           className="game-scene-btn primary"
@@ -301,8 +273,8 @@ function ArtifactPreview({ artifact }: { artifact: ArtifactState | null }) {
     <section className="game-runtime-output">
       <div className="game-runtime-section-head">
         <div>
-          <h3>最新运行时工件</h3>
-          <span>{artifact?.subtitle || "等待生成"}</span>
+          <h3>最新AI配置结果</h3>
+          <span>{artifact?.subtitle || "等待测试或导出"}</span>
         </div>
       </div>
       {exportBundle ? (
@@ -320,7 +292,7 @@ function ArtifactPreview({ artifact }: { artifact: ArtifactState | null }) {
         </div>
       ) : null}
       <pre className="game-export-code game-runtime-code">
-        {artifact ? artifactText(artifact.content) : "选择场景后生成行为树、任务线、多模态方案或导出包。"}
+        {artifact ? artifactText(artifact.content) : "选择场景后测试调用或导出配置包。"}
       </pre>
       {artifact ? (
         <div className="game-runtime-output-actions">
@@ -349,151 +321,6 @@ function ArtifactPreview({ artifact }: { artifact: ArtifactState | null }) {
         </div>
       ) : null}
     </section>
-  );
-}
-
-function RuntimeOverview({
-  runtimeState,
-  scenes,
-  artifact,
-  errorText,
-  busyAction,
-  onGenerate,
-  onExportAll,
-  onRuntimeTest,
-}: {
-  runtimeState: GameModelRuntimeState | null;
-  scenes: GameSceneConfig[];
-  artifact: ArtifactState | null;
-  errorText: string;
-  busyAction: string;
-  onGenerate: (scene: GameSceneConfig, mode: GenerateMode) => void;
-  onExportAll: () => void;
-  onRuntimeTest: (scene: GameSceneConfig) => void;
-}) {
-  const behaviorScene = scenes.find((scene) => scene.id === "character-behavior-tree");
-  const questScene = scenes.find((scene) => scene.id === "questline-generator");
-  const multimodalScene = scenes.find((scene) => scene.id === "multimodal-runtime");
-  const testScene = scenes.find((scene) => scene.runtimeStage !== "coming_soon");
-
-  return (
-    <div className="game-runtime-layout">
-      <section className="game-runtime-main">
-        <div className="game-runtime-strip">
-          <div>
-            <span className="game-runtime-kicker">Project</span>
-            <strong>{runtimeState?.project_id || "current"}</strong>
-          </div>
-          <div>
-            <span className="game-runtime-kicker">Engine</span>
-            <strong>{runtimeState?.target_engine || "generic"}</strong>
-          </div>
-          <div>
-            <span className="game-runtime-kicker">Scenes</span>
-            <strong>{scenes.length}</strong>
-          </div>
-          <button
-            type="button"
-            className="game-model-detail-btn primary"
-            disabled={!testScene || Boolean(busyAction)}
-            onClick={() => testScene && onRuntimeTest(testScene)}
-          >
-            测试调用
-          </button>
-          <button
-            type="button"
-            className="game-model-detail-btn primary"
-            disabled={Boolean(busyAction)}
-            onClick={onExportAll}
-          >
-            全部导出
-          </button>
-        </div>
-
-        {errorText ? <div className="game-runtime-error">{errorText}</div> : null}
-
-        <div className="game-runtime-quick-grid">
-          {behaviorScene ? (
-            <button
-              type="button"
-              className="game-runtime-action"
-              disabled={Boolean(busyAction)}
-              onClick={() => onGenerate(behaviorScene, "behavior_tree")}
-            >
-              <span>角色行为树</span>
-              <small>黑板变量、节点、转移、Unity Runner</small>
-            </button>
-          ) : null}
-          {questScene ? (
-            <button
-              type="button"
-              className="game-runtime-action"
-              disabled={Boolean(busyAction)}
-              onClick={() => onGenerate(questScene, "questline")}
-            >
-              <span>任务 / 任务线</span>
-              <small>依赖、目标、奖励、服务端事件</small>
-            </button>
-          ) : null}
-          {multimodalScene ? (
-            <button
-              type="button"
-              className="game-runtime-action"
-              disabled={Boolean(busyAction)}
-              onClick={() => onGenerate(multimodalScene, "multimodal")}
-            >
-              <span>多模态场景</span>
-              <small>图片、语音、视频输入边界</small>
-            </button>
-          ) : null}
-        </div>
-
-        <div className="game-runtime-pipeline">
-          {(runtimeState?.runtime_pipeline.steps || []).map((step, index) => (
-            <div key={step} className="game-runtime-pipeline-step">
-              <span>{index + 1}</span>
-              <strong>{step}</strong>
-            </div>
-          ))}
-        </div>
-
-        <ArtifactPreview artifact={artifact} />
-      </section>
-
-      <aside className="game-runtime-side">
-        <section className="game-runtime-world">
-          <div className="game-runtime-section-head">
-            <div>
-              <h3>世界模型</h3>
-              <span>{runtimeState?.world_model.status || "coming_soon"}</span>
-            </div>
-            <span className="game-model-badge coming-soon">Coming Soon</span>
-          </div>
-          <div className="game-runtime-milestones">
-            {(runtimeState?.world_model.milestones || []).map((milestone) => (
-              <div key={milestone.id} className="game-runtime-milestone">
-                <strong>{milestone.name}</strong>
-                <span>{milestone.deliverable}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="game-runtime-world">
-          <div className="game-runtime-section-head">
-            <div>
-              <h3>运行时边界</h3>
-              <span>成本、上下文、权限</span>
-            </div>
-          </div>
-          <div className="game-runtime-notes">
-            {(runtimeState?.world_model.guardrails || []).map((item) => (
-              <span key={item}>{item}</span>
-            ))}
-          </div>
-        </section>
-      </aside>
-    </div>
   );
 }
 
@@ -555,12 +382,13 @@ function ExportPanel({ scene, onClose }: { scene: GameSceneConfig; onClose: () =
 }
 
 export function GameModelPage() {
-  const [activeTab, setActiveTab] = useState<Tab>("runtime");
+  const [activeTab, setActiveTab] = useState<Tab>("scenes");
   const [activeCategory, setActiveCategory] = useState<ModelCategory | "all">("all");
   const [selectedModel, setSelectedModel] = useState<GameModel | null>(null);
   const [runtimeState, setRuntimeState] = useState<GameModelRuntimeState | null>(null);
   const [scenes, setScenes] = useState<GameSceneConfig[]>(SCENE_TEMPLATES);
   const [editingScene, setEditingScene] = useState<GameSceneConfig | null>(null);
+  const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
   const [exportScene, setExportScene] = useState<GameSceneConfig | null>(null);
   const [customBaseUrl, setCustomBaseUrl] = useState("");
   const [customApiKey, setCustomApiKey] = useState("");
@@ -620,53 +448,6 @@ export function GameModelPage() {
     }
   }
 
-  async function handleGenerate(scene: GameSceneConfig, mode: GenerateMode) {
-    if (scene.runtimeStage === "coming_soon") {
-      setArtifact({
-        title: "世界模型 Coming Soon",
-        subtitle: "已保留接口和验收里程碑，当前不开放运行时调用。",
-        content: runtimeState?.world_model || "world_model coming soon",
-      });
-      setActiveTab("runtime");
-      return;
-    }
-
-    const request = buildSceneRequest(scene);
-    const resolvedMode =
-      mode === "auto"
-        ? scene.category === "multimodal"
-          ? "multimodal"
-          : scene.id.includes("questline")
-            ? "questline"
-            : "behavior_tree"
-        : mode;
-    setBusyAction(`${resolvedMode}:${scene.id}`);
-    try {
-      const result =
-        resolvedMode === "questline"
-          ? await generateGameModelQuestline(request)
-          : resolvedMode === "multimodal"
-            ? await generateGameModelMultimodalPlan(request)
-            : await generateGameModelBehaviorTree(request);
-      setArtifact({
-        title: scene.name,
-        subtitle:
-          resolvedMode === "questline"
-            ? "任务线 JSON"
-            : resolvedMode === "multimodal"
-              ? "多模态运行时方案"
-              : "角色行为树 JSON",
-        content: result,
-      });
-      setErrorText("");
-      setActiveTab("runtime");
-    } catch (error) {
-      setErrorText(toErrorMessage(error));
-    } finally {
-      setBusyAction("");
-    }
-  }
-
   async function handleRuntimeTest(scene: GameSceneConfig) {
     if (scene.runtimeStage === "coming_soon") {
       setArtifact({
@@ -674,7 +455,7 @@ export function GameModelPage() {
         subtitle: "当前只开放计划预览，不执行运行时测试调用。",
         content: runtimeState?.world_model || "world_model coming soon",
       });
-      setActiveTab("runtime");
+      setActiveTab("scenes");
       return;
     }
 
@@ -692,7 +473,7 @@ export function GameModelPage() {
         content: result,
       });
       setErrorText("");
-      setActiveTab("runtime");
+      setActiveTab("scenes");
     } catch (error) {
       setErrorText(toErrorMessage(error));
     } finally {
@@ -713,7 +494,7 @@ export function GameModelPage() {
         content: bundle,
       });
       setErrorText("");
-      setActiveTab("runtime");
+      setActiveTab("scenes");
     } catch (error) {
       setErrorText(toErrorMessage(error));
     } finally {
@@ -752,25 +533,48 @@ export function GameModelPage() {
       testInput: "",
       runtimeStage: "ready",
     };
-    setScenes((prev) => [...prev, newScene]);
+    setCategoryPickerOpen(false);
     setEditingScene(newScene);
+  }
+
+  function deleteScene(scene: GameSceneConfig) {
+    const confirmed = window.confirm(`删除场景“${scene.name}”？此操作会更新当前项目的运行时配置。`);
+    if (!confirmed) {
+      return;
+    }
+    const nextScenes = scenes.filter((item) => item.id !== scene.id);
+    void persistScenes(nextScenes).then(() => {
+      if (editingScene?.id === scene.id) {
+        setEditingScene(null);
+        setCategoryPickerOpen(false);
+      }
+      if (exportScene?.id === scene.id) {
+        setExportScene(null);
+      }
+      if (artifact?.title === scene.name) {
+        setArtifact(null);
+      }
+    });
   }
 
   const firstRunnableScene =
     scenes.find((scene) => scene.id === "character-behavior-tree") ||
     scenes.find((scene) => scene.runtimeStage !== "coming_soon") ||
     scenes[0];
+  const editingCategory = editingScene
+    ? MODEL_CATEGORIES.find((cat) => cat.id === editingScene.category)
+    : null;
 
   return (
     <div className="game-model-page">
       <header className="game-model-header">
         <div className="game-model-header-left">
-          <div className="game-model-title-row">
-            <span className="game-model-icon">🎮</span>
-            <span className="game-model-title">游戏内模型接入</span>
+          <div className="game-model-title-stack">
+            <span className="game-model-eyebrow">GAME AI CONFIG</span>
+            <h1 className="game-model-title">游戏AI配置中心</h1>
           </div>
           <span className="game-model-subtitle">
-            Agent / Prompt / Tool 配置、运行时工件生成与 Unity / REST 导出
+            在你的游戏项目当中接入AI模型，统一管理配置
           </span>
         </div>
         <div className="game-model-header-right">
@@ -803,24 +607,17 @@ export function GameModelPage() {
       <nav className="game-model-tabs">
         <button
           type="button"
-          className={`game-model-tab${activeTab === "runtime" ? " is-active" : ""}`}
-          onClick={() => setActiveTab("runtime")}
+          className={`game-model-tab${activeTab === "scenes" ? " is-active" : ""}`}
+          onClick={() => setActiveTab("scenes")}
         >
-          运行时闭环
+          场景配置
         </button>
         <button
           type="button"
           className={`game-model-tab${activeTab === "models" ? " is-active" : ""}`}
           onClick={() => setActiveTab("models")}
         >
-          模型目录
-        </button>
-        <button
-          type="button"
-          className={`game-model-tab${activeTab === "scenes" ? " is-active" : ""}`}
-          onClick={() => setActiveTab("scenes")}
-        >
-          场景配置
+          模型广场
         </button>
         <button
           type="button"
@@ -839,19 +636,6 @@ export function GameModelPage() {
       </nav>
 
       <div className="game-model-content">
-        {activeTab === "runtime" && (
-          <RuntimeOverview
-            runtimeState={runtimeState}
-            scenes={scenes}
-            artifact={artifact}
-            errorText={errorText}
-            busyAction={busyAction}
-            onGenerate={(scene, mode) => void handleGenerate(scene, mode)}
-            onExportAll={() => void handleExport()}
-            onRuntimeTest={(scene) => void handleRuntimeTest(scene)}
-          />
-        )}
-
         {activeTab === "models" && (
           <div className="game-models-tab">
             <div className="game-model-filter-bar">
@@ -862,16 +646,27 @@ export function GameModelPage() {
               >
                 全部
               </button>
-              {MODEL_CATEGORIES.map((cat) => (
-                <button
-                  key={cat.id}
-                  type="button"
-                  className={`game-model-filter-btn${activeCategory === cat.id ? " is-active" : ""}`}
-                  onClick={() => setActiveCategory(cat.id)}
-                >
-                  {cat.icon} {cat.label}
-                </button>
-              ))}
+              {MODEL_CATEGORIES.map((cat) => {
+                const isComingSoon = cat.status === "coming_soon";
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    className={`game-model-filter-btn${activeCategory === cat.id ? " is-active" : ""}${
+                      isComingSoon ? " is-coming-soon" : ""
+                    }`}
+                    disabled={isComingSoon}
+                    onClick={() => {
+                      if (!isComingSoon) {
+                        setActiveCategory(cat.id);
+                      }
+                    }}
+                  >
+                    <span>{cat.icon} {cat.label}</span>
+                    {isComingSoon ? <small>Coming Soon</small> : null}
+                  </button>
+                );
+              })}
             </div>
 
             <div className="game-models-grid">
@@ -971,29 +766,45 @@ export function GameModelPage() {
               </button>
             </div>
 
+            {errorText ? <div className="game-scenes-error">{errorText}</div> : null}
+
+            {artifact ? <ArtifactPreview artifact={artifact} /> : null}
+
             <div className="game-scenes-list">
               {scenes.map((scene) => (
                 <SceneItem
                   key={scene.id}
                   scene={scene}
                   busyAction={busyAction}
-                  onEdit={() => setEditingScene(scene)}
+                  onEdit={() => {
+                    setCategoryPickerOpen(false);
+                    setEditingScene(scene);
+                  }}
                   onExport={() => void handleExport([scene.id])}
-                  onGenerate={(mode) => void handleGenerate(scene, mode)}
                   onTest={() => void handleRuntimeTest(scene)}
+                  onDelete={() => deleteScene(scene)}
                 />
               ))}
             </div>
 
             {editingScene && (
-              <div className="game-model-detail-panel" onClick={() => setEditingScene(null)}>
+              <div
+                className="game-model-detail-panel"
+                onClick={() => {
+                  setCategoryPickerOpen(false);
+                  setEditingScene(null);
+                }}
+              >
                 <div className="game-model-edit-card" onClick={(event) => event.stopPropagation()}>
                   <div className="game-model-detail-head">
                     <strong className="game-model-detail-name">编辑场景：{editingScene.name}</strong>
                     <button
                       type="button"
                       className="game-model-detail-close"
-                      onClick={() => setEditingScene(null)}
+                      onClick={() => {
+                        setCategoryPickerOpen(false);
+                        setEditingScene(null);
+                      }}
                     >
                       ×
                     </button>
@@ -1009,24 +820,55 @@ export function GameModelPage() {
                       />
                     </label>
 
-                    <label className="game-model-edit-field">
+                    <div className="game-model-edit-field">
                       <span>分类</span>
-                      <select
-                        value={editingScene.category}
-                        onChange={(event) =>
-                          setEditingScene({
-                            ...editingScene,
-                            category: event.target.value as ModelCategory,
-                          })
-                        }
-                      >
-                        {MODEL_CATEGORIES.map((cat) => (
-                          <option key={cat.id} value={cat.id}>
-                            {cat.icon} {cat.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                      <div className={`game-category-select${categoryPickerOpen ? " is-open" : ""}`}>
+                        <button
+                          type="button"
+                          className="game-category-select-trigger"
+                          onClick={() => setCategoryPickerOpen((value) => !value)}
+                        >
+                          <span className="game-category-select-value">
+                            {editingCategory?.icon} {editingCategory?.label || categoryLabel(editingScene.category)}
+                          </span>
+                          <span className="game-category-select-arrow">⌄</span>
+                        </button>
+                        {categoryPickerOpen ? (
+                          <div className="game-category-option-list">
+                            {MODEL_CATEGORIES.map((cat) => {
+                              const isComingSoon = cat.status === "coming_soon";
+                              const isActive = editingScene.category === cat.id;
+                              return (
+                                <button
+                                  key={cat.id}
+                                  type="button"
+                                  className={`game-category-option${isActive ? " is-active" : ""}${
+                                    isComingSoon ? " is-coming-soon" : ""
+                                  }`}
+                                  disabled={isComingSoon}
+                                  onClick={() => {
+                                    if (!isComingSoon) {
+                                      setEditingScene({ ...editingScene, category: cat.id });
+                                      setCategoryPickerOpen(false);
+                                    }
+                                  }}
+                                >
+                                  <span className="game-category-option-main">
+                                    <span className="game-category-option-label">
+                                      {cat.icon} {cat.label}
+                                    </span>
+                                    {isComingSoon ? (
+                                      <span className="game-category-option-status">Coming Soon</span>
+                                    ) : null}
+                                  </span>
+                                  <span className="game-category-option-hint">{cat.hint}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
 
                     <label className="game-model-edit-field">
                       <span>System Prompt</span>
@@ -1104,10 +946,14 @@ export function GameModelPage() {
                         type="button"
                         className="game-model-detail-btn primary"
                         onClick={() => {
-                          const nextScenes = scenes.map((scene) =>
-                            scene.id === editingScene.id ? editingScene : scene,
-                          );
-                          void persistScenes(nextScenes).then(() => setEditingScene(null));
+                          const sceneExists = scenes.some((scene) => scene.id === editingScene.id);
+                          const nextScenes = sceneExists
+                            ? scenes.map((scene) => (scene.id === editingScene.id ? editingScene : scene))
+                            : [...scenes, editingScene];
+                          void persistScenes(nextScenes).then(() => {
+                            setCategoryPickerOpen(false);
+                            setEditingScene(null);
+                          });
                         }}
                       >
                         保存
@@ -1115,7 +961,10 @@ export function GameModelPage() {
                       <button
                         type="button"
                         className="game-model-detail-btn"
-                        onClick={() => setEditingScene(null)}
+                        onClick={() => {
+                          setCategoryPickerOpen(false);
+                          setEditingScene(null);
+                        }}
                       >
                         取消
                       </button>

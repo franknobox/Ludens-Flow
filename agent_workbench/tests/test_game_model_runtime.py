@@ -80,6 +80,41 @@ class GameModelRuntimeTests(unittest.TestCase):
         self.assertEqual(reloaded["scenes"][0]["systemPrompt"], scene["systemPrompt"])
         self.assertIn("quest_state_query", reloaded["scenes"][0]["tools"])
 
+    def test_api_runtime_scene_save_replaces_removed_scenes(self):
+        import ludens_flow.app.api as api
+
+        api.post_project(api.ProjectRequest(project_id="alpha"))
+        first_scene = {
+            "id": "keep-scene",
+            "name": "保留场景",
+            "category": "npc",
+            "modelId": "gpt-5.4-mini",
+            "systemPrompt": "保留。",
+            "temperature": 0.5,
+            "maxTokens": 120,
+            "tools": [],
+            "testInput": "",
+            "runtimeStage": "ready",
+        }
+        removed_scene = {
+            **first_scene,
+            "id": "remove-scene",
+            "name": "删除场景",
+            "systemPrompt": "应被删除。",
+        }
+
+        api.post_current_project_game_model_runtime_scenes(
+            api.GameModelRuntimeScenesRequest(scenes=[first_scene, removed_scene])
+        )
+        api.post_current_project_game_model_runtime_scenes(
+            api.GameModelRuntimeScenesRequest(scenes=[first_scene])
+        )
+
+        reloaded = api.get_current_project_game_model_runtime()
+        scene_ids = {scene["id"] for scene in reloaded["scenes"]}
+        self.assertIn("keep-scene", scene_ids)
+        self.assertNotIn("remove-scene", scene_ids)
+
     def test_behavior_tree_generation_returns_runtime_ready_structure(self):
         from ludens_flow.capabilities.game_model.runtime import generate_behavior_tree
 
