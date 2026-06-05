@@ -11,7 +11,7 @@
 
 这里的文档不是运行时代码真源。
 运行时代码真源目前在：
-- `agent_workbench/src/ludens_flow/schemas/`
+- `agent_workbench/src/ludens_flow/core/schemas/`
 
 ## Current Schemas
 

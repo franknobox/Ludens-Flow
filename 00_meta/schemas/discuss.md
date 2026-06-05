@@ -10,7 +10,7 @@
 - `EngineeringAgent` plan_discuss
 
 当前运行时代码对应：
-- `agent_workbench/src/ludens_flow/schemas/discuss.py`
+- `agent_workbench/src/ludens_flow/core/schemas/discuss.py`
 
 ## Shape
 

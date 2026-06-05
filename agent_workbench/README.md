@@ -91,7 +91,7 @@ workspace/skills/installed/<skill_id>/
 └── prompt.md
 ```
 
-可以在 Web 设置页的 `Skills` 中导入、删除和管理 Skill，并在工作台的 Skills 页面为当前项目启用或关闭，现已支持自主沉淀Skills。
+可以在 Web 设置页的 `Skills` 中导入、删除和管理 Skill，并在工作台的 Skills 页面为当前项目启用或关闭；后续会继续推进可复用流程的自我沉淀。
 
 ### 2. 安装依赖
 
@@ -165,13 +165,20 @@ ludensflow
 - 进入 `设置 -> 引擎连接`，添加或编辑 MCP 连接（如 Blender、Unity、Godot、Unreal）。
 - 连接配置按项目持久化，保存在对应项目的元数据中。
 
-已实机验证的能力（Blender）：
+当前引擎接入状态：
+
+- Blender MCP 已完成实机验证。
+- Unity MCP 已完成实机验证，并修正为 stdio 交互配置。
+- Unreal MCP 正在连接和验证，重点补齐插件兼容、Python 服务链路、Output Log、保存关卡和 PIE 等工具映射。
+- Godot 当前保留最小参数校验、workspace 路径沙箱和部分受控能力映射。
+
+已验证的基础能力示例：
 
 - `engine_list_scene`：列出当前场景中的对象
 - `engine_create_object`：在场景中创建对象
 - `engine_save_scene`：保存场景文件
 
-其他引擎（Unity / Godot / Unreal）当前采用安全沙箱校验：写入类操作限定在项目可写工作区内，并对脚本扩展名、运行模式等做白名单检查。
+所有引擎写入类操作都应通过 Ludens-Flow 的受控能力层执行，并受项目工作区、权限确认、脚本扩展名、运行模式等规则约束。
 
 安全与行为说明：
 
@@ -196,6 +203,7 @@ agent_workbench/
 │   │   │   ├── artifacts/  # 工件读写管理
 │   │   │   ├── copywriting/# 文案生成能力
 │   │   │   ├── github/     # GitHub 集成
+│   │   │   ├── game_model/ # 游戏 AI 配置与导出能力
 │   │   │   ├── ingest/     # 文件摄取
 │   │   │   ├── mcp/        # MCP 引擎接入
 │   │   │   │   └── adapters/  # 各引擎适配器
@@ -213,8 +221,9 @@ agent_workbench/
     │   ├── features/       # 功能模块
     │   │   ├── aigc/       # AIGC 快捷入口
     │   │   ├── copywriting/# 文案加工台
-    │   │   ├── game-model/ # Game Model 页面
+    │   │   ├── game-model/ # 游戏 AI 配置中心（旧目录名保留）
     │   │   ├── github/     # GitHub 可视化
+    │   │   ├── level-layout/# Level Layout Studio / 关卡设计台
     │   │   ├── mcp/        # MCP 引擎连接页面
     │   │   ├── settings/   # 设置页
     │   │   ├── skills/     # Skills 管理

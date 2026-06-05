@@ -137,7 +137,7 @@ Benchmark 关注“这个产品能力现在好不好用”。
 - 执行测试或构建命令。
 - Agent 根据失败输出继续修正。
 
-第一版可以先使用小型 Python / TypeScript 示例工程；Unity 示例工程可作为后续扩展。
+第一版可以先使用小型 Python / TypeScript 示例工程；Unity / Godot / Unreal 示例工程可作为后续扩展。
 
 核心指标：
 
@@ -153,10 +153,12 @@ Benchmark 关注“这个产品能力现在好不好用”。
 
 覆盖内容：
 
-- Unity 工程阅读：定位角色移动、UI、关卡配置相关文件。
-- Unity 工程修改：在 `.cs` 文件内完成小型功能修改。
-- Blender MCP：检查连接、工具发现和能力映射。
-- 文案加工台：按用途、风格、字数和限制生成游戏文案。
+- 引擎工程阅读：在 Unity / Godot / Unreal 等项目中定位角色移动、UI、关卡配置相关文件。
+- 引擎工程修改：在授权工作区内完成小型脚本或配置修改，并保持路径与权限边界。
+- MCP 引擎能力：检查 Blender / Unity / Godot / Unreal 的连接、工具发现、能力映射和失败回传。
+- 文案加工台：按用途、风格、字数和限制生成游戏文案，并导出 Markdown / CSV。
+- 游戏 AI 配置中心：生成 NPC 对话、任务、行为树、多模态等场景配置，验证模型广场快捷配置、自定义模型、测试调用和导出包。
+- Level Layout Studio / 关卡设计台：验证本地离线加载、导入导出、刷新不丢和布局结果回流路径。
 - 多模态输入：结合图片、PDF、Markdown 或代码文件进行讨论。
 
 核心指标：
@@ -184,6 +186,8 @@ Benchmark 关注“这个产品能力现在好不好用”。
 | `latency_ms` | 关键步骤耗时 |
 | `manual_intervention_count` | 人工介入次数 |
 | `manual_quality_score` | 人工质量评分 |
+| `export_validity` | 导出的 JSON、CSV、示例代码或布局文件是否结构正确 |
+| `persistence_success` | 刷新、切页或重启后关键项目状态是否保留 |
 
 人工评分建议保持简单，例如 1-5 分：
 
@@ -314,7 +318,7 @@ python -m unittest discover -s agent_workbench/tests
    - 覆盖文件读写、patch、delete、权限和工具事件。
 
 5. **最后扩展 GameDev Capability Benchmark**
-   - Unity、Blender、文案、多模态逐步加入。
+   - 引擎 MCP、文案、多模态、游戏 AI 配置中心和关卡设计台逐步加入。
 
 ---
 
