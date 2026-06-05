@@ -56,10 +56,10 @@ interface EngineConnectionsSectionProps {
   onCheckAll: () => void;
 }
 
-type EngineGuideKey = Extract<McpConnectionConfig["engine"], "blender" | "unity" | "godot">;
+type EngineGuideKey = Extract<McpConnectionConfig["engine"], "blender" | "unity" | "godot" | "unreal">;
 
 function hasInstallGuide(engine: McpConnectionConfig["engine"]): engine is EngineGuideKey {
-  return engine === "blender" || engine === "unity" || engine === "godot";
+  return engine === "blender" || engine === "unity" || engine === "godot" || engine === "unreal";
 }
 
 function EngineInstallGuideModal({
@@ -72,7 +72,13 @@ function EngineInstallGuideModal({
   onFillPreset: () => void;
 }) {
   const engineName =
-    engine === "unity" ? "Unity MCP" : engine === "godot" ? "Godot MCP" : "Blender MCP";
+    engine === "unity"
+      ? "Unity MCP"
+      : engine === "godot"
+        ? "Godot MCP"
+        : engine === "unreal"
+          ? "Unreal MCP"
+          : "Blender MCP";
 
   return (
     <div
@@ -109,6 +115,12 @@ function EngineInstallGuideModal({
             <p>
               这一步会把 Blender 和 Ludens-Flow 连接起来。先完成 Blender 插件安装，
               再在当前项目里保存 MCP 启动配置，最后回到这里做健康检查。
+            </p>
+          ) : null}
+          {engine === "unreal" ? (
+            <p>
+              这一步会把 Unreal Editor 和 Ludens-Flow 连接起来。先把 UnrealMCP 插件放进
+              UE 项目并编译启用，再配置 Python MCP Server，最后回到这里做健康检查。
             </p>
           ) : null}
         </div>
@@ -366,6 +378,117 @@ function EngineInstallGuideModal({
                   <p>
                     保存配置后点击“检查”。如果能读取到底层工具列表，再去工作台的
                     Blender MCP 页面查看能力映射。
+                  </p>
+                </div>
+              </section>
+            </>
+          ) : null}
+
+          {engine === "unreal" ? (
+            <>
+              <section className="settings-guide-step">
+                <div className="settings-guide-step-index">1</div>
+                <div>
+                  <h3>确认本机环境</h3>
+                  <p>
+                    需要 Unreal Engine 5.5+、Visual Studio / C++ 编译环境、Python 3.12+，
+                    并确保已经安装 uv。
+                  </p>
+                  <p>如果还没有 uv，在 Windows PowerShell 里运行：</p>
+                  <pre><code>powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"</code></pre>
+                  <p>安装完成后重新打开终端，确认 uv 可用：</p>
+                  <pre><code>uv --version</code></pre>
+                </div>
+              </section>
+
+              <section className="settings-guide-step">
+                <div className="settings-guide-step-index">2</div>
+                <div>
+                  <h3>获取 Unreal MCP 仓库</h3>
+                  <p>
+                    下载或 clone 仓库。后续需要用到其中的 <code>MCPGameProject/Plugins/UnrealMCP</code>{" "}
+                    插件目录，以及 <code>Python</code> 目录里的 MCP Server。
+                  </p>
+                  <pre><code>git clone https://github.com/chongdashu/unreal-mcp.git</code></pre>
+                  <a
+                    className="settings-guide-link"
+                    href="https://github.com/chongdashu/unreal-mcp"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    打开 Unreal MCP 仓库
+                  </a>
+                </div>
+              </section>
+
+              <section className="settings-guide-step">
+                <div className="settings-guide-step-index">3</div>
+                <div>
+                  <h3>把插件放入 UE 项目</h3>
+                  <ol>
+                    <li>
+                      将仓库里的 <code>MCPGameProject/Plugins/UnrealMCP</code> 复制到你的 UE
+                      项目 <code>Plugins/UnrealMCP</code>。
+                    </li>
+                    <li>右键你的 <code>.uproject</code>，选择 Generate Visual Studio project files。</li>
+                    <li>打开生成的 <code>.sln</code>，目标选择 <code>Development Editor</code> 后编译。</li>
+                    <li>打开 Unreal Editor，在 <code>Edit / Plugins</code> 中启用 <code>UnrealMCP</code>，按提示重启。</li>
+                  </ol>
+                </div>
+              </section>
+
+              <section className="settings-guide-step">
+                <div className="settings-guide-step-index">4</div>
+                <div>
+                  <h3>准备 Python MCP Server</h3>
+                  <p>
+                    进入仓库的 <code>Python</code> 目录，安装依赖。Unreal Editor 需要保持打开，
+                    插件会通过本机端口和 Python Server 通信。
+                  </p>
+                  <pre><code>{`cd E:\\path\\to\\unreal-mcp\\Python\nuv venv\nuv pip install -e .`}</code></pre>
+                </div>
+              </section>
+
+              <section className="settings-guide-step">
+                <div className="settings-guide-step-index">5</div>
+                <div>
+                  <h3>在 Ludens-Flow 中保存 MCP 配置</h3>
+                  <p>
+                    启动参数中的 <code>E:\path\to\unreal-mcp\Python</code> 需要改成你本机真实路径。
+                    点击一键填入后，再手动替换这个目录。
+                  </p>
+                  <button
+                    type="button"
+                    className="settings-guide-inline-button"
+                    onClick={onFillPreset}
+                  >
+                    一键填入添加表单
+                  </button>
+                  <div className="settings-guide-config-grid">
+                    <div>
+                      <span>启动命令</span>
+                      <pre><code>cmd</code></pre>
+                    </div>
+                    <div>
+                      <span>启动参数，每行一个</span>
+                      <pre><code>{"/c\nuv\n--directory\nE:\\path\\to\\unreal-mcp\\Python\nrun\nunreal_mcp_server.py"}</code></pre>
+                    </div>
+                    <div>
+                      <span>环境变量</span>
+                      <pre><code>（留空）</code></pre>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section className="settings-guide-step">
+                <div className="settings-guide-step-index">6</div>
+                <div>
+                  <h3>回到设置页检查连接</h3>
+                  <p>
+                    保存配置后点击“检查”。如果能读取到底层工具列表，再去工作台的 Unreal MCP
+                    页面查看能力映射。当前 Ludens-Flow 会优先映射 Actor、Transform、Blueprint
+                    和输入映射能力。
                   </p>
                 </div>
               </section>

@@ -211,6 +211,8 @@ export function useWorkbenchController() {
       ? "文案加工台"
       : currentView.type === "game-model"
       ? "游戏内模型接入"
+      : currentView.type === "level-layout"
+      ? "Level Layout Studio / 关卡设计台"
       : currentView.type === "skills"
       ? "Skills 能力"
       : currentView.type === "mcp"
@@ -229,6 +231,8 @@ export function useWorkbenchController() {
       ? `面向当前项目的策划文案加工入口`
       : currentView.type === "game-model"
       ? `配置大模型能力，接入 Unity / REST 游戏运行时`
+      : currentView.type === "level-layout"
+      ? `本地离线关卡布局、地图 blockout 与 2D/3D 导出辅助工具`
       : currentView.type === "skills"
       ? `管理当前项目启用的 Agent Skills`
       : currentView.type === "mcp"
@@ -843,6 +847,10 @@ export function useWorkbenchController() {
     setCurrentView({ type: "game-model" });
   };
 
+  const openLevelLayout = () => {
+    setCurrentView({ type: "level-layout" });
+  };
+
   const openSkills = () => {
     setCurrentView({ type: "skills" });
   };
@@ -1021,6 +1029,7 @@ createProject,
     openAigc,
     openCopywriting,
     openGameModel,
+    openLevelLayout,
     openSkills,
     openMcp,
     openFile,

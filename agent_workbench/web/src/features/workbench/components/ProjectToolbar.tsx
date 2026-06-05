@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 
 import type { McpTool } from "../types";
 import { MCP_ICONS } from "../../mcp/components/McpIcons";
+import { LevelLayoutMark } from "../../level-layout/components/LevelLayoutMark";
 
 import { PHASE_LABEL } from "../constants";
 import { projectUpdated } from "../utils";
@@ -31,6 +32,7 @@ interface ProjectToolbarProps {
   onOpenAigc?: () => void;
   onOpenCopywriting?: () => void;
   onOpenGameModel?: () => void;
+  onOpenLevelLayout?: () => void;
   onOpenSkills?: () => void;
   onOpenMcp?: (tool: McpTool) => void;
 }
@@ -52,6 +54,7 @@ export function ProjectToolbar(props: ProjectToolbarProps) {
     onOpenAigc,
     onOpenCopywriting,
     onOpenGameModel,
+    onOpenLevelLayout,
     onOpenSkills,
     onOpenMcp,
   } = props;
@@ -144,6 +147,21 @@ export function ProjectToolbar(props: ProjectToolbarProps) {
       </div>
 
       <div className="project-toolbar-menu">
+        {onOpenLevelLayout ? (
+          <button
+            type="button"
+            className="project-toolbar-settings"
+            onClick={() => {
+              closeProjectPanel();
+              closeSettingsPanel();
+              onOpenLevelLayout();
+            }}
+            title="Level Layout Studio / 关卡设计台"
+          >
+            <LevelLayoutMark className="project-toolbar-level-layout-icon" size={17} />
+          </button>
+        ) : null}
+
         {onOpenSkills ? (
           <button
             type="button"

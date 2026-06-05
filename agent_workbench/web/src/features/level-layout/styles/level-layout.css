@@ -1,0 +1,93 @@
+.level-layout-page {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.level-layout-header {
+  min-height: 56px;
+  padding: 8px 24px 7px 0;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  background: rgba(255, 255, 255, 0.64);
+}
+
+.level-layout-title-block {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.level-layout-kicker {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.1;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.level-layout-header h1 {
+  margin: 2px 0 0;
+  font-size: 22px;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+.level-layout-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.level-layout-source {
+  color: var(--muted);
+}
+
+.level-layout-frame-wrap {
+  flex: 1;
+  min-height: 0;
+  background: #f8f6ef;
+}
+
+.level-layout-frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+  background: #f8f6ef;
+}
+
+[data-theme="dark"] .level-layout-page {
+  background: #181818;
+}
+
+[data-theme="dark"] .level-layout-header {
+  background: #1f1f1f;
+  border-bottom-color: #333;
+}
+
+[data-theme="dark"] .level-layout-source {
+  color: #a7a7a7;
+}
+
+@media (max-width: 760px) {
+  .level-layout-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .level-layout-meta {
+    justify-content: flex-start;
+  }
+}

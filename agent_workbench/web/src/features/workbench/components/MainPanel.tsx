@@ -42,6 +42,11 @@ const GameModelPage = lazy(() =>
     default: module.GameModelPage,
   })),
 );
+const LevelLayoutStudioPage = lazy(() =>
+  import("../../level-layout/components/LevelLayoutStudioPage").then((module) => ({
+    default: module.LevelLayoutStudioPage,
+  })),
+);
 const McpPage = lazy(() =>
   import("../../mcp/components/McpPage").then((module) => ({
     default: module.McpPage,
@@ -151,6 +156,7 @@ export function MainPanel(props: MainPanelProps) {
     currentView.type === "aigc" ||
     currentView.type === "copywriting" ||
     currentView.type === "game-model" ||
+    currentView.type === "level-layout" ||
     currentView.type === "skills" ||
     currentView.type === "mcp";
   const showGddFastDevImport = currentView.type === "file" && currentView.id === "gdd";
@@ -225,6 +231,9 @@ export function MainPanel(props: MainPanelProps) {
           </LazyPersistentView>
           <LazyPersistentView active={currentView.type === "game-model"}>
             <GameModelPage key={currentProjectId} />
+          </LazyPersistentView>
+          <LazyPersistentView active={currentView.type === "level-layout"}>
+            <LevelLayoutStudioPage key={currentProjectId} projectId={currentProjectId} />
           </LazyPersistentView>
           <LazyPersistentView active={currentView.type === "skills"}>
             <SkillsWorkbenchPage key={currentProjectId} projectId={currentProjectId} />

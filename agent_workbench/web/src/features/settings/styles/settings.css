@@ -1178,6 +1178,15 @@
   --guide-accent-button-hover: rgba(31, 120, 255, 0.16);
 }
 
+.settings-guide-overlay--unreal {
+  --guide-accent: #475467;
+  --guide-accent-strong: #1d2734;
+  --guide-accent-soft: rgba(71, 84, 103, 0.1);
+  --guide-accent-border: rgba(71, 84, 103, 0.2);
+  --guide-accent-button-bg: rgba(71, 84, 103, 0.08);
+  --guide-accent-button-hover: rgba(71, 84, 103, 0.14);
+}
+
 .settings-guide-panel {
   position: relative;
   width: min(980px, calc(100vw - 56px));
@@ -1368,6 +1377,15 @@
   --guide-accent-border: rgba(90, 162, 255, 0.26);
   --guide-accent-button-bg: rgba(90, 162, 255, 0.1);
   --guide-accent-button-hover: rgba(90, 162, 255, 0.16);
+}
+
+[data-theme="dark"] .settings-guide-overlay--unreal {
+  --guide-accent: #d0d5dd;
+  --guide-accent-strong: #f2f4f7;
+  --guide-accent-soft: rgba(208, 213, 221, 0.1);
+  --guide-accent-border: rgba(208, 213, 221, 0.18);
+  --guide-accent-button-bg: rgba(208, 213, 221, 0.08);
+  --guide-accent-button-hover: rgba(208, 213, 221, 0.14);
 }
 
 [data-theme="dark"] .settings-guide-inline-button {

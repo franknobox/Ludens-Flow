@@ -291,3 +291,15 @@
     transform: rotate(360deg);
   }
 }
+
+[data-theme="dark"] .aigc-card-status {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+[data-theme="dark"] .aigc-card-tag {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: var(--line);
+  color: #c7c7c7;
+}

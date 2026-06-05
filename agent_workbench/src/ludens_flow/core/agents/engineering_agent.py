@@ -10,6 +10,18 @@ from typing import Callable, Optional
 
 from ludens_flow.capabilities.artifacts.artifacts import read_artifact
 from ludens_flow.capabilities.mcp.adapter import ENGINE_TOOL_SCHEMAS
+from ludens_flow.capabilities.tools.unity_files import (
+    UNITY_FIND_FILES_TOOL_SCHEMA,
+    UNITY_LIST_DIR_TOOL_SCHEMA,
+    UNITY_READ_FILE_TOOL_SCHEMA,
+)
+from ludens_flow.capabilities.tools.workspace_files import (
+    WORKSPACE_CREATE_DIRECTORY_TOOL_SCHEMA,
+    WORKSPACE_DELETE_FILE_TOOL_SCHEMA,
+    WORKSPACE_PATCH_TEXT_FILE_TOOL_SCHEMA,
+    WORKSPACE_READ_FILES_BATCH_TOOL_SCHEMA,
+    WORKSPACE_WRITE_TEXT_FILE_TOOL_SCHEMA,
+)
 from ludens_flow.capabilities.workspaces.access import build_workspace_context_for_prompt
 from ludens_flow.core.agents.base import AgentResult, BaseAgent, CommitSpec
 from ludens_flow.core.engine_context import format_project_engine_for_prompt
@@ -18,6 +30,19 @@ from ludens_flow.core.state import LudensState
 from llm.provider import LLMConfig
 
 logger = logging.getLogger(__name__)
+
+
+EON_TOOL_SCHEMAS = [
+    WORKSPACE_READ_FILES_BATCH_TOOL_SCHEMA,
+    WORKSPACE_CREATE_DIRECTORY_TOOL_SCHEMA,
+    WORKSPACE_WRITE_TEXT_FILE_TOOL_SCHEMA,
+    WORKSPACE_PATCH_TEXT_FILE_TOOL_SCHEMA,
+    WORKSPACE_DELETE_FILE_TOOL_SCHEMA,
+    UNITY_LIST_DIR_TOOL_SCHEMA,
+    UNITY_READ_FILE_TOOL_SCHEMA,
+    UNITY_FIND_FILES_TOOL_SCHEMA,
+    *ENGINE_TOOL_SCHEMAS,
+]
 
 
 class EngineeringAgent(BaseAgent):
@@ -164,9 +189,9 @@ class EngineeringAgent(BaseAgent):
             "4. 在工程讨论阶段，不要给出逐类实现指令、文件骨架、精确脚本拆分或特定编辑器逐步操作。\n"
             "5. 除非用户明确要求进入后续执行阶段，否则不要主动建议具体文件名、代码脚手架或直接构建指令。\n"
             "6. 语气保持务实、清晰。\n"
-            "7. MCP 工具模式："
+            "7. 工具模式："
             + ("开启" if mcp_mode else "关闭")
-            + "。你知道系统具备受控 `engine_*` MCP 能力；开启时，如果用户明确要求读取或操作外部编辑器，可以调用工具；关闭时请提醒用户先打开 `MCP on`。\n"
+            + "。你拥有 Eon 专属的 `workspace_*`、`unity_*` 和 `engine_*` 能力；开启时，如果用户明确要求读取/修改授权工作区、读取 Unity 工程或操作外部编辑器，可以调用工具；关闭时请提醒用户先打开 `MCP on` / 工具模式。\n"
         )
 
         if stream_handler and not mcp_mode:
@@ -202,7 +227,7 @@ class EngineeringAgent(BaseAgent):
             history=state.chat_history,
             user_persona=user_persona,
             project_id=state.project_id,
-            tools=ENGINE_TOOL_SCHEMAS if mcp_mode else None,
+            tools=EON_TOOL_SCHEMAS if mcp_mode else None,
             tool_event_handler=tool_event_handler,
         )
         payload, _ = parse_discuss_payload(raw)
@@ -356,12 +381,15 @@ class EngineeringAgent(BaseAgent):
             f"{engine_context}\n"
             f"实现计划：\n{impl_plan}\n\n"
             f"{workspace_context + chr(10) + chr(10) if workspace_context else ''}"
-            "MCP 工具模式："
+            "工具模式："
             + ("开启" if mcp_mode else "关闭")
             + "。\n"
-            "你知道 Ludens-Flow 具备受控 MCP / 引擎工具能力，可通过稳定的 `engine_*` 能力操作 Blender、Unity、Godot 等外部编辑器。\n"
-            "如果 MCP 工具模式开启，并且用户目标需要读取或操作外部编辑器，请优先调用可用工具，不要改为让用户手动运行脚本。\n"
-            "如果 MCP 工具模式关闭，而用户要求你实际调用 MCP 或操作外部编辑器，请明确提醒用户先在工作台顶部打开 `MCP on`，不要声称系统没有这类能力。\n\n"
+            "你知道 Ludens-Flow 已把工作区文件、Unity 工程读取和外部引擎 MCP 操作分配给 Eon：\n"
+            "- `workspace_*`：读取、创建、写入、patch、删除授权工作区内的文本文件。\n"
+            "- `unity_*`：读取已绑定 Unity 项目的目录、文本文件和文件搜索结果。\n"
+            "- `engine_*`：通过稳定能力操作 Blender、Unity、Godot、Unreal 等外部编辑器。\n"
+            "如果工具模式开启，并且用户目标需要读取/修改授权工作区或操作外部编辑器，请优先调用可用工具，不要改为让用户手动运行脚本。\n"
+            "如果工具模式关闭，而用户要求你实际执行上述操作，请明确提醒用户先在工作台顶部打开 `MCP on` / 工具模式，不要声称系统没有这类能力。\n\n"
             "Godot MCP 使用提示：读取项目信息使用 `engine_list_scene`，读取运行输出使用 `engine_read_console`；"
             "创建新 .tscn 场景或添加节点使用 `engine_create_object`，参数通常包含 `engine=\"godot\"`, `workspace_id`, `scene_path`, `name`, `object_type`。"
             "当前 Coding-Solo Godot MCP 原生支持 create_scene/add_node/save_scene/run_project/get_debug_output；"
@@ -399,7 +427,7 @@ class EngineeringAgent(BaseAgent):
             user_persona=user_persona,
             project_id=state.project_id,
             stream_handler=None if mcp_mode else filtered_handler,
-            tools=ENGINE_TOOL_SCHEMAS if mcp_mode else None,
+            tools=EON_TOOL_SCHEMAS if mcp_mode else None,
             tool_event_handler=tool_event_handler,
         )
         logger.info("[EngineeringAgent] Coach instruction issued.")

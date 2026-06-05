@@ -21,9 +21,9 @@
 
 ## What Is Ludens-Flow?
 
-Ludens-Flow is a multi-agent game development workbench built around explicit artifacts, controlled tools, and project-level state.
+Ludens-Flow is a human-in-the-loop, multi-agent game development workbench built around explicit artifacts, controlled tools, and project-level state.
 
-It is designed to help teams and solo developers structure game development work, not just chat with a model.
+It is designed to help teams and solo developers structure game development work, not just chat with a model or hand over the whole project to an opaque automation loop.
 
 Instead of treating the agent as a free-form assistant, Ludens-Flow puts it back inside an engineering system:
 
@@ -32,7 +32,8 @@ Instead of treating the agent as a free-form assistant, Ludens-Flow puts it back
 - tools have permissions
 - tasks have state
 - projects have workspaces
-- the UI makes the workflow visible
+- the UI keeps the workflow visible
+- users can inspect, edit, approve, export, or override important steps
 
 ## What It Does
 
@@ -42,8 +43,11 @@ Instead of treating the agent as a free-form assistant, Ludens-Flow puts it back
 - Supports project-scoped workspaces, structured tool execution, and controlled file operations.
 - Integrates multimodal input such as images, text files, code files, and PDFs.
 - Supports project profiles and externally imported Skills that can be enabled per project.
-- Connects external game engines through a controlled MCP capability layer (Blender and Unity verified; Godot/Unreal adapters prepared).
+- Connects external game engines through a controlled MCP capability layer, with Unreal MCP integration being actively connected and validated.
 - Provides a copywriting workspace with external references, live generation status, and Markdown/CSV export.
+- Provides an AIGC shortcut directory for game-production image, audio, video, 3D, UI, and reference workflows.
+- Provides a Game AI Config Center for designing in-game AI scenes, model/provider configs, prompt/tool combinations, test calls, and exportable integration packages.
+- Integrates Level Layout Studio / 关卡设计台 as a local offline level layout tool with import/export support, autosave, and Ludens-Flow-specific interaction fixes.
 - Supports capability-aware model routing with per-project configuration.
 - Offers a resilient web workbench with real-time streaming, thinking/progress flow, tool progress tracking, and multi-theme support.
 
@@ -63,11 +67,12 @@ It is a workflow system for:
 
 Ludens-Flow is currently focused on:
 
-- stabilizing the multi-agent workflow core and graph execution
-- connecting real game engines via MCP for live asset, scene, and editor operations
-- hardening project-level state persistence, metadata safety, and workspace isolation
-- enriching the web workbench with tool observability, settings management, and responsive UX
-- deepening the integration of Skills, user profiles, and project context into agent runtime behavior
+- stabilizing the multi-agent workflow core, backend API structure, and endpoint coverage
+- connecting real game engines via MCP for live asset, scene, editor, and log operations, with Unreal as the current active integration target
+- improving the Game AI Config Center so users can configure, test, export, and understand practical in-game AI workflows
+- expanding project tools such as AIGC entry points, copywriting export, model routing, and Level Layout Studio into coherent project workflows
+- hardening project-level state persistence, metadata safety, workspace isolation, and browser-side recovery behavior
+- improving the web workbench browsing experience, observability, settings management, dark/light themes, and responsive UX
 
 See [ROADMAP.md](11_docs/ROADMAP.md) for the longer-term direction.
 
@@ -126,15 +131,14 @@ Screenshot placeholders can be added here later:
 
 Ludens-Flow is evolving toward a broader game-development AI workbench, including:
 
-- deeper engine integration (viewport snapshots, material editing, Unity editor workflows)
-- richer file and tool execution flows with batch operations and editor-side visualization
-- broader engine compatibility such as Godot and UE
-- stronger structured agent collaboration with role-based communication protocols
-- project-level Skills usage and self-distilled reusable workflows
-- in-game LLM integration
-- collaboration platform visualization
-- external AIGC ecosystem access
-- release acceptance baselines and automated smoke tests
+- deeper engine integration through MCP, including Unreal editor operations, output-log reading, PIE control, viewport/context capture, and project-side validation
+- agent-driven module automation, where the user can describe a goal and the agent can operate workbench modules such as copywriting, AIGC, MCP, model configuration, and layout tools under explicit permission
+- practical in-game AI integration: configuration JSON, example code, usage guides, model routing, streaming output, tool-call audit, cache, rate limits, cost budgets, and fallback policies
+- Level Layout Studio evolution into a first-class local level-design workspace, with Agent-assisted layout generation and project result return
+- stronger multimodal workflows covering voice, image, video, UI references, world-model exploration, and generated game assets
+- smoother external AIGC loops: choose a capability inside Ludens-Flow, jump to or call an external service, then bring results back into the project workflow
+- stronger structured agent collaboration with role-based communication protocols, traceable decisions, and human review checkpoints
+- release acceptance baselines, browser smoke tests, and repeatable workflow evaluation
 
 ## Open Source
 

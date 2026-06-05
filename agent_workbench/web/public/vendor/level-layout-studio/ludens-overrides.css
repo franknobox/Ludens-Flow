@@ -1,0 +1,77 @@
+/*
+ * Ludens-Flow local integration overrides.
+ * The original LayoutTools AI panel is disabled here because Ludens-Flow
+ * routes AI through its own project Agent and model settings.
+ */
+[data-ludens-ai-panel],
+[data-ludens-ai-tab] {
+  display: none !important;
+}
+
+[data-panel="right"] > div:first-child > button:nth-child(3) {
+  display: none !important;
+}
+
+.ludens-tool-menu {
+  position: absolute;
+  top: 0;
+  left: 100%;
+  z-index: 1000;
+  min-width: 152px;
+  margin-left: 6px;
+  padding: 6px;
+  border: 1px solid #cfcbc4;
+  border-radius: 10px;
+  background: #f9f9f6;
+  box-shadow: 0 14px 32px rgba(32, 33, 31, 0.16);
+  color: #2b2b28;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  user-select: none;
+}
+
+.ludens-tool-menu button {
+  width: 100%;
+  min-height: 34px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.ludens-tool-menu button:hover,
+.ludens-tool-menu button[data-active="true"] {
+  background: rgba(16, 163, 127, 0.12);
+  color: #0b6b57;
+}
+
+.ludens-tool-menu button[data-hovered="true"] {
+  background: #10a37f;
+  color: #fff;
+}
+
+.ludens-tool-menu-icon {
+  width: 16px;
+  color: currentColor;
+  display: inline-flex;
+  justify-content: center;
+}
+
+.ludens-tool-menu-dot {
+  width: 10px;
+  height: 10px;
+  border: 1px solid #9b9b95;
+  border-radius: 999px;
+  margin-left: auto;
+}

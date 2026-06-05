@@ -11,12 +11,66 @@ from typing import Optional
 
 from ludens_flow.core.agents.base import AgentResult, BaseAgent, CommitSpec
 from ludens_flow.capabilities.artifacts.artifacts import read_artifact
+from ludens_flow.capabilities.github import fetch_github_snapshot
 from ludens_flow.core.schemas import DISCUSS_RESPONSE_SCHEMA_TEXT, parse_discuss_payload
 from ludens_flow.core.engine_context import format_project_engine_for_prompt
+from ludens_flow.core.paths import get_project_github_repo
 from ludens_flow.core.state import LudensState
 from llm.provider import LLMConfig
 
 logger = logging.getLogger(__name__)
+
+
+def _format_github_context_for_pm(project_id: str | None) -> str:
+    try:
+        repo = get_project_github_repo(project_id=project_id)
+    except Exception:
+        return ""
+    if not repo:
+        return ""
+
+    repo_label = f"{repo.get('owner', '')}/{repo.get('repo', '')}".strip("/")
+    try:
+        snapshot = fetch_github_snapshot(repo)
+    except Exception as exc:
+        return (
+            "\nGitHub 协作上下文（Pax 只读能力）：\n"
+            f"- 已绑定仓库：{repo_label or repo.get('url', '')}\n"
+            f"- 本轮读取失败：{exc}\n"
+            "- 你可以提醒用户检查仓库地址、网络或 GitHub token，但不要把 GitHub 写操作纳入计划。\n"
+        )
+
+    summary = snapshot.get("summary") or {}
+    pulls = snapshot.get("pull_requests") or []
+    issues = snapshot.get("issues") or []
+    runs = snapshot.get("workflow_runs") or []
+
+    lines = [
+        "\nGitHub 协作上下文（Pax 只读能力）：",
+        f"- 仓库：{repo_label or (snapshot.get('repo') or {}).get('url', '')}",
+        f"- open PR：{summary.get('open_pr_count', 0)}；open issue：{summary.get('open_issue_count', 0)}；失败 CI：{summary.get('failing_ci_count', 0)}",
+    ]
+    if pulls:
+        lines.append("- 最近 PR：" + "；".join(
+            f"#{item.get('number')} {item.get('title')} [{item.get('state')}]"
+            for item in pulls[:3]
+        ))
+    if issues:
+        lines.append("- 最近 Issue：" + "；".join(
+            f"#{item.get('number')} {item.get('title')}"
+            for item in issues[:3]
+        ))
+    failing_runs = [
+        item for item in runs
+        if item.get("conclusion") in {"failure", "timed_out", "cancelled", "action_required"}
+    ]
+    if failing_runs:
+        lines.append("- 失败工作流：" + "；".join(
+            f"{item.get('name')} ({item.get('conclusion')})"
+            for item in failing_runs[:3]
+        ))
+    lines.append("- 使用边界：只用于 PM 范围、排期、风险和阻塞判断，不执行 GitHub 写操作。")
+    return "\n".join(lines) + "\n"
 
 
 class PMAgent(BaseAgent):
@@ -37,6 +91,7 @@ class PMAgent(BaseAgent):
         gdd_content = read_artifact("GDD", project_id=state.project_id)
         existing_pm = read_artifact("PROJECT_PLAN", project_id=state.project_id)
         engine_context = format_project_engine_for_prompt(state.project_id)
+        github_context = _format_github_context_for_pm(state.project_id)
 
         pm_context = ""
         if existing_pm.strip():
@@ -49,6 +104,7 @@ class PMAgent(BaseAgent):
         base_prompt_text = (
             f"现有 GDD：\n{gdd_content}\n\n"
             f"{engine_context}\n\n"
+            f"{github_context}\n"
             f"{pm_context}"
             "请完成以下任务，默认使用简体中文回复，除非用户明确要求英文：\n"
             "1. 作为项目伙伴 Pax，帮助用户确认最重要的排期输入，例如大致周期和团队规模。\n"
@@ -109,10 +165,12 @@ class PMAgent(BaseAgent):
     ) -> AgentResult:
         gdd_content = read_artifact("GDD", project_id=state.project_id)
         engine_context = format_project_engine_for_prompt(state.project_id)
+        github_context = _format_github_context_for_pm(state.project_id)
 
         prompt_text = (
             f"现有 GDD：\n{gdd_content}\n\n"
             f"{engine_context}\n\n"
+            f"{github_context}\n"
             "请生成一份适合独立游戏或 game jam 项目的 PROJECT_PLAN.md。\n"
             "默认使用简体中文撰写，除非用户明确要求英文。\n"
             "要求：\n"

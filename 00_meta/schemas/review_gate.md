@@ -8,8 +8,8 @@
 - `ReviewAgent` commit
 
 当前运行时代码对应：
-- `agent_workbench/src/ludens_flow/schemas/review_gate.py`
-- `agent_workbench/src/ludens_flow/agents/review_agent.py`
+- `agent_workbench/src/ludens_flow/core/schemas/review_gate.py`
+- `agent_workbench/src/ludens_flow/core/agents/review_agent.py`
 
 ## Shape
 

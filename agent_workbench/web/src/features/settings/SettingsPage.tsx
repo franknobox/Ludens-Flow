@@ -766,6 +766,15 @@ export function SettingsPage({ isActive = false }: SettingsPageProps) {
                   setMcpCommandInput("cmd");
                   setMcpArgsInput("/c\nuvx\nblender-mcp");
                   setMcpEnvInput("DISABLE_TELEMETRY=true");
+                  return;
+                }
+                if (engine === "unreal") {
+                  setMcpLabelInput("Unreal MCP");
+                  setMcpCommandInput("cmd");
+                  setMcpArgsInput(
+                    "/c\nuv\n--directory\nE:\\path\\to\\unreal-mcp\\Python\nrun\nunreal_mcp_server.py",
+                  );
+                  setMcpEnvInput("");
                 }
               }}
               onAddConnection={() => {

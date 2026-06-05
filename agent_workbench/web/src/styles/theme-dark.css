@@ -636,7 +636,7 @@
   color: var(--green);
 }
 
-/* 游戏模型页面统一小圆�?*/
+/* 游戏模型页面统一小圆�?*/
 [data-theme="dark"] .game-model-card,
 [data-theme="dark"] .game-model-filter-btn,
 [data-theme="dark"] .game-model-badge,
@@ -1157,4 +1157,10 @@
 .github-graph-svg circle[r="14"] {
   fill: #5e81ac !important;
   stroke: #eceff4 !important;
+}
+
+[data-theme="dark"] .aigc-card-tag {
+  background: #2b2b2b;
+  border-color: #3a3a3a;
+  color: #c7c7c7;
 }
